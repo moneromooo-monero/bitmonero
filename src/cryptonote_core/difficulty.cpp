@@ -64,12 +64,16 @@ namespace cryptonote {
 
 #endif
 
+  /* check for integer overflow on addition */
   static inline bool cadd(uint64_t a, uint64_t b) {
-    return a + b < a;
+    return UINT64_MAX - a < b;
   }
 
+  /* check for integer overflow on addition with optional carry */
   static inline bool cadc(uint64_t a, uint64_t b, bool c) {
-    return a + b < a || (c && a + b == (uint64_t) -1);
+    /* The second part of the || has no overflow in a+b, since there was
+       no short cut of the expression */
+    return UINT64_MAX - a < b || (c && (UINT64_MAX - 1 < a + b));
   }
 
   bool check_hash(const crypto::hash &hash, difficulty_type difficulty) {
@@ -120,11 +124,14 @@ namespace cryptonote {
     if (time_span == 0) {
       time_span = 1;
     }
+    /* cumulative_difficulties unsorted above, but this line assumes it is. Maybe above should
+       just assert that timestamps (and cumulative_difficulties) are sorted, instead of sorting timestamps
+       as they're likely kept in sync ? */
     difficulty_type total_work = cumulative_difficulties[cut_end - 1] - cumulative_difficulties[cut_begin];
     assert(total_work > 0);
     uint64_t low, high;
     mul(total_work, target_seconds, low, high);
-    if (high != 0 || low + time_span - 1 < low) {
+    if (high != 0 || UINT64_MAX - low < time_span - 1) {
       return 0;
     }
     return (low + time_span - 1) / time_span;
