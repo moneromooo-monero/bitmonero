@@ -65,6 +65,7 @@ using namespace cryptonote;
 // used to target a given block size (additional outputs may be added on top to build fee)
 #define TX_MIN_SIZE_TARGET(bytes) (bytes*1/3)
 #define TX_MAX_SIZE_TARGET(bytes) (bytes*2/3)
+#define TX_DECOY_SIZE_TARGET(bytes) (bytes*3/4)
 
 namespace
 {
@@ -1462,10 +1463,19 @@ size_t wallet2::pick_tx_size_target() const
 // cut off at a tx boundary in the middle of paying a given destination), the
 // fee will be carved out of the current input if possible, to avoid having to
 // add another output just for the fee and getting change.
+// An optional post processing step alllows adding random outputs to those
+// transactions, if there are outputs left unused. This step typically incurs
+// extra fees as the extra outputs likely increase the kB quantized tx size.
+// If this step is performed, a further pass over the transactions add some
+// noise to the amounts sent to the destination and as change for neighbouring
+// transactions, if they are to the same destination. This is needed to avoid
+// a transaction having change that equals exactly the sum of a subset of its
+// inputs (which can happen often, given the original transactions had zero
+// change).
 // This system allows for sending (almost) the entire balance, since it does
 // not generate spurious change in all txes, thus decreasing the instantaneous
 // usable balance.
-std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee_UNUSED, const std::vector<uint8_t> extra)
+std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee_UNUSED, const std::vector<uint8_t> extra, bool add_decoy_outputs)
 {
   std::vector<size_t> unused_transfers_indices;
   std::vector<size_t> unused_dust_indices;
@@ -1681,7 +1691,6 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   LOG_PRINT_L1("Done creating " << txes.size() << " transactions, " << print_money(accumulated_fee) <<
     " total fee, " << print_money(accumulated_change) << " total change");
 
-  std::vector<wallet2::pending_tx> ptx_vector;
   for (std::vector<TX>::iterator i = txes.begin(); i != txes.end(); ++i)
   {
     TX &tx = *i;
@@ -1690,12 +1699,104 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
       tx_money += (*mi)->amount();
     LOG_PRINT_L1("  Transaction " << (1+std::distance(txes.begin(), i)) << "/" << txes.size() <<
       ": " << (tx.bytes+1023)/1024 << " kB, sending " << print_money(tx_money) << " in " << tx.selected_transfers.size() <<
-      " outputs to " << tx.dsts.size() << " destination(s), including " <<
-      print_money(tx.ptx.fee) << " fee, " << print_money(tx.ptx.change_dts.amount) << " change");
-    ptx_vector.push_back(tx.ptx);
+      " outputs to " << tx.dsts.size() << " destination(s), " << print_money(tx_money - tx.ptx.fee - tx.ptx.change_dts.amount) <<
+      " to destination, " << print_money(tx.ptx.fee) << " fee, " << print_money(tx.ptx.change_dts.amount) << " change");
+  }
+
+  // add decoy outputs, which we will send as change
+  if (add_decoy_outputs)
+  {
+    LOG_PRINT_L1("Adding decoy outputs");
+    while (1)
+    {
+      if (unused_transfers_indices.empty())
+      {
+        LOG_PRINT_L1("No non-dust outputs to add as decoy");
+        break;
+      }
+      LOG_PRINT_L2("Adding decoy output");
+
+      // pick smaller transaction
+      std::vector<TX>::iterator smallest = txes.begin();
+      for (std::vector<TX>::iterator i = txes.begin(); i != txes.end(); ++i)
+      {
+        if (i->bytes < smallest->bytes)
+          smallest = i;
+      }
+      TX &tx = *smallest;
+      LOG_PRINT_L2("Smallest tx has " << smallest->bytes << " bytes");
+
+      size_t idx = pop_random_value(unused_transfers_indices);
+      const transfer_details &td = m_transfers[idx];
+      LOG_PRINT_L2("Picking output " << idx << ", amount " << print_money(td.amount()));
+
+      // might go over size
+      tx.selected_transfers.push_back(m_transfers.begin() + idx);
+      try
+      {
+        uint64_t previous_fee = tx.ptx.fee;
+        uint64_t previous_change = tx.ptx.change_dts.amount;
+        cryptonote::transaction test_tx;
+        pending_tx test_ptx;
+
+        needed_fee = 0;
+        transfer_selected(tx.dsts, tx.selected_transfers, fake_outs_count, unlock_time, needed_fee, extra,
+          detail::digit_split_strategy, tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD), test_tx, test_ptx);
+        auto txBlob = t_serializable_object_to_blob(test_ptx.tx);
+        uint64_t txSize = txBlob.size();
+        size_t numKB = (txSize + 1023) / 1024;
+        needed_fee = numKB * FEE_PER_KB;
+        available_for_fee = test_ptx.fee + test_ptx.change_dts.amount;
+        if (available_for_fee < needed_fee)
+        {
+          LOG_PRINT_L1("Not enough available for fee");
+          break;
+        }
+
+        LOG_PRINT_L2("Added decoy output");
+        test_ptx.change_dts.amount = available_for_fee - needed_fee;
+        test_ptx.fee = needed_fee;
+        accumulated_fee += test_ptx.fee - previous_fee;
+        accumulated_change += test_ptx.change_dts.amount - previous_change;
+        tx.tx = test_tx;
+        tx.ptx = test_ptx;
+        tx.bytes = txSize;
+
+        if (txSize >= TX_DECOY_SIZE_TARGET(m_upper_transaction_size_limit))
+        {
+          LOG_PRINT_L1("Transaction size passed the max decoy target size, stopping adding decoy outputs");
+          break;
+        }
+      }
+      catch (...)
+      {
+        LOG_PRINT_L1("Could not add output to tx, stopping adding decoy outputs");
+        break;
+      }
+    }
+  }
+
+  LOG_PRINT_L1("After post processing, " << txes.size() << " transactions, " << print_money(accumulated_fee) <<
+    " total fee, " << print_money(accumulated_change) << " total change");
+  for (std::vector<TX>::iterator i = txes.begin(); i != txes.end(); ++i)
+  {
+    TX &tx = *i;
+    uint64_t tx_money = 0;
+    for (std::list<transfer_container::iterator>::const_iterator mi = tx.selected_transfers.begin(); mi != tx.selected_transfers.end(); ++mi)
+      tx_money += (*mi)->amount();
+    LOG_PRINT_L1("  Transaction " << (1+std::distance(txes.begin(), i)) << "/" << txes.size() <<
+      ": " << (tx.bytes+1023)/1024 << " kB, sending " << print_money(tx_money) << " in " << tx.selected_transfers.size() <<
+      " outputs to " << tx.dsts.size() << " destination(s), " << print_money(tx_money - tx.ptx.fee - tx.ptx.change_dts.amount) <<
+      " to destination, " << print_money(tx.ptx.fee) << " fee, " << print_money(tx.ptx.change_dts.amount) << " change");
   }
 
   // if we made it this far, we're OK to actually send the transactions
+  std::vector<wallet2::pending_tx> ptx_vector;
+  for (std::vector<TX>::iterator i = txes.begin(); i != txes.end(); ++i)
+  {
+    TX &tx = *i;
+    ptx_vector.push_back(tx.ptx);
+  }
   return ptx_vector;
 }
 
