@@ -63,7 +63,8 @@ using namespace cryptonote;
 #define APPROXIMATE_INPUT_BYTES 80
 
 // used to target a given block size (additional outputs may be added on top to build fee)
-#define TX_SIZE_TARGET(bytes) (bytes*2/3)
+#define TX_MIN_SIZE_TARGET(bytes) (bytes*1/3)
+#define TX_MAX_SIZE_TARGET(bytes) (bytes*2/3)
 
 namespace
 {
@@ -1438,6 +1439,17 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
 
 }
 
+// return a random target within the min/max range
+size_t wallet2::pick_tx_size_target() const
+{
+  size_t min_size_target = TX_MIN_SIZE_TARGET(m_upper_transaction_size_limit);
+  size_t max_size_target = TX_MAX_SIZE_TARGET(m_upper_transaction_size_limit);
+  float x = (crypto::rand<size_t>() & 0xffff) / (float)0xffff;
+  size_t target = min_size_target + x * (max_size_target - min_size_target);
+  LOG_PRINT_L2("Picking tx size target: " << target << " bytes, (" << (target + 1023) / 1024 << " kB)");
+  return target;
+}
+
 // Another implementation of transaction creation that is hopefully better
 // While there is anything left to pay, it goes through random outputs and tries
 // to fill the next destination/amount. If it fully fills it, it will use the
@@ -1478,6 +1490,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   std::vector<TX> txes;
   bool adding_fee; // true if new outputs go towards fee, rather than destinations
   uint64_t needed_fee, available_for_fee = 0;
+  size_t tx_size_target;
 
   // throw if attempting a transaction with no destinations
   THROW_WALLET_EXCEPTION_IF(dsts.empty(), error::zero_destination);
@@ -1495,6 +1508,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
 
   // throw if attempting a transaction with no money
   THROW_WALLET_EXCEPTION_IF(needed_money == 0, error::zero_destination);
+
+  LOG_PRINT_L1("Trying to create transaction(s) to send " << print_money(needed_money) << " to " << dsts.size() << " destinations");
 
   // gather all our dust and non dust outputs
   for (size_t i = 0; i < m_transfers.size(); ++i)
@@ -1517,6 +1532,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   accumulated_change = 0;
   adding_fee = false;
   needed_fee = 0;
+  tx_size_target = pick_tx_size_target();
 
   // while we have something to send
   while ((!dsts.empty() && dsts[0].amount > 0) || adding_fee) {
@@ -1570,7 +1586,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
 
     // here, check if we need to sent tx and start a new one
     LOG_PRINT_L2("Considering whether to create a tx now, " << tx.selected_transfers.size() << " inputs, tx limit "
-      << m_upper_transaction_size_limit);
+      << tx_size_target << " (upper " << m_upper_transaction_size_limit << ")");
     bool try_tx;
     if (adding_fee)
     {
@@ -1579,7 +1595,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
     }
     else
     {
-      try_tx = dsts.empty() || (tx.selected_transfers.size() * (fake_outs_count+1) * APPROXIMATE_INPUT_BYTES >= TX_SIZE_TARGET(m_upper_transaction_size_limit));
+      try_tx = dsts.empty() || (tx.selected_transfers.size() * (fake_outs_count+1) * APPROXIMATE_INPUT_BYTES >= tx_size_target);
     }
 
     if (try_tx) {
@@ -1650,6 +1666,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
         {
           LOG_PRINT_L2("We have more to pay, starting another tx");
           txes.push_back(TX());
+          tx_size_target = pick_tx_size_target();
         }
       }
     }

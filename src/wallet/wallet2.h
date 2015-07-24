@@ -304,6 +304,7 @@ namespace tools
     void add_unconfirmed_tx(const cryptonote::transaction& tx, uint64_t change_amount);
     void generate_genesis(cryptonote::block& b);
     void check_genesis(const crypto::hash& genesis_hash) const; //throws
+    size_t pick_tx_size_target() const;
 
     cryptonote::account_base m_account;
     std::string m_daemon_address;
