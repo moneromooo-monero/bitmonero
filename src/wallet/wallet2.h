@@ -133,6 +133,23 @@ namespace tools
       END_SERIALIZE()
     };
 
+    struct TX {
+      std::list<transfer_container::iterator> selected_transfers;
+      std::vector<cryptonote::tx_destination_entry> dsts;
+      cryptonote::transaction tx;
+      pending_tx ptx;
+      size_t bytes;
+
+      void add(const cryptonote::account_public_address &addr, uint64_t amount) {
+        std::vector<cryptonote::tx_destination_entry>::iterator i;
+        i = std::find_if(dsts.begin(), dsts.end(), [&](const cryptonote::tx_destination_entry &d) { return !memcmp (&d.addr, &addr, sizeof(addr)); });
+        if (i == dsts.end())
+          dsts.push_back(cryptonote::tx_destination_entry(amount,addr));
+        else
+          i->amount += amount;
+      }
+    };
+
     /*!
      * \brief Generates a wallet or restores one.
      * \param  wallet_        Name of wallet file
@@ -228,7 +245,7 @@ namespace tools
     void commit_tx(pending_tx& ptx_vector);
     void commit_tx(std::vector<pending_tx>& ptx_vector);
     std::vector<pending_tx> create_transactions(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee, const std::vector<uint8_t> extra);
-    std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee_UNUSED, const std::vector<uint8_t> extra, bool add_decoy_outputs = true);
+    std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee_UNUSED, const std::vector<uint8_t> extra, bool add_decoy_outputs = true, bool add_amount_noise = true, bool reorder_transactions = true);
     std::vector<pending_tx> create_dust_sweep_transactions();
     bool check_connection();
     void get_transfers(wallet2::transfer_container& incoming_transfers) const;
@@ -305,6 +322,8 @@ namespace tools
     void generate_genesis(cryptonote::block& b);
     void check_genesis(const crypto::hash& genesis_hash) const; //throws
     size_t pick_tx_size_target() const;
+    void log_txes(const std::vector<TX> &txes, const char *msg) const;
+    void check_txes_match_request(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<TX> &txes) const;
 
     cryptonote::account_base m_account;
     std::string m_daemon_address;
