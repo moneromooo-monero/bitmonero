@@ -110,6 +110,51 @@ namespace tools
       time_t m_sent_time;
     };
 
+    struct tx_construction_data
+    {
+      std::vector<cryptonote::tx_source_entry> sources;
+      std::vector<cryptonote::tx_destination_entry> destinations;
+      std::vector<uint8_t> extra;
+      uint64_t unlock_time;
+      std::vector<std::vector<crypto::signature>> signatures;
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(sources)
+        FIELD(destinations)
+        FIELD(extra)
+        VARINT_FIELD(unlock_time)
+
+        ar.tag("signatures");
+        ar.begin_array();
+        PREPARE_CUSTOM_VECTOR_SERIALIZATION(sources.size(), signatures);
+        bool signatures_not_expected = signatures.empty();
+        if (!signatures_not_expected && sources.size() != signatures.size())
+          return false;
+
+        for (size_t i = 0; i < sources.size(); ++i)
+        {
+          size_t signature_size = sources[i].outputs.size();
+          if (signatures_not_expected)
+          {
+            if (0 == signature_size)
+              continue;
+            else
+              return false;
+          }
+
+          PREPARE_CUSTOM_VECTOR_SERIALIZATION(signature_size, signatures[i]);
+          if (signature_size != signatures[i].size())
+            return false;
+
+          FIELDS(signatures[i]);
+
+          if (sources.size() - i > 1)
+            ar.delimit_array();
+        }
+        ar.end_array();
+      END_SERIALIZE()
+    };
+
     typedef std::vector<transfer_details> transfer_container;
     typedef std::unordered_multimap<crypto::hash, payment_details> payment_container;
 
@@ -118,8 +163,20 @@ namespace tools
       cryptonote::transaction tx;
       uint64_t dust, fee;
       cryptonote::tx_destination_entry change_dts;
-      std::list<transfer_container::iterator> selected_transfers;
+      std::list<uint64_t> selected_transfers;
       std::string key_images;
+
+      tx_construction_data construction_data;
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(tx)
+        VARINT_FIELD(dust)
+        VARINT_FIELD(fee)
+        FIELD(change_dts)
+        FIELD(selected_transfers)
+        FIELD(key_images)
+        FIELD(construction_data)
+      END_SERIALIZE()
     };
 
     struct keys_file_data
@@ -222,11 +279,14 @@ namespace tools
     template<typename T>
     void transfer_dust(size_t num_outputs, uint64_t unlock_time, uint64_t needed_fee, T destination_split_strategy, const tx_dust_policy& dust_policy, const std::vector<uint8_t>& extra, cryptonote::transaction& tx, pending_tx &ptx);
     template<typename T>
-    void transfer_selected(const std::vector<cryptonote::tx_destination_entry>& dsts, const std::list<transfer_container::iterator> selected_transfers, size_t fake_outputs_count,
+    void transfer_selected(const std::vector<cryptonote::tx_destination_entry>& dsts, const std::list<uint64_t> selected_transfers, size_t fake_outputs_count,
       uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, T destination_split_strategy, const tx_dust_policy& dust_policy, cryptonote::transaction& tx, pending_tx &ptx);
 
     void commit_tx(pending_tx& ptx_vector);
     void commit_tx(std::vector<pending_tx>& ptx_vector);
+    bool save_tx(std::vector<pending_tx>& ptx_vector, const std::string &filename);
+    bool sign_tx(const std::string &unsigned_filename, const std::string &signed_filename);
+    bool load_tx(const std::string &signed_filename, std::vector<tools::wallet2::pending_tx> &ptx);
     std::vector<pending_tx> create_transactions(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee, const std::vector<uint8_t> extra);
     std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, const uint64_t fee_UNUSED, const std::vector<uint8_t> extra);
     std::vector<pending_tx> create_dust_sweep_transactions();
@@ -301,12 +361,13 @@ namespace tools
     bool is_transfer_unlocked(const transfer_details& td) const;
     bool clear();
     void pull_blocks(uint64_t start_height, size_t& blocks_added);
-    uint64_t select_transfers(uint64_t needed_money, bool add_dust, uint64_t dust, std::list<transfer_container::iterator>& selected_transfers);
+    uint64_t select_transfers(uint64_t needed_money, bool add_dust, uint64_t dust, std::list<uint64_t>& selected_transfers);
     bool prepare_file_names(const std::string& file_path);
     void process_unconfirmed(const cryptonote::transaction& tx);
     void add_unconfirmed_tx(const cryptonote::transaction& tx, uint64_t change_amount);
     void generate_genesis(cryptonote::block& b);
     void check_genesis(const crypto::hash& genesis_hash) const; //throws
+    std::vector<uint64_t> get_selected_internal_indices(const std::list<uint64_t> &selected_transfers);
 
     cryptonote::account_base m_account;
     std::string m_daemon_address;
@@ -466,7 +527,7 @@ namespace tools
 
     // randomly select inputs for transaction
     // throw if requested send amount is greater than amount available to send
-    std::list<transfer_container::iterator> selected_transfers;
+    std::list<uint64_t> selected_transfers;
     uint64_t found_money = select_transfers(needed_money, 0 == fake_outputs_count, dust_policy.dust_threshold, selected_transfers);
     THROW_WALLET_EXCEPTION_IF(found_money < needed_money, error::not_enough_money, found_money, needed_money - fee, fee);
 
@@ -478,8 +539,9 @@ namespace tools
     {
       COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request req = AUTO_VAL_INIT(req);
       req.outs_count = fake_outputs_count + 1;// add one to make possible (if need) to skip real output key
-      BOOST_FOREACH(transfer_container::iterator it, selected_transfers)
+      BOOST_FOREACH(uint64_t idx, selected_transfers)
       {
+        transfer_container::iterator it = m_transfers.begin() + idx;
         THROW_WALLET_EXCEPTION_IF(it->m_tx.vout.size() <= it->m_internal_output_index, error::wallet_internal_error,
           "m_internal_output_index = " + std::to_string(it->m_internal_output_index) +
           " is greater or equal to outputs count = " + std::to_string(it->m_tx.vout.size()));
@@ -508,8 +570,9 @@ namespace tools
     //prepare inputs
     size_t i = 0;
     std::vector<cryptonote::tx_source_entry> sources;
-    BOOST_FOREACH(transfer_container::iterator it, selected_transfers)
+    BOOST_FOREACH(uint64_t idx, selected_transfers)
     {
+      transfer_container::iterator it = m_transfers.begin() + idx;
       sources.resize(sources.size()+1);
       cryptonote::tx_source_entry& src = sources.back();
       transfer_details& td = *it;
@@ -584,7 +647,11 @@ namespace tools
     ptx.tx = tx;
     ptx.change_dts = change_dts;
     ptx.selected_transfers = selected_transfers;
-
+    ptx.construction_data.sources = sources;
+    ptx.construction_data.destinations = splitted_dsts;
+    ptx.construction_data.extra = tx.extra;
+    ptx.construction_data.unlock_time = unlock_time;
+    ptx.construction_data.signatures = tx.signatures;
   }
 
 

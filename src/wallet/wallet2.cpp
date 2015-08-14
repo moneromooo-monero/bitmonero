@@ -1065,7 +1065,7 @@ namespace
 // returns:
 //    direct return: amount of money found
 //    modified reference: selected_transfers, a list of iterators/indices of input sources
-uint64_t wallet2::select_transfers(uint64_t needed_money, bool add_dust, uint64_t dust, std::list<transfer_container::iterator>& selected_transfers)
+uint64_t wallet2::select_transfers(uint64_t needed_money, bool add_dust, uint64_t dust, std::list<uint64_t>& selected_transfers)
 {
   std::vector<size_t> unused_transfers_indices;
   std::vector<size_t> unused_dust_indices;
@@ -1100,7 +1100,7 @@ uint64_t wallet2::select_transfers(uint64_t needed_money, bool add_dust, uint64_
     }
 
     transfer_container::iterator it = m_transfers.begin() + idx;
-    selected_transfers.push_back(it);
+    selected_transfers.push_back(idx);
     found_money += it->amount();
   }
 
@@ -1263,8 +1263,8 @@ void wallet2::commit_tx(pending_tx& ptx)
 
   LOG_PRINT_L2("transaction " << get_transaction_hash(ptx.tx) << " generated ok and sent to daemon, key_images: [" << ptx.key_images << "]");
 
-  BOOST_FOREACH(transfer_container::iterator it, ptx.selected_transfers)
-    it->m_spent = true;
+  BOOST_FOREACH(uint64_t idx, ptx.selected_transfers)
+    m_transfers[idx].m_spent = true;
 
   LOG_PRINT_L0("Transaction successfully sent. <" << get_transaction_hash(ptx.tx) << ">" << ENDL
             << "Commission: " << print_money(ptx.fee+ptx.dust) << " (dust: " << print_money(ptx.dust) << ")" << ENDL
@@ -1279,6 +1279,96 @@ void wallet2::commit_tx(std::vector<pending_tx>& ptx_vector)
   {
     commit_tx(ptx);
   }
+}
+
+struct exported_tx_set_data
+{
+  std::vector<tools::wallet2::pending_tx> ptx;
+  BEGIN_SERIALIZE_OBJECT()
+    FIELD(ptx)
+  END_SERIALIZE()
+};
+
+bool wallet2::save_tx(std::vector<pending_tx>& ptx_vector, const std::string &filename)
+{
+  LOG_PRINT_L0("saving " << ptx_vector.size() << " transactions");
+  exported_tx_set_data txs;
+  txs.ptx = ptx_vector;
+  std::string s = obj_to_json_str(txs);
+  LOG_PRINT_L2("Saving unsigned tx data: " << s);
+  // save as binary as there's no implementation of loading a json_archive
+  ::serialization::dump_binary(txs, s);
+  return epee::file_io_utils::save_string_to_file(filename, s);
+}
+
+bool wallet2::sign_tx(const std::string &unsigned_filename, const std::string &signed_filename)
+{
+  std::string s;
+  boost::system::error_code errcode;
+
+  if (!boost::filesystem::exists(unsigned_filename, errcode))
+  {
+    LOG_PRINT_L0("File " << unsigned_filename << " does not exist: " << errcode);
+    return false;
+  }
+  if (!epee::file_io_utils::load_file_to_string(unsigned_filename.c_str(), s))
+  {
+    LOG_PRINT_L0("Failed to load from " << unsigned_filename);
+    return false;
+  }
+  exported_tx_set_data exported_txs;
+  if (!::serialization::parse_binary(s, exported_txs))
+  {
+    LOG_PRINT_L0("Failed to parse data from " << unsigned_filename);
+    return false;
+  }
+  LOG_PRINT_L1("Loaded tx unsigned data from binary: " << exported_txs.ptx.size() << " transactions");
+
+  // sign the transactions
+  for (size_t n = 0; n < exported_txs.ptx.size(); ++n)
+  {
+    const tools::wallet2::tx_construction_data &sd = exported_txs.ptx[n].construction_data;
+    LOG_PRINT_L1(" " << (n+1) << ": " << sd.sources.size() << " inputs, mixin " << (sd.sources[0].outputs.size()-1));
+    cryptonote::transaction &tx = exported_txs.ptx[n].tx;
+    bool r = cryptonote::construct_tx(m_account.get_keys(), sd.sources, sd.destinations, sd.extra, tx, sd.unlock_time);
+    THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sd.sources, sd.destinations, sd.unlock_time, m_testnet);
+    THROW_WALLET_EXCEPTION_IF(m_upper_transaction_size_limit <= get_object_blobsize(tx), error::tx_too_big, tx, m_upper_transaction_size_limit);
+  }
+
+  s = obj_to_json_str(exported_txs);
+  LOG_PRINT_L2("Saving signed tx data: " << s);
+  // save as binary as there's no implementation of loading a json_archive
+  ::serialization::dump_binary(exported_txs, s);
+  return epee::file_io_utils::save_string_to_file(signed_filename, s);
+}
+
+bool wallet2::load_tx(const std::string &signed_filename, std::vector<tools::wallet2::pending_tx> &ptx)
+{
+  std::string s;
+  boost::system::error_code errcode;
+  exported_tx_set_data signed_txs;
+
+  if (!boost::filesystem::exists(signed_filename, errcode))
+  {
+    LOG_PRINT_L0("File " << signed_filename << " does not exist: " << errcode);
+    return false;
+  }
+
+  if (!epee::file_io_utils::load_file_to_string(signed_filename.c_str(), s))
+  {
+    LOG_PRINT_L0("Failed to load from " << signed_filename);
+    return false;
+  }
+  if (!::serialization::parse_binary(s, signed_txs))
+  {
+    LOG_PRINT_L0("Failed to parse data from " << signed_filename);
+    return false;
+  }
+  LOG_PRINT_L1("Loaded signed tx data from binary: " << signed_txs.ptx.size() << " transactions");
+
+  ptx = signed_txs.ptx;
+
+  return true;
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1331,8 +1421,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
         ptx_vector.push_back(ptx);
 
         // mark transfers to be used as "spent"
-        BOOST_FOREACH(transfer_container::iterator it, ptx.selected_transfers)
-          it->m_spent = true;
+        BOOST_FOREACH(uint64_t idx, ptx.selected_transfers)
+          m_transfers[idx].m_spent = true;
       }
 
       // if we made it this far, we've selected our transactions.  committing them will mark them spent,
@@ -1341,8 +1431,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
       for (auto & ptx : ptx_vector)
       {
         // mark transfers to be used as not spent
-        BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
-          it2->m_spent = false;
+        BOOST_FOREACH(uint64_t idx2, ptx.selected_transfers)
+          m_transfers[idx2].m_spent = false;
 
       }
 
@@ -1358,8 +1448,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
       for (auto & ptx : ptx_vector)
       {
         // mark transfers to be used as not spent
-        BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
-          it2->m_spent = false;
+        BOOST_FOREACH(uint64_t idx2, ptx.selected_transfers)
+          m_transfers[idx2].m_spent = false;
 
       }
 
@@ -1376,8 +1466,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
       for (auto & ptx : ptx_vector)
       {
         // mark transfers to be used as not spent
-        BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
-          it2->m_spent = false;
+        BOOST_FOREACH(uint64_t idx2, ptx.selected_transfers)
+          m_transfers[idx2].m_spent = false;
 
       }
 
@@ -1387,7 +1477,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
 }
 
 template<typename T>
-void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_entry>& dsts, const std::list<transfer_container::iterator> selected_transfers, size_t fake_outputs_count,
+void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_entry>& dsts, const std::list<uint64_t> selected_transfers, size_t fake_outputs_count,
   uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, T destination_split_strategy, const tx_dust_policy& dust_policy, cryptonote::transaction& tx, pending_tx &ptx)
 {
   using namespace cryptonote;
@@ -1408,9 +1498,9 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   }
 
   uint64_t found_money = 0;
-  BOOST_FOREACH(auto it, selected_transfers)
+  BOOST_FOREACH(auto idx, selected_transfers)
   {
-    found_money += it->amount();
+    found_money += m_transfers[idx].amount();
   }
 
   LOG_PRINT_L2("wanted " << print_money(needed_money) << ", found " << print_money(found_money) << ", fee " << print_money(fee));
@@ -1424,8 +1514,9 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   {
     COMMAND_RPC_GET_RANDOM_OUTPUTS_FOR_AMOUNTS::request req = AUTO_VAL_INIT(req);
     req.outs_count = fake_outputs_count + 1;// add one to make possible (if need) to skip real output key
-    BOOST_FOREACH(transfer_container::iterator it, selected_transfers)
+    BOOST_FOREACH(uint64_t idx, selected_transfers)
     {
+      transfer_container::iterator it = m_transfers.begin() + idx;
       THROW_WALLET_EXCEPTION_IF(it->m_tx.vout.size() <= it->m_internal_output_index, error::wallet_internal_error,
         "m_internal_output_index = " + std::to_string(it->m_internal_output_index) +
         " is greater or equal to outputs count = " + std::to_string(it->m_tx.vout.size()));
@@ -1454,8 +1545,9 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   //prepare inputs
   size_t i = 0;
   std::vector<cryptonote::tx_source_entry> sources;
-  BOOST_FOREACH(transfer_container::iterator it, selected_transfers)
+  BOOST_FOREACH(uint64_t idx, selected_transfers)
   {
+    transfer_container::iterator it = m_transfers.begin() + idx;
     sources.resize(sources.size()+1);
     cryptonote::tx_source_entry& src = sources.back();
     transfer_details& td = *it;
@@ -1531,6 +1623,11 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   ptx.change_dts = change_dts;
   ptx.selected_transfers = selected_transfers;
 
+  ptx.construction_data.sources = sources;
+  ptx.construction_data.destinations = splitted_dsts;
+  ptx.construction_data.extra = tx.extra;
+  ptx.construction_data.unlock_time = unlock_time;
+  ptx.construction_data.signatures = tx.signatures;
 }
 
 // Another implementation of transaction creation that is hopefully better
@@ -1555,7 +1652,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   uint64_t needed_money;
   uint64_t accumulated_fee, accumulated_outputs, accumulated_change;
   struct TX {
-    std::list<transfer_container::iterator> selected_transfers;
+    std::list<uint64_t> selected_transfers;
     std::vector<cryptonote::tx_destination_entry> dsts;
     cryptonote::transaction tx;
     pending_tx ptx;
@@ -1631,7 +1728,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
     LOG_PRINT_L2("Picking output " << idx << ", amount " << print_money(td.amount()));
 
     // add this output to the list to spend
-    tx.selected_transfers.push_back(m_transfers.begin() + idx);
+    tx.selected_transfers.push_back(idx);
     uint64_t available_amount = td.amount();
     accumulated_outputs += available_amount;
 
@@ -1764,8 +1861,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   {
     TX &tx = *i;
     uint64_t tx_money = 0;
-    for (std::list<transfer_container::iterator>::const_iterator mi = tx.selected_transfers.begin(); mi != tx.selected_transfers.end(); ++mi)
-      tx_money += (*mi)->amount();
+    for (std::list<uint64_t>::const_iterator mi = tx.selected_transfers.begin(); mi != tx.selected_transfers.end(); ++mi)
+      tx_money += m_transfers[*mi].amount();
     LOG_PRINT_L1("  Transaction " << (1+std::distance(txes.begin(), i)) << "/" << txes.size() <<
       ": " << (tx.bytes+1023)/1024 << " kB, sending " << print_money(tx_money) << " in " << tx.selected_transfers.size() <<
       " outputs to " << tx.dsts.size() << " destination(s), including " <<
@@ -1780,7 +1877,6 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
 uint64_t wallet2::unlocked_dust_balance(const tx_dust_policy &dust_policy) const
 {
   uint64_t money = 0;
-  std::list<transfer_container::iterator> selected_transfers;
   for (transfer_container::const_iterator i = m_transfers.begin(); i != m_transfers.end(); ++i)
   {
     const transfer_details& td = *i;
@@ -1800,13 +1896,13 @@ void wallet2::transfer_dust(size_t num_outputs, uint64_t unlock_time, uint64_t n
   // select all dust inputs for transaction
   // throw if there are none
   uint64_t money = 0;
-  std::list<transfer_container::iterator> selected_transfers;
+  std::list<uint64_t> selected_transfers;
   for (transfer_container::iterator i = m_transfers.begin(); i != m_transfers.end(); ++i)
   {
     const transfer_details& td = *i;
     if (!td.m_spent && td.amount() < dust_policy.dust_threshold && is_transfer_unlocked(td))
     {
-      selected_transfers.push_back (i);
+      selected_transfers.push_back (std::distance(m_transfers.begin(), i));
       money += td.amount();
       if (selected_transfers.size() >= num_outputs)
         break;
@@ -1821,8 +1917,9 @@ void wallet2::transfer_dust(size_t num_outputs, uint64_t unlock_time, uint64_t n
   //prepare inputs
   size_t i = 0;
   std::vector<cryptonote::tx_source_entry> sources;
-  BOOST_FOREACH(transfer_container::iterator it, selected_transfers)
+  BOOST_FOREACH(uint64_t idx, selected_transfers)
   {
+    transfer_container::iterator it = m_transfers.begin() + idx;
     sources.resize(sources.size()+1);
     cryptonote::tx_source_entry& src = sources.back();
     transfer_details& td = *it;
@@ -1876,6 +1973,11 @@ void wallet2::transfer_dust(size_t num_outputs, uint64_t unlock_time, uint64_t n
   ptx.tx = tx;
   ptx.change_dts = change_dts;
   ptx.selected_transfers = selected_transfers;
+  ptx.construction_data.sources = sources;
+  ptx.construction_data.destinations = splitted_dsts;
+  ptx.construction_data.extra = tx.extra;
+  ptx.construction_data.unlock_time = unlock_time;
+  ptx.construction_data.signatures = tx.signatures;
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1934,8 +2036,8 @@ std::vector<wallet2::pending_tx> wallet2::create_dust_sweep_transactions()
         ptx_vector.push_back(ptx);
 
         // mark transfers to be used as "spent"
-        BOOST_FOREACH(transfer_container::iterator it, ptx.selected_transfers)
-          it->m_spent = true;
+        BOOST_FOREACH(uint64_t idx, ptx.selected_transfers)
+          m_transfers[idx].m_spent = true;
       }
 
       // if we made it this far, we've selected our transactions.  committing them will mark them spent,
@@ -1944,8 +2046,8 @@ std::vector<wallet2::pending_tx> wallet2::create_dust_sweep_transactions()
       for (auto & ptx : ptx_vector)
       {
         // mark transfers to be used as not spent
-        BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
-          it2->m_spent = false;
+        BOOST_FOREACH(uint64_t idx2, ptx.selected_transfers)
+          m_transfers[idx2].m_spent = false;
 
       }
 
@@ -1961,8 +2063,8 @@ std::vector<wallet2::pending_tx> wallet2::create_dust_sweep_transactions()
       for (auto & ptx : ptx_vector)
       {
         // mark transfers to be used as not spent
-        BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
-          it2->m_spent = false;
+        BOOST_FOREACH(uint64_t idx2, ptx.selected_transfers)
+          m_transfers[idx2].m_spent = false;
 
       }
 
@@ -1979,8 +2081,8 @@ std::vector<wallet2::pending_tx> wallet2::create_dust_sweep_transactions()
       for (auto & ptx : ptx_vector)
       {
         // mark transfers to be used as not spent
-        BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
-          it2->m_spent = false;
+        BOOST_FOREACH(uint64_t idx2, ptx.selected_transfers)
+          m_transfers[idx2].m_spent = false;
 
       }
 

@@ -57,6 +57,14 @@ namespace cryptonote
     crypto::public_key real_out_tx_key; //incoming real tx public key
     size_t real_output_in_tx_index;     //index in transaction outputs vector
     uint64_t amount;                    //money
+
+    BEGIN_SERIALIZE_OBJECT()
+      FIELD(outputs)
+      VARINT_FIELD(real_output)
+      FIELD(real_out_tx_key)
+      VARINT_FIELD(real_output_in_tx_index)
+      VARINT_FIELD(amount)
+    END_SERIALIZE()
   };
 
   struct tx_destination_entry
@@ -66,6 +74,11 @@ namespace cryptonote
 
     tx_destination_entry() : amount(0), addr(AUTO_VAL_INIT(addr)) { }
     tx_destination_entry(uint64_t a, const account_public_address &ad) : amount(a), addr(ad) { }
+
+    BEGIN_SERIALIZE_OBJECT()
+      VARINT_FIELD(amount)
+      FIELD(addr)
+    END_SERIALIZE()
   };
 
   //---------------------------------------------------------------

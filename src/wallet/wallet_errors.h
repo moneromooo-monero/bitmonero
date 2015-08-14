@@ -48,6 +48,7 @@ namespace tools
     //     wallet_runtime_error *
     //       wallet_internal_error
     //         unexpected_txin_type
+    //         unexpected_txout_type
     //   std::logic_error
     //     wallet_logic_error *
     //       file_exists
@@ -151,6 +152,28 @@ namespace tools
     {
       explicit unexpected_txin_type(std::string&& loc, const cryptonote::transaction& tx)
         : wallet_internal_error(std::move(loc), "one of tx inputs has unexpected type")
+        , m_tx(tx)
+      {
+      }
+
+      const cryptonote::transaction& tx() const { return m_tx; }
+
+      std::string to_string() const
+      {
+        std::ostringstream ss;
+        cryptonote::transaction tx = m_tx;
+        ss << wallet_internal_error::to_string() << ", tx:\n" << cryptonote::obj_to_json_str(tx);
+        return ss.str();
+      }
+
+    private:
+      cryptonote::transaction m_tx;
+    };
+    //----------------------------------------------------------------------------------------------------
+    struct unexpected_txout_type : public wallet_internal_error
+    {
+      explicit unexpected_txout_type(std::string&& loc, const cryptonote::transaction& tx)
+        : wallet_internal_error(std::move(loc), "one of tx outputs has unexpected type")
         , m_tx(tx)
       {
       }
