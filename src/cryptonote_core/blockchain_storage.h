@@ -184,6 +184,11 @@ namespace cryptonote
     bool update_checkpoints(const std::string& file_path, bool check_dns);
     void set_enforce_dns_checkpoints(bool enforce_checkpoints);
 
+    bool for_all_key_images(std::function<bool(const crypto::key_image&)>) const;
+    bool for_all_blocks(std::function<bool(uint64_t height, const crypto::hash&, const block&)>) const;
+    bool for_all_transactions(std::function<bool(const crypto::hash&, const transaction&)>) const;
+    bool for_all_outputs(std::function<bool(uint64_t amount, const crypto::hash &tx_hash, size_t tx_idx)>) const;
+
   private:
     typedef std::unordered_map<crypto::hash, size_t> blocks_by_id_index;
     typedef std::unordered_map<crypto::hash, transaction_chain_entry> transactions_container;
