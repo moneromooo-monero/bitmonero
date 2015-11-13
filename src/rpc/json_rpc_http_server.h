@@ -6,6 +6,8 @@
 #ifndef JSON_RPC_HTTP_SERVER_H
 #define JSON_RPC_HTTP_SERVER_H
 
+#include <unistd.h>
+#include <sys/socket.h>
 #include "net_skeleton/net_skeleton.h"
 #include <boost/thread.hpp>
 #include <string>
