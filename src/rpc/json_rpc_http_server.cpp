@@ -5,6 +5,7 @@
 
 #include "json_rpc_http_server.h"
 
+#include <unistd.h>
 #include <iostream>
 
 /*!
