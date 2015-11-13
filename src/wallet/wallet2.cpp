@@ -68,6 +68,13 @@ using namespace cryptonote;
 // arbitrary, used to generate different hashes from the same input
 #define CHACHA8_KEY_TAIL 0x8c
 
+#define KILL_IOSERVICE()  \
+    do { \
+      work.reset(); \
+      threadpool.join_all(); \
+      ioservice.stop(); \
+    } while(0)
+
 namespace
 {
 void do_prepare_file_names(const std::string& file_path, std::string& keys_file, std::string& wallet_file)
@@ -149,6 +156,25 @@ bool wallet2::is_deprecated() const
   return is_old_file_format;
 }
 //----------------------------------------------------------------------------------------------------
+void wallet2::check_acc_out(const account_keys &acc, const tx_out &o, const crypto::public_key &tx_pub_key, size_t i, uint64_t &money_transfered, bool &error) const
+{
+  if (o.target.type() !=  typeid(txout_to_key))
+  {
+     error = true;
+     LOG_ERROR("wrong type id in transaction out");
+     return;
+  }
+  if(is_out_to_acc(acc, boost::get<txout_to_key>(o.target), tx_pub_key, i))
+  {
+    money_transfered = o.amount;
+  }
+  else
+  {
+    money_transfered = 0;
+  }
+  error = false;
+}
+//----------------------------------------------------------------------------------------------------
 void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_t height)
 {
   process_unconfirmed(tx);
@@ -176,7 +202,48 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
     }
 
     tx_pub_key = pub_key_field.pub_key;
-    bool r = lookup_acc_outs(m_account.get_keys(), tx, tx_pub_key, outs, tx_money_got_in_outs);
+    bool r = true;
+    int threads = std::thread::hardware_concurrency();
+    if (threads > 1)
+    {
+      boost::asio::io_service ioservice;
+      boost::thread_group threadpool;
+      std::auto_ptr < boost::asio::io_service::work > work(new boost::asio::io_service::work(ioservice));
+      for (int i = 0; i < threads; i++)
+      {
+        threadpool.create_thread(boost::bind(&boost::asio::io_service::run, &ioservice));
+      }
+
+      const account_keys &keys = m_account.get_keys();
+      uint64_t *money_transfered = new uint64_t[tx.vout.size()];
+      bool *error = new bool[tx.vout.size()];
+      for (size_t i = 0; i < tx.vout.size(); ++i)
+      {
+        ioservice.dispatch(boost::bind(&wallet2::check_acc_out, this, std::cref(keys), std::cref(tx.vout[i]), std::cref(tx_pub_key), i,
+          std::ref(money_transfered[i]), std::ref(error[i])));
+      }
+      KILL_IOSERVICE();
+      tx_money_got_in_outs = 0;
+      for (size_t i = 0; i < tx.vout.size(); ++i)
+      {
+        if (error[i])
+        {
+          r = false;
+          break;
+        }
+        if (money_transfered[i])
+        {
+          outs.push_back(i);
+          tx_money_got_in_outs += money_transfered[i];
+        }
+      }
+      delete[] error;
+      delete[] money_transfered;
+    }
+    else
+    {
+      r = lookup_acc_outs(m_account.get_keys(), tx, tx_pub_key, outs, tx_money_got_in_outs);
+    }
     THROW_WALLET_EXCEPTION_IF(!r, error::acc_outs_lookup_error, tx, tx_pub_key, m_account.get_keys());
 
     if(!outs.empty() && tx_money_got_in_outs)
@@ -303,7 +370,7 @@ void wallet2::process_unconfirmed(const cryptonote::transaction& tx)
     m_unconfirmed_txs.erase(unconf_it);
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::process_new_blockchain_entry(const cryptonote::block& b, cryptonote::block_complete_entry& bche, crypto::hash& bl_id, uint64_t height)
+void wallet2::process_new_blockchain_entry(const cryptonote::block& b, cryptonote::block_complete_entry& bche, const crypto::hash& bl_id, uint64_t height)
 {
   //handle transactions from new block
     
@@ -361,7 +428,7 @@ void wallet2::get_short_chain_history(std::list<crypto::hash>& ids) const
   if(!genesis_included)
     ids.push_back(m_blockchain[0]);
 }
-void wallet2::get_blocks_from_zmq_msg(zmsg_t *msg, std::list<cryptonote::block_complete_entry> &blocks) {
+void wallet2::get_blocks_from_zmq_msg(zmsg_t *msg, std::vector<cryptonote::block_complete_entry> &blocks) {
   zframe_t *frame = zmsg_first(msg);
   THROW_WALLET_EXCEPTION_IF(!frame, error::get_blocks_error, "getblocks");
   size_t size = zframe_size(frame);
@@ -369,6 +436,7 @@ void wallet2::get_blocks_from_zmq_msg(zmsg_t *msg, std::list<cryptonote::block_c
   const uint8_t *block_data = reinterpret_cast<const uint8_t*>(zframe_data(frame));
   THROW_WALLET_EXCEPTION_IF(size < 8, error::get_blocks_error, "getblocks");
   uint64_t nblocks = IPC::read64be(block_data);
+  blocks.reserve(nblocks);
   block_data += 8; size -= 8;
   for (uint64_t n = 0; n < nblocks; ++n) {
     block_complete_entry be;
@@ -391,6 +459,13 @@ void wallet2::get_blocks_from_zmq_msg(zmsg_t *msg, std::list<cryptonote::block_c
     }
     blocks.push_back(be);
   }
+}
+//----------------------------------------------------------------------------------------------------
+void wallet2::parse_block_round(const cryptonote::blobdata &blob, cryptonote::block &bl, crypto::hash &bl_id, bool &error) const
+{
+  error = !cryptonote::parse_and_validate_block_from_blob(blob, bl);
+  if (!error)
+    bl_id = get_block_hash(bl);
 }
 //----------------------------------------------------------------------------------------------------
 void wallet2::pull_blocks(uint64_t start_height, uint64_t& blocks_added)
@@ -420,11 +495,73 @@ void wallet2::pull_blocks(uint64_t start_height, uint64_t& blocks_added)
   THROW_WALLET_EXCEPTION_IF(status == IPC::STATUS_CORE_BUSY, error::daemon_busy, "get_blocks");
   THROW_WALLET_EXCEPTION_IF(status == IPC::STATUS_INTERNAL_ERROR, error::daemon_internal_error, "get_blocks");
   THROW_WALLET_EXCEPTION_IF(status != IPC::STATUS_OK, error::get_blocks_error, "get_blocks");
-  std::list<block_complete_entry> blocks;
+  std::vector<block_complete_entry> blocks;
   zmsg_t *msg = wap_client_msg_data(ipc_client); 
   get_blocks_from_zmq_msg(msg, blocks);
 
   uint64_t current_index = wap_client_start_height(ipc_client);
+
+  int threads = std::thread::hardware_concurrency();
+  if (threads > 1)
+  {
+    crypto::hash *round_block_hashes = new crypto::hash[threads];
+    cryptonote::block *round_blocks = new cryptonote::block[threads];
+    bool *error = new bool[threads];
+    for (size_t b = 0; b < blocks.size(); b += threads)
+    {
+      size_t round_size = std::min((size_t)threads, blocks.size() - b);
+
+      boost::asio::io_service ioservice;
+      boost::thread_group threadpool;
+      std::auto_ptr < boost::asio::io_service::work > work(new boost::asio::io_service::work(ioservice));
+      for (size_t i = 0; i < round_size; i++)
+      {
+        threadpool.create_thread(boost::bind(&boost::asio::io_service::run, &ioservice));
+      }
+
+      for (size_t i = 0; i < round_size; ++i)
+      {
+        ioservice.dispatch(boost::bind(&wallet2::parse_block_round, this, std::cref(blocks[b+i].block),
+          std::ref(round_blocks[i]), std::ref(round_block_hashes[i]), std::ref(error[i])));
+      }
+      KILL_IOSERVICE();
+      for (size_t i = 0; i < round_size; ++i)
+      {
+        THROW_WALLET_EXCEPTION_IF(error[i], error::block_parse_error, blocks[b+i].block);
+      }
+      for (size_t i = 0; i < round_size; ++i)
+      {
+        const crypto::hash &bl_id = round_block_hashes[i];
+        cryptonote::block &bl = round_blocks[i];
+        if(current_index >= m_blockchain.size())
+        {
+          process_new_blockchain_entry(bl, blocks[b+i], bl_id, current_index);
+          ++blocks_added;
+        }
+        else if(bl_id != m_blockchain[current_index])
+        {
+          //split detected here !!!
+          THROW_WALLET_EXCEPTION_IF(current_index == start_height, error::wallet_internal_error,
+            "wrong daemon response: split starts from the first block in response " + string_tools::pod_to_hex(bl_id) +
+            " (height " + std::to_string(start_height) + "), local block id at this height: " +
+            string_tools::pod_to_hex(m_blockchain[current_index]));
+
+          detach_blockchain(current_index);
+          process_new_blockchain_entry(bl, blocks[b+i], bl_id, current_index);
+        }
+        else
+        {
+          LOG_PRINT_L2("Block is already in blockchain: " << string_tools::pod_to_hex(bl_id));
+        }
+        ++current_index;
+      }
+    }
+    delete[] error;
+    delete[] round_blocks;
+    delete[] round_block_hashes;
+  }
+  else
+  {
   BOOST_FOREACH(auto& bl_entry, blocks)
   {
     cryptonote::block bl;
@@ -454,6 +591,7 @@ void wallet2::pull_blocks(uint64_t start_height, uint64_t& blocks_added)
     }
 
     ++current_index;
+  }
   }
 }
 //----------------------------------------------------------------------------------------------------

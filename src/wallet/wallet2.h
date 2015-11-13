@@ -334,13 +334,13 @@ namespace tools
      */
     void load_keys(const std::string& keys_file_name, const std::string& password);
     void process_new_transaction(const cryptonote::transaction& tx, uint64_t height);
-    void process_new_blockchain_entry(const cryptonote::block& b, cryptonote::block_complete_entry& bche, crypto::hash& bl_id, uint64_t height);
+    void process_new_blockchain_entry(const cryptonote::block& b, cryptonote::block_complete_entry& bche, const crypto::hash& bl_id, uint64_t height);
     void detach_blockchain(uint64_t height);
     void get_short_chain_history(std::list<crypto::hash>& ids) const;
     bool is_tx_spendtime_unlocked(uint64_t unlock_time) const;
     bool is_transfer_unlocked(const transfer_details& td) const;
     bool clear();
-    void get_blocks_from_zmq_msg(zmsg_t *msg, std::list<cryptonote::block_complete_entry> &blocks);
+    void get_blocks_from_zmq_msg(zmsg_t *msg, std::vector<cryptonote::block_complete_entry> &blocks);
     void pull_blocks(uint64_t start_height, uint64_t& blocks_added);
     uint64_t select_transfers(uint64_t needed_money, bool add_dust, uint64_t dust, std::list<transfer_container::iterator>& selected_transfers);
     bool prepare_file_names(const std::string& file_path);
@@ -350,6 +350,8 @@ namespace tools
     void connect_to_daemon();
     void check_genesis(const crypto::hash& genesis_hash) const; //throws
     bool generate_chacha8_key_from_secret_keys(crypto::chacha8_key &key) const;
+    void check_acc_out(const cryptonote::account_keys &acc, const cryptonote::tx_out &o, const crypto::public_key &tx_pub_key, size_t i, uint64_t &money_transfered, bool &error) const;
+    void parse_block_round(const cryptonote::blobdata &blob, cryptonote::block &bl, crypto::hash &bl_id, bool &error) const;
 
     cryptonote::account_base m_account;
     std::string m_daemon_address;
