@@ -132,6 +132,29 @@ namespace cryptonote
     res.grey_peerlist_size = m_p2p.get_peerlist_manager().get_gray_peers_count();
     res.testnet = m_testnet;
     res.status = CORE_RPC_STATUS_OK;
+
+    LOG_PRINT_L0("Scanning for missing key images");
+    uint64_t missing = 0;
+    std::unordered_set<crypto::hash> txes;
+    m_core.get_blockchain_storage().for_all_transactions([&](const crypto::hash &hash, const cryptonote::transaction &tx) {
+      if (tx.vout.size() == 0) {
+        txes.emplace(hash);
+      }
+      return true;
+    });
+    for (const auto &hash: txes) {
+      uint64_t height = m_core.get_blockchain_storage().get_db().get_tx_block_height(hash);
+      cryptonote::transaction tx = m_core.get_blockchain_storage().get_db().get_tx(hash);
+      LOG_PRINT_L0("Found 0 output tx: height " << height << ", hash " << string_tools::pod_to_hex(hash));
+      for (const auto &txin: tx.vin) {
+        if (txin.type() == typeid(txin_to_key)) {
+          const txin_to_key &tk = boost::get<txin_to_key>(txin);
+          LOG_PRINT_L0("  key image: " << string_tools::pod_to_hex(tk.k_image));
+          ++missing;
+        }
+      }
+    }
+    LOG_PRINT_L0("Found " << missing << " missing key images");
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
