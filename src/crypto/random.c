@@ -92,6 +92,9 @@ static void generate_system_random_bytes(size_t n, void *result) {
 
 static union hash_state state;
 
+#define RESEED_EVERY 256
+static unsigned int calls = 0;
+
 #if !defined(NDEBUG)
 static volatile int curstate; /* To catch thread safety problems. */
 #endif
@@ -125,6 +128,16 @@ void generate_random_bytes(size_t n, void *result) {
 #endif
     return;
   }
+  if (calls == 0) {
+    unsigned char reseed[32];
+    unsigned int n;
+    generate_system_random_bytes(32, reseed);
+    for (n = 0; n < 32; ++n)
+      ((unsigned char*)&state)[n] ^= reseed[n];
+    memset(reseed, 0, 32);
+    calls = RESEED_EVERY;
+  }
+  --calls;
   for (;;) {
     hash_permutation(&state);
     if (n <= HASH_DATA_AREA) {
