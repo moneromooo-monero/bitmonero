@@ -92,8 +92,9 @@ namespace net_utils
 			typename t_protocol_handler::config_type& config, 
 			std::atomic<long> &ref_sock_count,  // the ++/-- counter 
 			std::atomic<long> &sock_number, // the only increasing ++ number generator
-			i_connection_filter * &pfilter
-			,t_connection_type connection_type);
+			i_connection_filter * &pfilter,
+			t_connection_type connection_type,
+			uint64_t idle_timeout_ms);
 
     virtual ~connection();
     /// Get the socket associated with the connection.
@@ -150,6 +151,9 @@ namespace net_utils
     
     t_connection_type m_connection_type;
     
+    boost::asio::deadline_timer m_idle_timer;
+    uint64_t m_idle_timeout;
+
     // for calculate speed (last 60 sec)
     network_throttle m_throttle_speed_in;
     network_throttle m_throttle_speed_out;

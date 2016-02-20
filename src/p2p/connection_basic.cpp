@@ -261,6 +261,7 @@ void connection_basic::sleep_before_packet(size_t packet_size, int phase,  int q
             long int ms = (long int)(delay * 1000);
 			_info_c("net/sleep", "Sleeping in " << __FUNCTION__ << " for " << ms << " ms before packet_size="<<packet_size); // debug sleep
 			_dbg1("sleep in sleep_before_packet");
+			LOG_PRINT_L1("sleep in sleep_before_packet: " << ms << " ms");
 			epee::net_utils::data_logger::get_instance().add_data("sleep_up", ms);
 			boost::this_thread::sleep(boost::posix_time::milliseconds( ms ) );
 		}

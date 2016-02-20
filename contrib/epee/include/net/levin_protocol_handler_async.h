@@ -706,6 +706,8 @@ template<class t_connection_context>
 void async_protocol_handler_config<t_connection_context>::add_connection(async_protocol_handler<t_connection_context>* pconn)
 {
   CRITICAL_REGION_BEGIN(m_connects_lock);
+  if (m_connects.find(pconn->get_connection_id()) != m_connects.end())
+    LOG_PRINT_L0("Replacing existing connection");
   m_connects[pconn->get_connection_id()] = pconn;
   CRITICAL_REGION_END();
   m_pcommands_handler->on_connection_new(pconn->m_connection_context);

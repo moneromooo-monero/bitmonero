@@ -103,12 +103,15 @@
 #define P2P_DEFAULT_PING_CONNECTION_TIMEOUT             2000       //2 seconds
 #define P2P_DEFAULT_INVOKE_TIMEOUT                      60*2*1000  //2 minutes
 #define P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT            5000       //5 seconds
+#define P2P_DEFAULT_IDLE_TIMEOUT                        (60*5*1000) // 5 minutes, should be larger than other timeouts
 #define P2P_DEFAULT_WHITELIST_CONNECTIONS_PERCENT       70
 
 #define P2P_FAILED_ADDR_FORGET_SECONDS                  (60*60)     //1 hour
 #define P2P_IP_BLOCKTIME                                (60*60*24)  //24 hour
 #define P2P_IP_FAILS_BEFORE_BLOCK                       10
 #define P2P_IDLE_CONNECTION_KILL_INTERVAL               (5*60) //5 minutes
+
+#define RPC_DEFAULT_IDLE_TIMEOUT                        (60*5*1000) // 5 minutes
 
 #define ALLOW_DEBUG_COMMANDS
 

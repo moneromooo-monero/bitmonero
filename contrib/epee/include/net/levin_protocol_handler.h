@@ -83,6 +83,7 @@ namespace levin
   template<class t_connection_context>
 	bool protocol_handler<t_connection_context>::handle_recv(const void* ptr, size_t cb)
 	{
+    LOG_PRINT_L1("handle_recv " << cb);
 		if(!m_config.m_pcommands_handler)
 		{
 			LOG_ERROR("Command handler not set!");
@@ -135,6 +136,7 @@ namespace levin
 					}
 
 
+    LOG_PRINT_L1("invoking " << m_current_head.m_command << " have to return " << m_current_head.m_have_to_return_data);
 					if(m_current_head.m_have_to_return_data)
 					{
 						std::string return_buff;
@@ -143,6 +145,7 @@ namespace levin
 						m_current_head.m_have_to_return_data = false;
 						std::string send_buff((const char*)&m_current_head, sizeof(m_current_head));
 						send_buff += return_buff;
+    LOG_PRINT_L1("invoked " << m_current_head.m_command << ", sending back " << send_buff);
 
 						if(!m_psnd_hndlr->do_send(send_buff.data(), send_buff.size()))
 							return false;

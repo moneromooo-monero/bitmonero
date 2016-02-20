@@ -343,7 +343,7 @@ namespace nodetool
       }
       else
       {
-        LOG_PRINT_L2("IPv6 doesn't supported, skip '" << host << "' -> " << endpoint.address().to_v6().to_string(ec));
+        LOG_PRINT_L1("IPv6 doesn't supported, skip '" << host << "' -> " << endpoint.address().to_v6().to_string(ec));
       }
     }
   }
@@ -713,7 +713,7 @@ namespace nodetool
 
         if(rsp.node_data.peer_id == m_config.m_peer_id)
         {
-          LOG_PRINT_CCONTEXT_L2("Connection to self detected, dropping connection");
+          LOG_PRINT_CCONTEXT_L1("Connection to self detected, dropping connection");
           hsh_result = false;
           return;
         }
@@ -766,7 +766,7 @@ namespace nodetool
 
     if(!r)
     {
-      LOG_PRINT_CC_L2(context_, "COMMAND_TIMED_SYNC Failed");
+      LOG_PRINT_CC_L1(context_, "COMMAND_TIMED_SYNC Failed");
       return false;
     }
     return true;
@@ -959,7 +959,7 @@ namespace nodetool
       if(is_addr_recently_failed(pe.adr))
         continue;
 
-      LOG_PRINT_L2("Selected peer: " << pe.id << " " << epee::string_tools::get_ip_string_from_int32(pe.adr.ip)
+      LOG_PRINT_L1("Selected peer: " << pe.id << " " << epee::string_tools::get_ip_string_from_int32(pe.adr.ip)
                     << ":" << boost::lexical_cast<std::string>(pe.adr.port)
                     << "[white=" << use_white_list
                     << "] last_seen: " << (pe.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - pe.last_seen) : "never"));
@@ -1078,7 +1078,7 @@ namespace nodetool
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::peer_sync_idle_maker()
   {
-    LOG_PRINT_L2("STARTED PEERLIST IDLE HANDSHAKE");
+    LOG_PRINT_L1("STARTED PEERLIST IDLE HANDSHAKE");
     typedef std::list<std::pair<epee::net_utils::connection_context_base, peerid_type> > local_connects_type;
     local_connects_type cncts;
     m_net_server.get_config_object().foreach_connection([&](const p2p_connection_context& cntxt)
@@ -1090,7 +1090,7 @@ namespace nodetool
 
     std::for_each(cncts.begin(), cncts.end(), [&](const typename local_connects_type::value_type& vl){do_peer_timed_sync(vl.first, vl.second);});
 
-    LOG_PRINT_L2("FINISHED PEERLIST IDLE HANDSHAKE");
+    LOG_PRINT_L1("FINISHED PEERLIST IDLE HANDSHAKE");
     return true;
   }
   //-----------------------------------------------------------------------------------
@@ -1121,7 +1121,7 @@ namespace nodetool
     std::list<peerlist_entry> peerlist_ = peerlist;
     if(!fix_time_delta(peerlist_, local_time, delta))
       return false;
-    LOG_PRINT_CCONTEXT_L2("REMOTE PEERLIST: TIME_DELTA: " << delta << ", remote peerlist size=" << peerlist_.size());
+    LOG_PRINT_CCONTEXT_L1("REMOTE PEERLIST: TIME_DELTA: " << delta << ", remote peerlist size=" << peerlist_.size());
     LOG_PRINT_CCONTEXT_L3("REMOTE PEERLIST: " <<  print_peerlist_to_string(peerlist_));
     return m_peerlist.merge_peerlist(peerlist_);
   }
@@ -1293,7 +1293,7 @@ namespace nodetool
     {
       if(ec)
       {
-        LOG_PRINT_CC_L2(ping_context, "back ping connect failed to " << ip << ":" << port);
+        LOG_PRINT_CC_L1(ping_context, "back ping connect failed to " << ip << ":" << port);
         return false;
       }
       COMMAND_PING::request req;
@@ -1312,13 +1312,13 @@ namespace nodetool
       {
         if(code <= 0)
         {
-          LOG_PRINT_CC_L2(ping_context, "Failed to invoke COMMAND_PING to " << ip << ":" << port << "(" << code <<  ", " << epee::levin::get_err_descr(code) << ")");
+          LOG_PRINT_CC_L1(ping_context, "Failed to invoke COMMAND_PING to " << ip << ":" << port << "(" << code <<  ", " << epee::levin::get_err_descr(code) << ")");
           return;
         }
 
         if(rsp.status != PING_OK_RESPONSE_STATUS_TEXT || pr != rsp.peer_id)
         {
-          LOG_PRINT_CC_L2(ping_context, "back ping invoke wrong response \"" << rsp.status << "\" from" << ip << ":" << port << ", hsh_peer_id=" << pr_ << ", rsp.peer_id=" << rsp.peer_id);
+          LOG_PRINT_CC_L1(ping_context, "back ping invoke wrong response \"" << rsp.status << "\" from" << ip << ":" << port << ", hsh_peer_id=" << pr_ << ", rsp.peer_id=" << rsp.peer_id);
           return;
         }
         m_net_server.get_config_object().close(ping_context.m_connection_id);
@@ -1327,7 +1327,7 @@ namespace nodetool
 
       if(!inv_call_res)
       {
-        LOG_PRINT_CC_L2(ping_context, "back ping invoke failed to " << ip << ":" << port);
+        LOG_PRINT_CC_L1(ping_context, "back ping invoke failed to " << ip << ":" << port);
         m_net_server.get_config_object().close(ping_context.m_connection_id);
         return false;
       }
@@ -1354,7 +1354,7 @@ namespace nodetool
     rsp.local_time = time(NULL);
     m_peerlist.get_peerlist_head(rsp.local_peerlist);
     m_payload_handler.get_payload_sync_data(rsp.payload_data);
-    LOG_PRINT_CCONTEXT_L2("COMMAND_TIMED_SYNC");
+    LOG_PRINT_CCONTEXT_L1("COMMAND_TIMED_SYNC");
     return 1;
   }
   //-----------------------------------------------------------------------------------
@@ -1410,7 +1410,7 @@ namespace nodetool
         pe.last_seen = static_cast<int64_t>(last_seen);
         pe.id = peer_id_l;
         this->m_peerlist.append_with_peer_white(pe);
-        LOG_PRINT_CCONTEXT_L2("PING SUCCESS " << epee::string_tools::get_ip_string_from_int32(context.m_remote_ip) << ":" << port_l);
+        LOG_PRINT_CCONTEXT_L1("PING SUCCESS " << epee::string_tools::get_ip_string_from_int32(context.m_remote_ip) << ":" << port_l);
       });
     }
 
@@ -1425,7 +1425,7 @@ namespace nodetool
   template<class t_payload_net_handler>
   int node_server<t_payload_net_handler>::handle_ping(int command, COMMAND_PING::request& arg, COMMAND_PING::response& rsp, p2p_connection_context& context)
   {
-    LOG_PRINT_CCONTEXT_L2("COMMAND_PING");
+    LOG_PRINT_CCONTEXT_L1("COMMAND_PING");
     rsp.status = PING_OK_RESPONSE_STATUS_TEXT;
     rsp.peer_id = m_config.m_peer_id;
     return 1;
@@ -1468,13 +1468,13 @@ namespace nodetool
   template<class t_payload_net_handler>
   void node_server<t_payload_net_handler>::on_connection_new(p2p_connection_context& context)
   {
-    LOG_PRINT_L2("["<< epee::net_utils::print_connection_context(context) << "] NEW CONNECTION");
+    LOG_PRINT_L1("["<< epee::net_utils::print_connection_context(context) << "] NEW CONNECTION");
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
   void node_server<t_payload_net_handler>::on_connection_close(p2p_connection_context& context)
   {
-    LOG_PRINT_L2("["<< epee::net_utils::print_connection_context(context) << "] CLOSE CONNECTION");
+    LOG_PRINT_L1("["<< epee::net_utils::print_connection_context(context) << "] CLOSE CONNECTION");
   }
 
   template<class t_payload_net_handler>
