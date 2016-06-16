@@ -412,6 +412,7 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
             td.m_mask = rct::identity();
           }
 	  td.m_spent = false;
+          td.m_spent_height = 0;
 	  m_key_images[td.m_key_image] = m_transfers.size()-1;
 	  LOG_PRINT_L0("Received money: " << print_money(td.amount()) << ", with tx: " << get_transaction_hash(tx));
 	  if (0 != m_callback)
@@ -479,6 +480,7 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
       LOG_PRINT_L0("Spent money: " << print_money(amount) << ", with tx: " << get_transaction_hash(tx));
       tx_money_spent_in_ins += amount;
       td.m_spent = true;
+      td.m_spent_height = height;
       if (0 != m_callback)
         m_callback->on_money_spent(height, td.m_tx, amount, tx);
     }
@@ -1042,6 +1044,17 @@ void wallet2::detach_blockchain(uint64_t height)
 {
   LOG_PRINT_L0("Detaching blockchain on height " << height);
   size_t transfers_detached = 0;
+
+  for (size_t i = 0; i < m_transfers.size(); ++i)
+  {
+    wallet2::transfer_details &td = m_transfers[i];
+    if (td.m_spent && td.m_spent_height >= height)
+    {
+      LOG_PRINT_L1("Resetting spent status for output " << i << ": " << td.m_key_image);
+      td.m_spent = false;
+      td.m_spent_height = 0;
+    }
+  }
 
   auto it = std::find_if(m_transfers.begin(), m_transfers.end(), [&](const transfer_details& td){return td.m_block_height >= height;});
   size_t i_start = it - m_transfers.begin();
@@ -1832,10 +1845,12 @@ void wallet2::rescan_spent()
       if (td.m_spent)
       {
         LOG_PRINT_L0("Marking output " << i << "(" << td.m_key_image << ") as unspent, it was marked as spent");
+        td.m_spent_height = 0;
       }
       else
       {
         LOG_PRINT_L0("Marking output " << i << "(" << td.m_key_image << ") as spent, it was marked as unspent");
+        // unknown height, if this gets reorged, it might still be missed
       }
       td.m_spent = daemon_resp.spent_status[i] != COMMAND_RPC_IS_KEY_IMAGE_SPENT::UNSPENT;
     }
@@ -2145,7 +2160,10 @@ void wallet2::commit_tx(pending_tx& ptx)
   LOG_PRINT_L2("transaction " << txid << " generated ok and sent to daemon, key_images: [" << ptx.key_images << "]");
 
   BOOST_FOREACH(transfer_container::iterator it, ptx.selected_transfers)
+  {
     it->m_spent = true;
+    it->m_spent_height = 0;
+  }
 
   //fee includes dust if dust policy specified it.
   LOG_PRINT_L0("Transaction successfully sent. <" << txid << ">" << ENDL
@@ -2223,7 +2241,10 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
 
         // mark transfers to be used as "spent"
         BOOST_FOREACH(transfer_container::iterator it, ptx.selected_transfers)
+        {
           it->m_spent = true;
+          it->m_spent_height = 0;
+        }
       }
 
       // if we made it this far, we've selected our transactions.  committing them will mark them spent,
@@ -2233,7 +2254,10 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
       {
         // mark transfers to be used as not spent
         BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
+        {
           it2->m_spent = false;
+          it2->m_spent_height = 0;
+        }
 
       }
 
@@ -2250,8 +2274,10 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
       {
         // mark transfers to be used as not spent
         BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
+        {
           it2->m_spent = false;
-
+          it2->m_spent_height = 0;
+        }
       }
 
       if (attempt_count >= MAX_SPLIT_ATTEMPTS)
@@ -2268,8 +2294,10 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions(std::vector<crypto
       {
         // mark transfers to be used as not spent
         BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
+        {
           it2->m_spent = false;
-
+          it2->m_spent_height = 0;
+        }
       }
 
       throw;
@@ -3585,7 +3613,10 @@ std::vector<wallet2::pending_tx> wallet2::create_unmixable_sweep_transactions(bo
 
         // mark transfers to be used as "spent"
         BOOST_FOREACH(transfer_container::iterator it, ptx.selected_transfers)
+        {
           it->m_spent = true;
+          it->m_spent_height = 0;
+        }
       }
 
       // if we made it this far, we've selected our transactions.  committing them will mark them spent,
@@ -3595,8 +3626,10 @@ std::vector<wallet2::pending_tx> wallet2::create_unmixable_sweep_transactions(bo
       {
         // mark transfers to be used as not spent
         BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
+        {
           it2->m_spent = false;
-
+          it2->m_spent_height = 0;
+        }
       }
 
       // if we made it this far, we're OK to actually send the transactions
@@ -3612,8 +3645,10 @@ std::vector<wallet2::pending_tx> wallet2::create_unmixable_sweep_transactions(bo
       {
         // mark transfers to be used as not spent
         BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
+        {
           it2->m_spent = false;
-
+          it2->m_spent_height = 0;
+        }
       }
 
       if (attempt_count >= MAX_SPLIT_ATTEMPTS)
@@ -3630,8 +3665,10 @@ std::vector<wallet2::pending_tx> wallet2::create_unmixable_sweep_transactions(bo
       {
         // mark transfers to be used as not spent
         BOOST_FOREACH(transfer_container::iterator it2, ptx.selected_transfers)
+        {
           it2->m_spent = false;
-
+          it2->m_spent_height = 0;
+        }
       }
 
       throw;
