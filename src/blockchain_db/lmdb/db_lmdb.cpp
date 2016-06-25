@@ -1240,6 +1240,7 @@ void BlockchainLMDB::reset()
   mdb_drop(txn, m_block_info, 0);
   mdb_drop(txn, m_block_heights, 0);
   mdb_drop(txn, m_txs, 0);
+  mdb_drop(txn, m_tx_indices, 0);
   mdb_drop(txn, m_tx_outputs, 0);
   mdb_drop(txn, m_output_txs, 0);
   mdb_drop(txn, m_output_amounts, 0);
@@ -1248,6 +1249,13 @@ void BlockchainLMDB::reset()
   mdb_drop(txn, m_hf_starting_heights, 0);
   mdb_drop(txn, m_hf_versions, 0);
   mdb_drop(txn, m_properties, 0);
+
+  // init with current version
+  MDB_val_copy<const char*> k("version");
+  MDB_val_copy<uint32_t> v(VERSION);
+  if (auto result = mdb_put(txn, m_properties, &k, &v, 0))
+    throw0(DB_ERROR(lmdb_error("Failed to write version to database: ", result).c_str()));
+
   txn.commit();
   m_height = 0;
   m_num_outputs = 0;
