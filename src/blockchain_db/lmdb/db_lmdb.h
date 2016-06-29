@@ -236,11 +236,6 @@ public:
 
   virtual bool has_key_image(const crypto::key_image& img) const;
 
-  virtual uint64_t get_num_rct_outputs() const;
-  virtual rct::key get_rct_commitment(uint64_t idx) const;
-  virtual uint64_t add_rct_commitment(const rct::key &commitment);
-  virtual void remove_rct_commitment(uint64_t idx);
-
   virtual bool for_all_key_images(std::function<bool(const crypto::key_image&)>) const;
   virtual bool for_all_blocks(std::function<bool(uint64_t, const crypto::hash&, const cryptonote::block&)>) const;
   virtual bool for_all_transactions(std::function<bool(const crypto::hash&, const cryptonote::transaction&)>) const;
@@ -301,7 +296,8 @@ private:
   virtual uint64_t add_output(const crypto::hash& tx_hash,
       const tx_out& tx_output,
       const uint64_t& local_index,
-      const uint64_t unlock_time
+      const uint64_t unlock_time,
+      const rct::key *commitment
       );
 
   virtual void add_tx_amount_output_indices(const uint64_t tx_id,
