@@ -99,6 +99,9 @@ static const struct {
 
   // version 2 starts from block 624634, which is on or around the 23rd of November, 2015. Fork time finalised on 2015-11-20. No fork voting occurs for the v2 fork.
   { 2, 624634, 0, 1445355000 },
+
+  // version 3 starts from block 1141317, which is on or around the 24th of September, 2016. Fork time finalised on 2016-03-21.
+  { 3, 774283, 0, 1458558528 },
 };
 static const uint64_t testnet_hard_fork_version_1_till = 624633;
 
