@@ -54,6 +54,14 @@
 
 namespace tools
 {
+  class slog {
+    private:
+      std::string str;
+    public:
+      slog(const char *s, unsigned ver): str(s) { LOG_PRINT_L0("entering " << str << ", ver " << ver); }
+      ~slog() { LOG_PRINT_L0("leaving " << str); }
+  };
+  #define SLOG() tools::slog s(__PRETTY_FUNCTION__, ver)
   class i_wallet2_callback
   {
   public:
@@ -309,6 +317,7 @@ namespace tools
     template <class t_archive>
     inline void serialize(t_archive &a, const unsigned int ver)
     {
+      SLOG();
       uint64_t dummy_refresh_height = 0; // moved to keys file
       if(ver < 5)
         return;
@@ -478,6 +487,7 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive &a, tools::wallet2::transfer_details &x, const boost::serialization::version_type ver)
     {
+      SLOG();
       a & x.m_block_height;
       a & x.m_global_output_index;
       a & x.m_internal_output_index;
@@ -489,6 +499,7 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive &a, tools::wallet2::unconfirmed_transfer_details &x, const boost::serialization::version_type ver)
     {
+      SLOG();
       a & x.m_change;
       a & x.m_sent_time;
       a & x.m_tx;
@@ -507,6 +518,7 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive &a, tools::wallet2::confirmed_transfer_details &x, const boost::serialization::version_type ver)
     {
+      SLOG();
       a & x.m_amount_in;
       a & x.m_amount_out;
       a & x.m_change;
@@ -523,6 +535,7 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive& a, tools::wallet2::payment_details& x, const boost::serialization::version_type ver)
     {
+      SLOG();
       a & x.m_tx_hash;
       a & x.m_amount;
       a & x.m_block_height;
@@ -535,6 +548,7 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive& a, cryptonote::tx_destination_entry& x, const boost::serialization::version_type ver)
     {
+      SLOG();
       a & x.amount;
       a & x.addr;
     }
