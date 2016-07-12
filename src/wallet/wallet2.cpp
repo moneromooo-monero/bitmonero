@@ -226,6 +226,7 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
       return;
     }
 
+    int num_vouts_received = 0;
     tx_pub_key = pub_key_field.pub_key;
     bool r = true;
     std::deque<cryptonote::keypair> in_ephemeral(tx.vout.size());
@@ -260,6 +261,7 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
             money_transfered = tools::decodeRct(tx.rct_signatures, rct::sk2rct(in_ephemeral[0].sec), 0, mask[0]);
           amount[0] = money_transfered;
           tx_money_got_in_outs = money_transfered;
+          ++num_vouts_received;
 
           // process the other outs from that tx
           boost::asio::io_service ioservice;
@@ -299,6 +301,7 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
                 money_transfered[i] = tools::decodeRct(tx.rct_signatures, rct::sk2rct(in_ephemeral[i].sec), i, mask[i]);
               tx_money_got_in_outs += money_transfered[i];
               amount[i] = money_transfered[i];
+              ++num_vouts_received;
             }
           }
         }
@@ -343,6 +346,7 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
             money_transfered[i] = tools::decodeRct(tx.rct_signatures, rct::sk2rct(in_ephemeral[i].sec), i, mask[i]);
           tx_money_got_in_outs += money_transfered[i];
           amount[i] = money_transfered[i];
+          ++num_vouts_received;
         }
       }
     }
@@ -371,13 +375,14 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, uint64_
               money_transfered = tools::decodeRct(tx.rct_signatures, rct::sk2rct(in_ephemeral[i].sec), i, mask[i]);
             amount[i] = money_transfered;
             tx_money_got_in_outs += money_transfered;
+            ++num_vouts_received;
           }
         }
       }
     }
     THROW_WALLET_EXCEPTION_IF(!r, error::acc_outs_lookup_error, tx, tx_pub_key, m_account.get_keys());
 
-    if(!outs.empty() && tx_money_got_in_outs)
+    if(!outs.empty() && num_vouts_received > 0)
     {
       //good news - got money! take care about it
       //usually we have only one transfer for user in transaction
@@ -2696,12 +2701,8 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   }
 
   cryptonote::tx_destination_entry change_dts = AUTO_VAL_INIT(change_dts);
-  if (needed_money < found_money)
-  {
-    change_dts.addr = m_account.get_keys().m_account_address;
-    change_dts.amount = found_money - needed_money;
-  }
-
+  change_dts.addr = m_account.get_keys().m_account_address;
+  change_dts.amount = found_money - needed_money; // may be 0, we allow 0 change
   dsts.push_back(change_dts);
 
   crypto::secret_key tx_key;
