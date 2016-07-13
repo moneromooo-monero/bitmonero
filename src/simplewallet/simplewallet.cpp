@@ -3270,6 +3270,7 @@ void simple_wallet::wallet_refresh_thread()
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::run()
 {
+  refresh_main(0, false);
   std::string addr_start = m_wallet->get_account().get_public_address_str(m_wallet->testnet()).substr(0, 6);
   m_auto_refresh_run = m_wallet->auto_refresh();
   if (m_auto_refresh_run)
