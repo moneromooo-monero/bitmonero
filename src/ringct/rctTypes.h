@@ -112,6 +112,12 @@ namespace rct {
         key mask;
         key amount;
         key senderPk;
+
+        BEGIN_SERIALIZE_OBJECT()
+          FIELD(mask)
+          FIELD(amount)
+          // FIELD(senderPk) // not serialized, as we do not use it in monero currently
+        END_SERIALIZE()
     };
 
     //containers for representing amounts
