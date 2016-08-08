@@ -2469,8 +2469,9 @@ bool Blockchain::check_tx_inputs(const transaction& tx, tx_verification_context 
     // from version 2, check ringct signatures
     // obviously, the original and simple rct APIs use a mixRing that's indexes
     // in opposite orders, because it'd be too simple otherwise...
-    if (tx.rct_signatures.simple)
+    switch (tx.rct_signatures.type)
     {
+    case rct::RCTTypeSimple: {
       rct::ctkeyM reconstructed_mixRing;
       std::vector<rct::keyV> reconstructed_II;
       rct::ctkeyV reconstructed_outPk;
@@ -2573,9 +2574,9 @@ bool Blockchain::check_tx_inputs(const transaction& tx, tx_verification_context 
         LOG_PRINT_L1("Failed to check ringct signatures!");
         return false;
       }
+      break;
     }
-    else
-    {
+    case rct::RCTTypeFull: {
       rct::ctkeyM reconstructed_mixRing;
       rct::keyV reconstructed_II;
       rct::ctkeyV reconstructed_outPk;
@@ -2679,6 +2680,11 @@ bool Blockchain::check_tx_inputs(const transaction& tx, tx_verification_context 
         LOG_PRINT_L1("Failed to check ringct signatures!");
         return false;
       }
+      break;
+    }
+    default:
+      LOG_PRINT_L1("Unsupported rct type: " << tx.rct_signatures.type);
+      return false;
     }
   }
   return true;
