@@ -964,7 +964,7 @@ bool Blockchain::validate_miner_transaction(const block& b, size_t cumulative_bl
     money_in_use += o.amount;
   partial_block_reward = false;
 
-  if (version >= 3) {
+  if (version == 3) {
     for (auto &o: b.miner_tx.vout) {
       if (!is_valid_decomposed_amount(o.amount)) {
         LOG_PRINT_L1("miner tx output " << print_money(o.amount) << " is not a valid decomposed amount");
@@ -2359,17 +2359,6 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
       }
     }
 
-    // for v3, we force txes with all mixable inputs to be rct
-    if (m_hardfork->get_current_version() >= 4)
-    {
-      if (n_unmixable == 0 && tx.version == 1)
-      {
-        LOG_PRINT_L1("Tx " << get_transaction_hash(tx) << " is not rct and does not have unmixable inputs");
-        tvc.m_not_rct = true;
-        return false;
-      }
-    }
-
     if (mixin < 2)
     {
       if (n_unmixable == 0)
@@ -2548,6 +2537,11 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
     const rct::rctSig &rv = tx.rct_signatures;
     switch (rv.type)
     {
+    case rct::RCTTypeNull: {
+      // we only accept no signatures for coinbase txes
+      LOG_PRINT_L1("Null rct signature on non-coinbase tx");
+      return false;
+    }
     case rct::RCTTypeSimple: {
       // check all this, either recontructed (so should really pass), or not
       {
