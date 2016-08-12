@@ -488,10 +488,17 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, const s
             {
               td.m_mask = mask[o];
               td.m_amount = amount[o];
+              td.m_rct = true;
+            }
+            else if (miner_tx && tx.version == 2)
+            {
+              td.m_mask = rct::identity();
+              td.m_rct = true;
             }
             else
             {
               td.m_mask = rct::identity();
+              td.m_rct = false;
             }
 	    set_unspent(td);
 	    m_key_images[td.m_key_image] = m_transfers.size()-1;
@@ -528,10 +535,17 @@ void wallet2::process_new_transaction(const cryptonote::transaction& tx, const s
             {
               td.m_mask = mask[o];
               td.m_amount = amount[o];
+              td.m_rct = true;
+            }
+            else if (miner_tx && tx.version == 2)
+            {
+              td.m_mask = rct::identity();
+              td.m_rct = true;
             }
             else
             {
               td.m_mask = rct::identity();
+              td.m_rct = false;
             }
             THROW_WALLET_EXCEPTION_IF(td.m_key_image != ki[o], error::wallet_internal_error, "Inconsistent key images");
 	    THROW_WALLET_EXCEPTION_IF(td.m_spent, error::wallet_internal_error, "Inconsistent spent status");
@@ -2846,6 +2860,7 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
     cryptonote::tx_source_entry& src = sources.back();
     transfer_details& td = *it;
     src.amount = td.amount();
+    src.rct = td.is_rct();
     //paste keys (fake and real)
 
     for (size_t n = 0; n < fake_outputs_count + 1; ++n)
@@ -3036,6 +3051,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
     cryptonote::tx_source_entry& src = sources.back();
     transfer_details& td = *it;
     src.amount = td.amount();
+    src.rct = td.is_rct();
     //paste mixin transaction
     if(it->is_rct())
     {
@@ -3731,6 +3747,7 @@ void wallet2::transfer_from(const std::vector<size_t> &outs, size_t num_outputs,
     cryptonote::tx_source_entry& src = sources.back();
     transfer_details& td = *it;
     src.amount = td.amount();
+    src.rct = td.is_rct();
 
     //paste real transaction to the random index
     auto it_to_insert = std::find_if(src.outputs.begin(), src.outputs.end(), [&](const tx_output_entry& a)
