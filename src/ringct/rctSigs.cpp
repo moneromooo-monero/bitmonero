@@ -155,82 +155,153 @@ namespace rct {
     //   the signer knows a secret key for each row in that column
     // Ver verifies that the MG sig was created correctly        
     mgSig MLSAG_Gen(const key &message, const keyM & pk, const keyV & xx, const unsigned int index, size_t dsRows) {
+std::cout << "trace: " << __LINE__ << std::endl;
         mgSig rv;
+std::cout << "trace: " << __LINE__ << std::endl;
         size_t cols = pk.size();
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(cols >= 2, "Error! What is c if cols = 1!");
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(index < cols, "Index out of range");
+std::cout << "trace: " << __LINE__ << std::endl;
         size_t rows = pk[0].size();
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(rows >= 1, "Empty pk");
+std::cout << "trace: " << __LINE__ << std::endl;
         for (size_t i = 1; i < cols; ++i) {
+std::cout << "trace: " << __LINE__ << std::endl;
           CHECK_AND_ASSERT_THROW_MES(pk[i].size() == rows, "pk is not rectangular");
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(xx.size() == rows, "Bad xx size");
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(dsRows <= rows, "Bad dsRows size");
+std::cout << "trace: " << __LINE__ << std::endl;
 
         size_t i = 0, j = 0, ii = 0;
+std::cout << "trace: " << __LINE__ << std::endl;
         key c, c_old, L, R, Hi;
+std::cout << "trace: " << __LINE__ << std::endl;
         sc_0(c_old.bytes);
+std::cout << "trace: " << __LINE__ << std::endl;
         vector<geDsmp> Ip(dsRows);
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.II = keyV(dsRows);
+std::cout << "trace: " << __LINE__ << std::endl;
         keyV alpha(rows);
+std::cout << "trace: " << __LINE__ << std::endl;
         keyV aG(rows);
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.ss = keyM(cols, aG);
+std::cout << "trace: " << __LINE__ << std::endl;
         keyV aHP(dsRows);
+std::cout << "trace: " << __LINE__ << std::endl;
         keyV toHash(1 + 3 * dsRows + 2 * (rows - dsRows));
+std::cout << "trace: " << __LINE__ << std::endl;
         toHash[0] = message;
+std::cout << "trace: " << __LINE__ << std::endl;
         DP("here1");
+std::cout << "trace: " << __LINE__ << std::endl;
         for (i = 0; i < dsRows; i++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             skpkGen(alpha[i], aG[i]); //need to save alphas for later..
+std::cout << "trace: " << __LINE__ << std::endl;
             Hi = hashToPoint(pk[index][i]);
+std::cout << "trace: " << __LINE__ << std::endl;
             aHP[i] = scalarmultKey(Hi, alpha[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
             toHash[3 * i + 1] = pk[index][i];
+std::cout << "trace: " << __LINE__ << std::endl;
             toHash[3 * i + 2] = aG[i];
+std::cout << "trace: " << __LINE__ << std::endl;
             toHash[3 * i + 3] = aHP[i];
+std::cout << "trace: " << __LINE__ << std::endl;
             rv.II[i] = scalarmultKey(Hi, xx[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
             precomp(Ip[i].k, rv.II[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         size_t ndsRows = 3 * dsRows; //non Double Spendable Rows (see identity chains paper)
+std::cout << "trace: " << __LINE__ << std::endl;
         for (i = dsRows, ii = 0 ; i < rows ; i++, ii++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             skpkGen(alpha[i], aG[i]); //need to save alphas for later..
+std::cout << "trace: " << __LINE__ << std::endl;
             toHash[ndsRows + 2 * ii + 1] = pk[index][i];
+std::cout << "trace: " << __LINE__ << std::endl;
             toHash[ndsRows + 2 * ii + 2] = aG[i];
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
 
         c_old = hash_to_scalar(toHash);
 
         
+std::cout << "trace: " << __LINE__ << std::endl;
         i = (index + 1) % cols;
+std::cout << "trace: " << __LINE__ << std::endl;
         if (i == 0) {
+std::cout << "trace: " << __LINE__ << std::endl;
             copy(rv.cc, c_old);
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         while (i != index) {
 
+std::cout << "trace: " << __LINE__ << std::endl;
             rv.ss[i] = skvGen(rows);            
+std::cout << "trace: " << __LINE__ << std::endl;
             sc_0(c.bytes);
+std::cout << "trace: " << __LINE__ << std::endl;
             for (j = 0; j < dsRows; j++) {
+std::cout << "trace: " << __LINE__ << std::endl;
                 addKeys2(L, rv.ss[i][j], c_old, pk[i][j]);
+std::cout << "trace: " << __LINE__ << std::endl;
                 hashToPoint(Hi, pk[i][j]);
+std::cout << "trace: " << __LINE__ << std::endl;
                 addKeys3(R, rv.ss[i][j], Hi, c_old, Ip[j].k);
+std::cout << "trace: " << __LINE__ << std::endl;
                 toHash[3 * j + 1] = pk[i][j];
+std::cout << "trace: " << __LINE__ << std::endl;
                 toHash[3 * j + 2] = L; 
+std::cout << "trace: " << __LINE__ << std::endl;
                 toHash[3 * j + 3] = R;
+std::cout << "trace: " << __LINE__ << std::endl;
             }
+std::cout << "trace: " << __LINE__ << std::endl;
             for (j = dsRows, ii = 0; j < rows; j++, ii++) {
+std::cout << "trace: " << __LINE__ << std::endl;
                 addKeys2(L, rv.ss[i][j], c_old, pk[i][j]);
+std::cout << "trace: " << __LINE__ << std::endl;
                 toHash[ndsRows + 2 * ii + 1] = pk[i][j];
+std::cout << "trace: " << __LINE__ << std::endl;
                 toHash[ndsRows + 2 * ii + 2] = L;
+std::cout << "trace: " << __LINE__ << std::endl;
             }
+std::cout << "trace: " << __LINE__ << std::endl;
             c = hash_to_scalar(toHash);
+std::cout << "trace: " << __LINE__ << std::endl;
             copy(c_old, c);
+std::cout << "trace: " << __LINE__ << std::endl;
             i = (i + 1) % cols;
+std::cout << "trace: " << __LINE__ << std::endl;
             
             if (i == 0) { 
+std::cout << "trace: " << __LINE__ << std::endl;
                 copy(rv.cc, c_old);
+std::cout << "trace: " << __LINE__ << std::endl;
             }   
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         for (j = 0; j < rows; j++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             sc_mulsub(rv.ss[index][j].bytes, c.bytes, xx[j].bytes, alpha[j].bytes);
+std::cout << "trace: " << __LINE__ << std::endl;
         }        
+std::cout << "trace: " << __LINE__ << std::endl;
         return rv;
     }
     
@@ -391,49 +462,92 @@ namespace rct {
     //Ver:    
     //   verifies the above sig is created corretly
     mgSig proveRctMG(const key &message, const ctkeyM & pubs, const ctkeyV & inSk, const ctkeyV &outSk, const ctkeyV & outPk, unsigned int index, key txnFeeKey) {
+std::cout << "trace: " << __LINE__ << std::endl;
         mgSig mg;
+std::cout << "trace: " << __LINE__ << std::endl;
         //setup vars
         size_t cols = pubs.size();
+std::cout << "cols: " << cols << std::endl;
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(cols >= 1, "Empty pubs");
+std::cout << "trace: " << __LINE__ << std::endl;
         size_t rows = pubs[0].size();
+std::cout << "rows: " << rows << std::endl;
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(rows >= 1, "Empty pubs");
+std::cout << "trace: " << __LINE__ << std::endl;
         for (size_t i = 1; i < cols; ++i) {
+std::cout << "trace: " << __LINE__ << std::endl;
           CHECK_AND_ASSERT_THROW_MES(pubs[i].size() == rows, "pubs is not rectangular");
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(inSk.size() == rows, "Bad inSk size");
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(outSk.size() == outPk.size(), "Bad outSk/outPk size");
 
+std::cout << "trace: " << __LINE__ << std::endl;
         keyV sk(rows + 1);
+std::cout << "trace: " << __LINE__ << std::endl;
         keyV tmp(rows + 1);
+std::cout << "trace: " << __LINE__ << std::endl;
         size_t i = 0, j = 0;
+std::cout << "trace: " << __LINE__ << std::endl;
         for (i = 0; i < rows + 1; i++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             sc_0(sk[i].bytes);
+std::cout << "trace: " << __LINE__ << std::endl;
             identity(tmp[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         keyM M(cols, tmp);
+std::cout << "trace: " << __LINE__ << std::endl;
         //create the matrix to mg sig
         for (i = 0; i < cols; i++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             M[i][rows] = identity();
+std::cout << "trace: " << __LINE__ << std::endl;
             for (j = 0; j < rows; j++) {
+std::cout << "trace: " << __LINE__ << std::endl;
                 M[i][j] = pubs[i][j].dest;
+std::cout << "trace: " << __LINE__ << std::endl;
                 addKeys(M[i][rows], M[i][rows], pubs[i][j].mask); //add input commitments in last row
+std::cout << "trace: " << __LINE__ << std::endl;
             }
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         sc_0(sk[rows].bytes);
+std::cout << "trace: " << __LINE__ << std::endl;
         for (j = 0; j < rows; j++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             sk[j] = copy(inSk[j].dest);
+std::cout << "trace: " << __LINE__ << std::endl;
             sc_add(sk[rows].bytes, sk[rows].bytes, inSk[j].mask.bytes); //add masks in last row
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         for (i = 0; i < cols; i++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             for (size_t j = 0; j < outPk.size(); j++) {
+std::cout << "trace: " << __LINE__ << std::endl;
                 subKeys(M[i][rows], M[i][rows], outPk[j].mask); //subtract output Ci's in last row
+std::cout << "trace: " << __LINE__ << std::endl;
             }
+std::cout << "trace: " << __LINE__ << std::endl;
             //subtract txn fee output in last row
+std::cout << "trace: " << __LINE__ << std::endl;
             subKeys(M[i][rows], M[i][rows], txnFeeKey);
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         for (size_t j = 0; j < outPk.size(); j++) {
+std::cout << "trace: " << __LINE__ << std::endl;
             sc_sub(sk[rows].bytes, sk[rows].bytes, outSk[j].mask.bytes); //subtract output masks in last row..
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         return MLSAG_Gen(message, M, sk, index, rows);
     }
 
@@ -592,60 +706,96 @@ namespace rct {
     //   Note: For txn fees, the last index in the amounts vector should contain that
     //   Thus the amounts vector will be "one" longer than the destinations vectort
     rctSig genRct(const key &message, const ctkeyV & inSk, const keyV & destinations, const vector<xmr_amount> & amounts, const ctkeyM &mixRing, const keyV &amount_keys, unsigned int index, ctkeyV &outSk) {
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(amounts.size() == destinations.size() || amounts.size() == destinations.size() + 1, "Different number of amounts/destinations");
         CHECK_AND_ASSERT_THROW_MES(amount_keys.size() == destinations.size(), "Different number of amount_keys/destinations");
+std::cout << "trace: " << __LINE__ << std::endl;
         CHECK_AND_ASSERT_THROW_MES(index < mixRing.size(), "Bad index into mixRing");
+std::cout << "trace: " << __LINE__ << std::endl;
         for (size_t n = 0; n < mixRing.size(); ++n) {
+std::cout << "trace: " << __LINE__ << std::endl;
           CHECK_AND_ASSERT_THROW_MES(mixRing[n].size() == inSk.size(), "Bad mixRing size");
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
 
         rctSig rv;
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.type = RCTTypeFull;
         rv.message = message;
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.outPk.resize(destinations.size());
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.p.rangeSigs.resize(destinations.size());
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.ecdhInfo.resize(destinations.size());
+std::cout << "trace: " << __LINE__ << std::endl;
 
         size_t i = 0;
         keyV masks(destinations.size()); //sk mask..
+std::cout << "trace: " << __LINE__ << std::endl;
         outSk.resize(destinations.size());
+std::cout << "trace: " << __LINE__ << std::endl;
         for (i = 0; i < destinations.size(); i++) {
             //add destination to sig
+std::cout << "trace: " << __LINE__ << std::endl;
             rv.outPk[i].dest = copy(destinations[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
             //compute range proof
             rv.p.rangeSigs[i] = proveRange(rv.outPk[i].mask, outSk[i].mask, amounts[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
             #ifdef DBG
+std::cout << "trace: " << __LINE__ << std::endl;
                 CHECK_AND_ASSERT_THROW_MES(verRange(rv.outPk[i].mask, rv.p.rangeSigs[i]), "verRange failed on newly created proof");
+std::cout << "trace: " << __LINE__ << std::endl;
             #endif
 
+std::cout << "trace: " << __LINE__ << std::endl;
             //mask amount and mask
             rv.ecdhInfo[i].mask = copy(outSk[i].mask);
+std::cout << "trace: " << __LINE__ << std::endl;
             rv.ecdhInfo[i].amount = d2h(amounts[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
             ecdhEncode(rv.ecdhInfo[i], amount_keys[i]);
+std::cout << "trace: " << __LINE__ << std::endl;
 
         }
 
         //set txn fee
+std::cout << "trace: " << __LINE__ << std::endl;
         if (amounts.size() > destinations.size())
         {
+std::cout << "trace: " << __LINE__ << std::endl;
           rv.txnFee = amounts[destinations.size()];
+std::cout << "trace: " << __LINE__ << std::endl;
         }
         else
         {
+std::cout << "trace: " << __LINE__ << std::endl;
           rv.txnFee = 0;
+std::cout << "trace: " << __LINE__ << std::endl;
         }
+std::cout << "trace: " << __LINE__ << std::endl;
         key txnFeeKey = scalarmultH(d2h(rv.txnFee));
 
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.mixRing = mixRing;
+std::cout << "trace: " << __LINE__ << std::endl;
         rv.p.MGs.push_back(proveRctMG(get_pre_mlsag_hash(rv), rv.mixRing, inSk, outSk, rv.outPk, index, txnFeeKey));
+std::cout << "trace: " << __LINE__ << std::endl;
         return rv;
     }
 
     rctSig genRct(const key &message, const ctkeyV & inSk, const ctkeyV  & inPk, const keyV & destinations, const vector<xmr_amount> & amounts, const keyV &amount_keys, const int mixin) {
+std::cout << "trace: " << __LINE__ << std::endl;
         unsigned int index;
+std::cout << "trace: " << __LINE__ << std::endl;
         ctkeyM mixRing;
+std::cout << "trace: " << __LINE__ << std::endl;
         ctkeyV outSk;
+std::cout << "trace: " << __LINE__ << std::endl;
         tie(mixRing, index) = populateFromBlockchain(inPk, mixin);
+std::cout << "trace: " << __LINE__ << std::endl;
         return genRct(message, inSk, destinations, amounts, mixRing, amount_keys, index, outSk);
     }
     
