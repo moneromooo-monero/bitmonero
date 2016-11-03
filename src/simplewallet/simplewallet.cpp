@@ -2350,6 +2350,8 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
   if (!try_connect_to_daemon())
     return true;
 
+  LOG_PRINT_L1("transfer_main start, args:");
+  for (const auto &a: args_) LOG_PRINT_L1("   " << a);
   LOCK_IDLE_SCOPE();
 
   std::vector<std::string> local_args = args_;
@@ -2381,26 +2383,32 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
   if ((expect_even ? 0 : 1) == local_args.size() % 2)
   {
     std::string payment_id_str = local_args.back();
+  LOG_PRINT_L1("explicit payment id: " << payment_id_str);
     local_args.pop_back();
 
     crypto::hash payment_id;
     bool r = tools::wallet2::parse_long_payment_id(payment_id_str, payment_id);
     if(r)
     {
+  LOG_PRINT_L1("was valid full length");
       std::string extra_nonce;
       set_payment_id_to_tx_extra_nonce(extra_nonce, payment_id);
       r = add_extra_nonce_to_tx_extra(extra, extra_nonce);
     }
     else
     {
+  LOG_PRINT_L1("was invalid, full length");
       crypto::hash8 payment_id8;
       r = tools::wallet2::parse_short_payment_id(payment_id_str, payment_id8);
       if(r)
       {
+  LOG_PRINT_L1("was valid short length");
         std::string extra_nonce;
         set_encrypted_payment_id_to_tx_extra_nonce(extra_nonce, payment_id8);
         r = add_extra_nonce_to_tx_extra(extra, extra_nonce);
       }
+else
+LOG_PRINT_L1("was invvalid short length too");
     }
 
     if(!r)
@@ -2408,6 +2416,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       fail_msg_writer() << tr("payment id has invalid format, expected 16 or 64 character hex string: ") << payment_id_str;
       return true;
     }
+LOG_PRINT_L1("setting payment_id_seen");
     payment_id_seen = true;
   }
 
@@ -2437,13 +2446,16 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     cryptonote::tx_destination_entry de;
     bool has_payment_id;
     crypto::hash8 new_payment_id;
+LOG_PRINT_L1("Next pair: address " << local_args[i] << ", amount " << local_args[i+1]);
     if (!get_address_from_str(local_args[i], de.addr, has_payment_id, new_payment_id))
       return true;
 
+LOG_PRINT_L1("has_payment_id: " << has_payment_id);
     if (has_payment_id)
     {
       if (payment_id_seen)
       {
+LOG_PRINT_L1("more than one payment id seen");
         fail_msg_writer() << tr("a single transaction cannot use more than one payment id: ") << local_args[i];
         return true;
       }
@@ -2456,6 +2468,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         fail_msg_writer() << tr("failed to set up payment id, though it was decoded correctly");
         return true;
       }
+LOG_PRINT_L1("setting payment_id_seen");
       payment_id_seen = true;
     }
 
@@ -2486,6 +2499,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
      }
   }
 
+LOG_PRINT_L1("creating transaction");
   try
   {
     // figure out what tx will be necessary
@@ -2679,16 +2693,19 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::transfer(const std::vector<std::string> &args_)
 {
+LOG_PRINT_L1("transfer");
   return transfer_main(TransferOriginal, args_);
 }
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::transfer_new(const std::vector<std::string> &args_)
 {
+LOG_PRINT_L1("transfer_new");
   return transfer_main(TransferNew, args_);
 }
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::locked_transfer(const std::vector<std::string> &args_)
 {
+LOG_PRINT_L1("transfer_locked");
   return transfer_main(TransferLocked, args_);
 }
 //----------------------------------------------------------------------------------------------------
