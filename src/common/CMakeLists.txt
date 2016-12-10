@@ -72,6 +72,7 @@ target_link_libraries(common
     crypto
     ${UNBOUND_LIBRARY}
     ${LIBUNWIND_LIBRARIES}
+    ${LIBLZMA_LIBRARIES}
     ${Boost_DATE_TIME_LIBRARY}
     ${Boost_FILESYSTEM_LIBRARY}
     ${Boost_SYSTEM_LIBRARY}
