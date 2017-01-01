@@ -50,7 +50,12 @@ using namespace epee;
 #include "blockchain_db/berkeleydb/db_bdb.h"
 #endif
 
+#undef MONERO_DEFAULT_LOG_CATEGORY
+#define MONERO_DEFAULT_LOG_CATEGORY "cn"
+
 DISABLE_VS_WARNINGS(4355)
+
+#define MERROR_VER(x) MCERROR("verify", x)
 
 namespace cryptonote
 {
@@ -280,10 +285,10 @@ namespace cryptonote
       const boost::filesystem::path old_files = folder;
       if (boost::filesystem::exists(old_files / "blockchain.bin"))
       {
-        LOG_PRINT_RED_L0("Found old-style blockchain.bin in " << old_files.string());
-        LOG_PRINT_RED_L0("Monero now uses a new format. You can either remove blockchain.bin to start syncing");
-        LOG_PRINT_RED_L0("the blockchain anew, or use monero-blockchain-export and monero-blockchain-import to");
-        LOG_PRINT_RED_L0("convert your existing blockchain.bin to the new format. See README.md for instructions.");
+        MWARNING("Found old-style blockchain.bin in " << old_files.string());
+        MWARNING("Monero now uses a new format. You can either remove blockchain.bin to start syncing");
+        MWARNING("the blockchain anew, or use monero-blockchain-export and monero-blockchain-import to");
+        MWARNING("convert your existing blockchain.bin to the new format. See README.md for instructions.");
         return false;
       }
     }
@@ -320,7 +325,7 @@ namespace cryptonote
     }
 
     folder /= db->get_db_name();
-    LOG_PRINT_L0("Loading blockchain from folder " << folder.string() << " ...");
+    MGINFO("Loading blockchain from folder " << folder.string() << " ...");
 
     const std::string filename = folder.string();
     // temporarily default to fastest:async:1000
@@ -336,7 +341,7 @@ namespace cryptonote
       boost::split(options, db_sync_mode, boost::is_any_of(" :"));
 
       for(const auto &option : options)
-        LOG_PRINT_L0("option: " << option);
+        MDEBUG("option: " << option);
 
       // default to fast:async:1000
       uint64_t DEFAULT_FLAGS = DBS_FAST_MODE;
@@ -516,12 +521,12 @@ namespace cryptonote
 
     bool r = add_new_tx(tx, tx_hash, tx_prefixt_hash, tx_blob.size(), tvc, keeped_by_block, relayed);
     if(tvc.m_verifivation_failed)
-    {LOG_PRINT_RED_L1("Transaction verification failed: " << tx_hash);}
+    {MERROR_VER("Transaction verification failed: " << tx_hash);}
     else if(tvc.m_verifivation_impossible)
-    {LOG_PRINT_RED_L1("Transaction verification impossible: " << tx_hash);}
+    {MERROR_VER("Transaction verification impossible: " << tx_hash);}
 
     if(tvc.m_added_to_pool)
-      LOG_PRINT_L1("tx added: " << tx_hash);
+      MDEBUG("tx added: " << tx_hash);
     return r;
   }
   //-----------------------------------------------------------------------------------------------
@@ -540,33 +545,33 @@ namespace cryptonote
   {
     if(!tx.vin.size())
     {
-      LOG_PRINT_RED_L1("tx with empty inputs, rejected for tx id= " << get_transaction_hash(tx));
+      MERROR_VER("tx with empty inputs, rejected for tx id= " << get_transaction_hash(tx));
       return false;
     }
 
     if(!check_inputs_types_supported(tx))
     {
-      LOG_PRINT_RED_L1("unsupported input types for tx id= " << get_transaction_hash(tx));
+      MERROR_VER("unsupported input types for tx id= " << get_transaction_hash(tx));
       return false;
     }
 
     if(!check_outs_valid(tx))
     {
-      LOG_PRINT_RED_L1("tx with invalid outputs, rejected for tx id= " << get_transaction_hash(tx));
+      MERROR_VER("tx with invalid outputs, rejected for tx id= " << get_transaction_hash(tx));
       return false;
     }
     if (tx.version > 1)
     {
       if (tx.rct_signatures.outPk.size() != tx.vout.size())
       {
-        LOG_PRINT_RED_L1("tx with mismatched vout/outPk count, rejected for tx id= " << get_transaction_hash(tx));
+        MERROR_VER("tx with mismatched vout/outPk count, rejected for tx id= " << get_transaction_hash(tx));
         return false;
       }
     }
 
     if(!check_money_overflow(tx))
     {
-      LOG_PRINT_RED_L1("tx has money overflow, rejected for tx id= " << get_transaction_hash(tx));
+      MERROR_VER("tx has money overflow, rejected for tx id= " << get_transaction_hash(tx));
       return false;
     }
 
@@ -578,7 +583,7 @@ namespace cryptonote
 
       if(amount_in <= amount_out)
       {
-        LOG_PRINT_RED_L1("tx with wrong amounts: ins " << amount_in << ", outs " << amount_out << ", rejected for tx id= " << get_transaction_hash(tx));
+        MERROR_VER("tx with wrong amounts: ins " << amount_in << ", outs " << amount_out << ", rejected for tx id= " << get_transaction_hash(tx));
         return false;
       }
     }
@@ -586,14 +591,14 @@ namespace cryptonote
 
     if(!keeped_by_block && get_object_blobsize(tx) >= m_blockchain_storage.get_current_cumulative_blocksize_limit() - CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE)
     {
-      LOG_PRINT_RED_L1("tx is too large " << get_object_blobsize(tx) << ", expected not bigger than " << m_blockchain_storage.get_current_cumulative_blocksize_limit() - CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE);
+      MERROR_VER("tx is too large " << get_object_blobsize(tx) << ", expected not bigger than " << m_blockchain_storage.get_current_cumulative_blocksize_limit() - CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE);
       return false;
     }
 
     //check if tx use different key images
     if(!check_tx_inputs_keyimages_diff(tx))
     {
-      LOG_PRINT_RED_L1("tx uses a single key image more than once");
+      MERROR_VER("tx uses a single key image more than once");
       return false;
     }
 
@@ -958,7 +963,7 @@ namespace cryptonote
   {
     if(!m_starter_message_showed)
     {
-      LOG_PRINT_L0(ENDL << "**********************************************************************" << ENDL
+      MGINFO_YELLOW(ENDL << "**********************************************************************" << ENDL
         << "The daemon will start synchronizing with the network. It may take up to several hours." << ENDL
         << ENDL
         << "You can set the level of process detailization* through \"set_log <level>\" command*, where <level> is between 0 (no details) and 4 (very verbose)." << ENDL
@@ -980,19 +985,18 @@ namespace cryptonote
   bool core::check_fork_time()
   {
     HardFork::State state = m_blockchain_storage.get_hard_fork_state();
+    const el::Level level = el::Level::Warning;
     switch (state) {
       case HardFork::LikelyForked:
-        LOG_PRINT_RED_L0(ENDL
-          << "**********************************************************************" << ENDL
-          << "Last scheduled hard fork is too far in the past." << ENDL
-          << "We are most likely forked from the network. Daemon update needed now." << ENDL
-          << "**********************************************************************" << ENDL);
+        MCLOG_RED(level, "global", "**********************************************************************");
+        MCLOG_RED(level, "global", "Last scheduled hard fork is too far in the past.");
+        MCLOG_RED(level, "global", "We are most likely forked from the network. Daemon update needed now.");
+        MCLOG_RED(level, "global", "**********************************************************************");
         break;
       case HardFork::UpdateNeeded:
-        LOG_PRINT_RED_L0(ENDL
-          << "**********************************************************************" << ENDL
-          << "Last scheduled hard fork time shows a daemon update is needed now." << ENDL
-          << "**********************************************************************" << ENDL);
+        MCLOG_RED(level, "global", "**********************************************************************");
+        MCLOG_RED(level, "global", "Last scheduled hard fork time shows a daemon update is needed now.");
+        MCLOG_RED(level, "global", "**********************************************************************");
         break;
       default:
         break;

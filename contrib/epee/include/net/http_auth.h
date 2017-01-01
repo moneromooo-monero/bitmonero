@@ -33,6 +33,9 @@
 #include <string>
 #include <utility>
 
+#undef MONERO_DEFAULT_LOG_CATEGORY
+#define MONERO_DEFAULT_LOG_CATEGORY "net.http"
+
 namespace epee
 {
 namespace net_utils

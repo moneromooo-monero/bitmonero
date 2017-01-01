@@ -68,6 +68,9 @@ extern "C"
 }
 using namespace cryptonote;
 
+#undef MONERO_DEFAULT_LOG_CATEGORY
+#define MONERO_DEFAULT_LOG_CATEGORY "wallet.wallet2"
+
 // used to choose when to stop adding outputs to a tx
 #define APPROXIMATE_INPUT_BYTES 80
 
@@ -2050,7 +2053,7 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const std::stri
   THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
   r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-  if(!r) LOG_PRINT_RED_L0("String with address text not saved");
+  if(!r) MERROR("String with address text not saved");
 
   cryptonote::block b;
   generate_genesis(b);
@@ -2085,7 +2088,7 @@ void wallet2::generate(const std::string& wallet_, const std::string& password,
   THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
   r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-  if(!r) LOG_PRINT_RED_L0("String with address text not saved");
+  if(!r) MERROR("String with address text not saved");
 
   cryptonote::block b;
   generate_genesis(b);
@@ -2120,7 +2123,7 @@ void wallet2::generate(const std::string& wallet_, const std::string& password,
   THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
 
   r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
-  if(!r) LOG_PRINT_RED_L0("String with address text not saved");
+  if(!r) MERROR("String with address text not saved");
 
   cryptonote::block b;
   generate_genesis(b);

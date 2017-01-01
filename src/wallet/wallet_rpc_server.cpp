@@ -46,6 +46,9 @@ using namespace epee;
 #include "string_tools.h"
 #include "crypto/hash.h"
 
+#undef MONERO_DEFAULT_LOG_CATEGORY
+#define MONERO_DEFAULT_LOG_CATEGORY "wallet.rpc"
+
 namespace
 {
   const command_line::arg_descriptor<std::string, true> arg_rpc_bind_port = {"rpc-bind-port", "Sets bind port for server"};
@@ -1232,7 +1235,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  epee::log_space::log_singletone::add_logger(LOGGER_CONSOLE, NULL, NULL, LOG_LEVEL_2);
+  mlog_configure("monero-wallet-rpc.log", true);
+  mlog_set_log_level(2);
 
   std::unique_ptr<tools::wallet2> wal;
   try
@@ -1277,12 +1281,12 @@ int main(int argc, char** argv) {
     // if we ^C during potentially length load/refresh, there's no server loop yet
     if (quit)
     {
-      LOG_PRINT_L0(tools::wallet_rpc_server::tr("Storing wallet..."));
+      MINFO(tools::wallet_rpc_server::tr("Storing wallet..."));
       wal->store();
-      LOG_PRINT_GREEN(tools::wallet_rpc_server::tr("Stored ok"), LOG_LEVEL_0);
+      MINFO(tools::wallet_rpc_server::tr("Stored ok"));
       return 1;
     }
-    LOG_PRINT_GREEN(tools::wallet_rpc_server::tr("Loaded ok"), LOG_LEVEL_0);
+    MINFO(tools::wallet_rpc_server::tr("Loaded ok"));
   }
   catch (const std::exception& e)
   {
@@ -1302,7 +1306,7 @@ int main(int argc, char** argv) {
   {
     LOG_PRINT_L0(tools::wallet_rpc_server::tr("Storing wallet..."));
     wal->store();
-    LOG_PRINT_GREEN(tools::wallet_rpc_server::tr("Stored ok"), LOG_LEVEL_0);
+    LOG_PRINT_L0(tools::wallet_rpc_server::tr("Stored ok"));
   }
   catch (const std::exception& e)
   {
