@@ -140,7 +140,9 @@ namespace wallet_args
       log_path = mlog_get_default_log_path("monero-wallet-cli,log");
     mlog_configure(log_path, false);
     if (!vm["log-level"].defaulted())
+    {
       mlog_set_log_level(command_line::get_arg(vm, arg_log_level));
+    }
 
     tools::scoped_message_writer(epee::console_color_white, true) << "Monero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";
 

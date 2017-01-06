@@ -117,6 +117,9 @@ void mlog_set_log_level(int level)
     const char *settings = NULL;
     switch (level)
     {
+      case -1:
+        settings = "";
+        break;
       case 0:
         settings = "*:FATAL,net*:FATAL,global:INFO,verify:FATAL";
         break;

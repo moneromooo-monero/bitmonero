@@ -252,7 +252,7 @@ int main(int argc, char const * argv[])
     if (!vm["log-level"].defaulted())
     {
       int new_log_level = command_line::get_arg(vm, daemon_args::arg_log_level);
-      if(new_log_level < 0 || new_log_level > 4)
+      if(new_log_level < -1 || new_log_level > 4)
       {
         MERROR("Wrong log level value: " << new_log_level);
       }
