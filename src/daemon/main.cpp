@@ -197,6 +197,42 @@ int main(int argc, char const * argv[])
     }
     po::notify(vm);
 
+    // log_file_path
+    //   default: <data_dir>/<CRYPTONOTE_NAME>.log
+    //   if log-file argument given:
+    //     absolute path
+    //     relative path: relative to data_dir
+    bf::path log_file_path {data_dir / std::string(CRYPTONOTE_NAME ".log")};
+    if (! vm["log-file"].defaulted())
+      log_file_path = command_line::get_arg(vm, daemon_args::arg_log_file);
+    log_file_path = bf::absolute(log_file_path, relative_path_base);
+    mlog_configure(log_file_path.string(), true);
+
+    // Set log level
+    if (!vm["log-level"].defaulted())
+    {
+      std::string log_level = command_line::get_arg(vm, daemon_args::arg_log_level);
+      int new_log_level;
+std::cout << "log_loevl: " << log_level << std::endl;
+      if (string_tools::get_xtype_from_string(new_log_level, log_level))
+      {
+        if(new_log_level < 0 || new_log_level > 4)
+        {
+          MERROR("Wrong log level value: " << new_log_level);
+        }
+        else
+        {
+          mlog_set_log_level(new_log_level);
+          MGINFO("LOG_LEVEL set to " << new_log_level);
+        }
+      }
+      else
+      {
+          mlog_set_categories(log_level.c_str());
+          MGINFO("Log categories set to " << log_level);
+      }
+    }
+
     // If there are positional options, we're running a daemon command
     {
       auto command = command_line::get_arg(vm, daemon_args::arg_command);
@@ -234,32 +270,6 @@ int main(int argc, char const * argv[])
           std::cerr << "Unknown command" << std::endl;
           return 1;
         }
-      }
-    }
-
-    // log_file_path
-    //   default: <data_dir>/<CRYPTONOTE_NAME>.log
-    //   if log-file argument given:
-    //     absolute path
-    //     relative path: relative to data_dir
-    bf::path log_file_path {data_dir / std::string(CRYPTONOTE_NAME ".log")};
-    if (! vm["log-file"].defaulted())
-      log_file_path = command_line::get_arg(vm, daemon_args::arg_log_file);
-    log_file_path = bf::absolute(log_file_path, relative_path_base);
-    mlog_configure(log_file_path.string(), true);
-
-    // Set log level
-    if (!vm["log-level"].defaulted())
-    {
-      int new_log_level = command_line::get_arg(vm, daemon_args::arg_log_level);
-      if(new_log_level < -1 || new_log_level > 4)
-      {
-        MERROR("Wrong log level value: " << new_log_level);
-      }
-      else
-      {
-        mlog_set_log_level(new_log_level);
-        MGINFO("LOG_LEVEL set to " << new_log_level);
       }
     }
 

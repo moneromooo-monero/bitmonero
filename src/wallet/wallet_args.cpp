@@ -81,7 +81,7 @@ namespace wallet_args
     _CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
 
-    const command_line::arg_descriptor<uint32_t> arg_log_level = {"log-level", "Kept for backward compatibility - use the MONERO_LOGS env var to configure logging", (int)el::Level::Unknown};
+    const command_line::arg_descriptor<std::string> arg_log_level = {"log-level", "0-4 or categories", ""};
     const command_line::arg_descriptor<uint32_t> arg_max_concurrency = {"max-concurrency", wallet_args::tr("Max number of threads to use for a parallel job"), DEFAULT_MAX_CONCURRENCY};
     const command_line::arg_descriptor<std::string> arg_log_file = {"log-file", wallet_args::tr("Specify log file"), ""};
 
@@ -141,7 +141,23 @@ namespace wallet_args
     mlog_configure(log_path, false);
     if (!vm["log-level"].defaulted())
     {
-      mlog_set_log_level(command_line::get_arg(vm, arg_log_level));
+      std::string log_level = command_line::get_arg(vm, arg_log_level);
+      int new_log_level;
+      if (epee::string_tools::get_xtype_from_string(new_log_level, log_level))
+      {
+        if (new_log_level >= 0 && new_log_level <= 4)
+        {
+          mlog_set_log_level(new_log_level);
+        }
+        else
+        {
+          MERROR("Wrong log level value: " << new_log_level);
+        }
+      }
+      else
+      {
+        mlog_set_categories(log_level.c_str());
+      }
     }
 
     tools::scoped_message_writer(epee::console_color_white, true) << "Monero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")";

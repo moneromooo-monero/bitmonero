@@ -674,7 +674,7 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_log_level(const COMMAND_RPC_SET_LOG_LEVEL::request& req, COMMAND_RPC_SET_LOG_LEVEL::response& res)
   {
-    if (req.level < -1 || req.level > 4)
+    if (req.level < 0 || req.level > 4)
     {
       res.status = "Error: log level not valid";
       return true;
