@@ -2740,6 +2740,7 @@ uint64_t Blockchain::get_dynamic_per_kb_fee(uint64_t block_reward, size_t median
     median_block_size = CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V2;
 
   uint64_t unscaled_fee_per_kb = (DYNAMIC_FEE_PER_KB_BASE_FEE * CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V2 / median_block_size);
+LOG_PRINT_L1("unscaled fee: " << print_money(unscaled_fee_per_kb));
   uint64_t hi, lo = mul128(unscaled_fee_per_kb, block_reward, &hi);
   static_assert(DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD % 1000000 == 0, "DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD must be divisible by 1000000");
   static_assert(DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD / 1000000 <= std::numeric_limits<uint32_t>::max(), "DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD is too large");
@@ -2747,6 +2748,7 @@ uint64_t Blockchain::get_dynamic_per_kb_fee(uint64_t block_reward, size_t median
   div128_32(hi, lo, DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD / 1000000, &hi, &lo);
   div128_32(hi, lo, 1000000, &hi, &lo);
   assert(hi == 0);
+LOG_PRINT_L1("lo: " << print_money(lo));
 
   return lo;
 }
@@ -2769,12 +2771,15 @@ bool Blockchain::check_fee(size_t blob_size, uint64_t fee) const
     if (!get_block_reward(median, 1, already_generated_coins, base_reward, version))
       return false;
     fee_per_kb = get_dynamic_per_kb_fee(base_reward, median);
+LOG_PRINT_L1("check_fee: fee " << print_money(fee) << ", median " << median << ", already_generated_coins " << print_money(already_generated_coins) << ", base_reward " << print_money(base_reward) << ", fee_per_kb " << print_money(fee_per_kb));
   }
-  LOG_PRINT_L2("Using " << print_money(fee) << "/kB fee");
+  LOG_PRINT_L2("Using " << print_money(fee_per_kb) << "/kB fee");
 
   uint64_t needed_fee = blob_size / 1024;
   needed_fee += (blob_size % 1024) ? 1 : 0;
+LOG_PRINT_L2("kB: " << needed_fee);
   needed_fee *= fee_per_kb;
+LOG_PRINT_L2("needed_fee " << print_money(needed_fee) << ", blob_size " << blob_size);
 
   if (fee < needed_fee)
   {
@@ -2789,6 +2794,7 @@ uint64_t Blockchain::get_dynamic_per_kb_fee_estimate(uint64_t grace_blocks) cons
 {
   const uint8_t version = get_current_hard_fork_version();
 
+LOG_PRINT_L1("get_current_hard_fork_version: " << grace_blocks << " grace blocks");
   if (version < HF_VERSION_DYNAMIC_FEE)
     return FEE_PER_KB;
 
@@ -2801,6 +2807,7 @@ uint64_t Blockchain::get_dynamic_per_kb_fee_estimate(uint64_t grace_blocks) cons
     sz.push_back(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V2);
 
   uint64_t median = epee::misc_utils::median(sz);
+LOG_PRINT_L1("median of " << sz.size() << ": " << median);
   if(median <= CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V2)
     median = CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V2;
 
@@ -2811,6 +2818,7 @@ uint64_t Blockchain::get_dynamic_per_kb_fee_estimate(uint64_t grace_blocks) cons
     LOG_PRINT_L1("Failed to determine block reward, using placeholder " << print_money(BLOCK_REWARD_OVERESTIMATE) << " as a high bound");
     base_reward = BLOCK_REWARD_OVERESTIMATE;
   }
+LOG_PRINT_L1("base_reward: " << print_money(base_reward));
 
   uint64_t fee = get_dynamic_per_kb_fee(base_reward, median);
   LOG_PRINT_L2("Estimating " << grace_blocks << "-block fee at " << print_money(fee) << "/kB");

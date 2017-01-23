@@ -3246,12 +3246,14 @@ uint64_t wallet2::get_dynamic_per_kb_fee_estimate()
   req_t.jsonrpc = "2.0";
   req_t.id = epee::serialization::storage_entry(0);
   req_t.method = "get_fee_estimate";
+LOG_PRINT_L1("getting fee estimate from daemon for " << FEE_ESTIMATE_GRACE_BLOCKS << " grace blocks...");
   req_t.params.grace_blocks = FEE_ESTIMATE_GRACE_BLOCKS;
   bool r = net_utils::invoke_http_json_remote_command2(m_daemon_address + "/json_rpc", req_t, resp_t, m_http_client);
   m_daemon_rpc_mutex.unlock();
   CHECK_AND_ASSERT_THROW_MES(r, "Failed to connect to daemon");
   CHECK_AND_ASSERT_THROW_MES(resp_t.result.status != CORE_RPC_STATUS_BUSY, "Failed to connect to daemon");
   CHECK_AND_ASSERT_THROW_MES(resp_t.result.status == CORE_RPC_STATUS_OK, "Failed to get fee estimate");
+LOG_PRINT_L1("got fee estimate from daemon: " << print_money(resp_t.result.fee));
   return resp_t.result.fee;
 }
 //----------------------------------------------------------------------------------------------------
