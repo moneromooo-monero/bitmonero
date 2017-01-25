@@ -39,8 +39,10 @@
   LOG_PRINT_L2("HTTP [" << epee::string_tools::get_ip_string_from_int32(m_conn_context.m_remote_ip ) << "] " << query_info.m_http_method_str << " " << query_info.m_URI); \
   response.m_response_code = 200; \
   response.m_response_comment = "Ok"; \
+  LOG_PRINT_L2("calling handle_http_request_map"); \
   if(!handle_http_request_map(query_info, response, m_conn_context)) \
   {response.m_response_code = 404;response.m_response_comment = "Not found";} \
+  LOG_PRINT_L2("called handle_http_request_map"); \
   return true; \
 }
 
@@ -51,7 +53,10 @@
   bool handled = false; \
   if(false) return true; //just a stub to have "else if"
 
-#define MAP_URI2(pattern, callback)  else if(std::string::npos != query_info.m_URI.find(pattern)) return callback(query_info, response_info, m_conn_context);
+#define MAP_URI2(pattern, callback)  else if(std::string::npos != query_info.m_URI.find(pattern)) { \
+  LOG_PRINT_L2("Found pattern in MAP_URI2 " << pattern << ", calling callback"); \
+  return callback(query_info, response_info, m_conn_context); \
+}
 
 #define MAP_URI_AUTO_XML2(s_pattern, callback_f, command_type) //TODO: don't think i ever again will use xml - ambiguous and "overtagged" format
 
@@ -59,12 +64,18 @@
     else if((query_info.m_URI == s_pattern) && (cond)) \
     { \
       handled = true; \
+      LOG_PRINT_L2("Found s_pattern in MAP_URI_AUTO_JON2_IF"); \
       uint64_t ticks = misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       boost::value_initialized<command_type::request> req; \
+      LOG_PRINT_L2("trace"); \
       bool parse_res = epee::serialization::load_t_from_json(static_cast<command_type::request&>(req), query_info.m_body); \
+      LOG_PRINT_L2("trace"); \
       CHECK_AND_ASSERT_MES(parse_res, false, "Failed to parse json: \r\n" << query_info.m_body); \
       uint64_t ticks1 = epee::misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       boost::value_initialized<command_type::response> resp;\
+      LOG_PRINT_L2("trace"); \
       if(!callback_f(static_cast<command_type::request&>(req), static_cast<command_type::response&>(resp))) \
       { \
         LOG_ERROR("Failed to " << #callback_f << "()"); \
@@ -72,9 +83,13 @@
         response_info.m_response_comment = "Internal Server Error"; \
         return true; \
       } \
+      LOG_PRINT_L2("trace"); \
       uint64_t ticks2 = epee::misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       epee::serialization::store_t_to_json(static_cast<command_type::response&>(resp), response_info.m_body); \
+      LOG_PRINT_L2("trace"); \
       uint64_t ticks3 = epee::misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       response_info.m_mime_tipe = "application/json"; \
       response_info.m_header_info.m_content_type = " application/json"; \
       LOG_PRINT( s_pattern << " processed with " << ticks1-ticks << "/"<< ticks2-ticks1 << "/" << ticks3-ticks2 << "ms", LOG_LEVEL_2); \
@@ -86,12 +101,18 @@
     else if(query_info.m_URI == s_pattern) \
     { \
       handled = true; \
+      LOG_PRINT_L2("Found pattern " << s_pattern << " in MAP_URI_AUTO_BIN2"); \
       uint64_t ticks = misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       boost::value_initialized<command_type::request> req; \
+      LOG_PRINT_L2("trace"); \
       bool parse_res = epee::serialization::load_t_from_binary(static_cast<command_type::request&>(req), query_info.m_body); \
+      LOG_PRINT_L2("trace"); \
       CHECK_AND_ASSERT_MES(parse_res, false, "Failed to parse bin body data, body size=" << query_info.m_body.size()); \
       uint64_t ticks1 = misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       boost::value_initialized<command_type::response> resp;\
+      LOG_PRINT_L2("trace"); \
       if(!callback_f(static_cast<command_type::request&>(req), static_cast<command_type::response&>(resp))) \
       { \
         LOG_ERROR("Failed to " << #callback_f << "()"); \
@@ -99,71 +120,102 @@
         response_info.m_response_comment = "Internal Server Error"; \
         return true; \
       } \
+      LOG_PRINT_L2("trace"); \
       uint64_t ticks2 = misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       epee::serialization::store_t_to_binary(static_cast<command_type::response&>(resp), response_info.m_body); \
+      LOG_PRINT_L2("trace"); \
       uint64_t ticks3 = epee::misc_utils::get_tick_count(); \
+      LOG_PRINT_L2("trace"); \
       response_info.m_mime_tipe = " application/octet-stream"; \
       response_info.m_header_info.m_content_type = " application/octet-stream"; \
       LOG_PRINT( s_pattern << "() processed with " << ticks1-ticks << "/"<< ticks2-ticks1 << "/" << ticks3-ticks2 << "ms", LOG_LEVEL_2); \
     }
 
-#define CHAIN_URI_MAP2(callback) else {callback(query_info, response_info, m_conn_context);handled = true;}
+#define CHAIN_URI_MAP2(callback) else {LOG_PRINT_L2("Calling callback in CHAIN_URI_MAP2"); callback(query_info, response_info, m_conn_context);handled = true;}
 
-#define END_URI_MAP2() return handled;}
+#define END_URI_MAP2() LOG_PRINT_L2("End of END_URI_MAP2");return handled;}
 
 
 #define BEGIN_JSON_RPC_MAP(uri)    else if(query_info.m_URI == uri) \
     { \
+    LOG_PRINT_L2("Found uri " << uri << " in BEGIN_JSON_RPC_MAP"); \
     uint64_t ticks = epee::misc_utils::get_tick_count(); \
+    LOG_PRINT_L2("trace"); \
     epee::serialization::portable_storage ps; \
+    LOG_PRINT_L2("trace"); \
     if(!ps.load_from_json(query_info.m_body)) \
     { \
+    LOG_PRINT_L2("trace"); \
        boost::value_initialized<epee::json_rpc::error_response> rsp; \
        static_cast<epee::json_rpc::error_response&>(rsp).error.code = -32700; \
        static_cast<epee::json_rpc::error_response&>(rsp).error.message = "Parse error"; \
+    LOG_PRINT_L2("trace"); \
        epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(rsp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
        return true; \
     } \
+    LOG_PRINT_L2("trace"); \
     epee::serialization::storage_entry id_; \
     id_ = epee::serialization::storage_entry(std::string()); \
+    LOG_PRINT_L2("trace"); \
     ps.get_value("id", id_, nullptr); \
     std::string callback_name; \
+    LOG_PRINT_L2("trace"); \
     if(!ps.get_value("method", callback_name, nullptr)) \
     { \
+    LOG_PRINT_L2("trace"); \
       epee::json_rpc::error_response rsp; \
       rsp.jsonrpc = "2.0"; \
       rsp.error.code = -32600; \
       rsp.error.message = "Invalid Request"; \
+    LOG_PRINT_L2("trace"); \
       epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(rsp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
       return true; \
     } \
+    LOG_PRINT_L2("trace"); \
     if(false) return true; //just a stub to have "else if"
 
 
 #define PREPARE_OBJECTS_FROM_JSON(command_type) \
   handled = true; \
+    LOG_PRINT_L2("trace"); \
   boost::value_initialized<epee::json_rpc::request<command_type::request> > req_; \
+    LOG_PRINT_L2("trace"); \
   epee::json_rpc::request<command_type::request>& req = static_cast<epee::json_rpc::request<command_type::request>&>(req_);\
+    LOG_PRINT_L2("trace"); \
   if(!req.load(ps)) \
   { \
+    LOG_PRINT_L2("trace"); \
     epee::json_rpc::error_response fail_resp = AUTO_VAL_INIT(fail_resp); \
     fail_resp.jsonrpc = "2.0"; \
     fail_resp.id = req.id; \
     fail_resp.error.code = -32602; \
     fail_resp.error.message = "Invalid params"; \
+    LOG_PRINT_L2("trace"); \
     epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(fail_resp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
     return true; \
   } \
+    LOG_PRINT_L2("trace"); \
   uint64_t ticks1 = epee::misc_utils::get_tick_count(); \
   boost::value_initialized<epee::json_rpc::response<command_type::response, epee::json_rpc::dummy_error> > resp_; \
+    LOG_PRINT_L2("trace"); \
   epee::json_rpc::response<command_type::response, epee::json_rpc::dummy_error>& resp =  static_cast<epee::json_rpc::response<command_type::response, epee::json_rpc::dummy_error> &>(resp_); \
+    LOG_PRINT_L2("trace"); \
   resp.jsonrpc = "2.0"; \
+    LOG_PRINT_L2("trace"); \
   resp.id = req.id;
 
 #define FINALIZE_OBJECTS_TO_JSON(method_name) \
+    LOG_PRINT_L2("trace"); \
   uint64_t ticks2 = epee::misc_utils::get_tick_count(); \
+    LOG_PRINT_L2("trace"); \
   epee::serialization::store_t_to_json(resp, response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
   uint64_t ticks3 = epee::misc_utils::get_tick_count(); \
+    LOG_PRINT_L2("trace"); \
   response_info.m_mime_tipe = "application/json"; \
   response_info.m_header_info.m_content_type = " application/json"; \
   LOG_PRINT( query_info.m_URI << "[" << method_name << "] processed with " << ticks1-ticks << "/"<< ticks2-ticks1 << "/" << ticks3-ticks2 << "ms", LOG_LEVEL_2);
@@ -171,16 +223,24 @@
 #define MAP_JON_RPC_WE_IF(method_name, callback_f, command_type, cond) \
     else if((callback_name == method_name) && (cond)) \
 { \
+    LOG_PRINT_L2("trace"); \
   PREPARE_OBJECTS_FROM_JSON(command_type) \
+    LOG_PRINT_L2("trace"); \
   epee::json_rpc::error_response fail_resp = AUTO_VAL_INIT(fail_resp); \
+    LOG_PRINT_L2("trace"); \
   fail_resp.jsonrpc = "2.0"; \
   fail_resp.id = req.id; \
+    LOG_PRINT_L2("trace"); \
   if(!callback_f(req.params, resp.result, fail_resp.error)) \
   { \
+    LOG_PRINT_L2("trace"); \
     epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(fail_resp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
     return true; \
   } \
+    LOG_PRINT_L2("trace"); \
   FINALIZE_OBJECTS_TO_JSON(method_name) \
+    LOG_PRINT_L2("trace"); \
   return true;\
 }
 
@@ -189,44 +249,63 @@
 #define MAP_JON_RPC_WERI(method_name, callback_f, command_type) \
     else if(callback_name == method_name) \
 { \
+    LOG_PRINT_L2("trace"); \
   PREPARE_OBJECTS_FROM_JSON(command_type) \
+    LOG_PRINT_L2("trace"); \
   epee::json_rpc::error_response fail_resp = AUTO_VAL_INIT(fail_resp); \
+    LOG_PRINT_L2("trace"); \
   fail_resp.jsonrpc = "2.0"; \
   fail_resp.id = req.id; \
+    LOG_PRINT_L2("trace"); \
   if(!callback_f(req.params, resp.result, fail_resp.error, m_conn_context, response_info)) \
   { \
+    LOG_PRINT_L2("trace"); \
     epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(fail_resp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
     return true; \
   } \
+    LOG_PRINT_L2("trace"); \
   FINALIZE_OBJECTS_TO_JSON(method_name) \
+    LOG_PRINT_L2("trace"); \
   return true;\
 }
 
 #define MAP_JON_RPC(method_name, callback_f, command_type) \
     else if(callback_name == method_name) \
 { \
+    LOG_PRINT_L2("trace"); \
   PREPARE_OBJECTS_FROM_JSON(command_type) \
+    LOG_PRINT_L2("trace"); \
   if(!callback_f(req.params, resp.result)) \
   { \
+    LOG_PRINT_L2("trace"); \
     epee::json_rpc::error_response fail_resp = AUTO_VAL_INIT(fail_resp); \
     fail_resp.jsonrpc = "2.0"; \
+    LOG_PRINT_L2("trace"); \
     fail_resp.id = req.id; \
     fail_resp.error.code = -32603; \
     fail_resp.error.message = "Internal error"; \
+    LOG_PRINT_L2("trace"); \
     epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(fail_resp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
     return true; \
   } \
+    LOG_PRINT_L2("trace"); \
   FINALIZE_OBJECTS_TO_JSON(method_name) \
+    LOG_PRINT_L2("trace"); \
   return true;\
 }
 
 #define END_JSON_RPC_MAP() \
+    LOG_PRINT_L2("trace"); \
   epee::json_rpc::error_response rsp; \
   rsp.id = id_; \
   rsp.jsonrpc = "2.0"; \
   rsp.error.code = -32601; \
   rsp.error.message = "Method not found"; \
+    LOG_PRINT_L2("trace"); \
   epee::serialization::store_t_to_json(static_cast<epee::json_rpc::error_response&>(rsp), response_info.m_body); \
+    LOG_PRINT_L2("trace"); \
   return true; \
 }
 
