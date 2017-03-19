@@ -1098,6 +1098,7 @@ void wallet2::process_new_blockchain_entry(const cryptonote::block& b, const cry
       " not match with daemon response size=" + std::to_string(o_indices.indices.size()));
 
   //handle transactions from new block
+  MGINFO("process_new_blockchain_entry: " << get_block_hash(b));
     
   //optimization: seeking only for blocks that are not older then the wallet creation time plus 1 day. 1 day is for possible user incorrect time setup
   if(b.timestamp + 60*60*24 > m_account.get_createtime() && height >= m_refresh_from_block_height)
@@ -1199,6 +1200,7 @@ void wallet2::pull_blocks(uint64_t start_height, uint64_t &blocks_start_height, 
     }
   }
 
+  MGINFO("asking for blocks from height " << start_height);
   req.start_height = start_height;
   m_daemon_rpc_mutex.lock();
   bool r = net_utils::invoke_http_bin("/getblocks.bin", req, res, m_http_client, rpc_timeout);
@@ -1212,6 +1214,7 @@ void wallet2::pull_blocks(uint64_t start_height, uint64_t &blocks_start_height, 
 
   blocks_start_height = res.start_height;
   blocks = res.blocks;
+  MGINFO("Got " << res.blocks.size() << " blocks");
   o_indices = res.output_indices;
 }
 //----------------------------------------------------------------------------------------------------
@@ -1654,7 +1657,9 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
   std::vector<COMMAND_RPC_GET_BLOCKS_FAST::block_output_indices> o_indices;
 
   // pull the first set of blocks
+  MGINFO("refresh: from " << start_height);
   get_short_chain_history(short_chain_history);
+  MGINFO("got short chain hisrory: " << short_chain_history.size() << " blocks");
   m_run.store(true, std::memory_order_relaxed);
   if (start_height > m_blockchain.size() || m_refresh_from_block_height > m_blockchain.size()) {
     if (!start_height)
@@ -1667,11 +1672,14 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
     start_height = 0;
     // and then fall through to regular refresh processing
   }
+  MGINFO("fast refresh step done");
 
   // If stop() is called during fast refresh we don't need to continue
   if(!m_run.load(std::memory_order_relaxed))
     return;
+  MGINFO("pulling first blocks from " << start_height);
   pull_blocks(start_height, blocks_start_height, short_chain_history, blocks, o_indices);
+  MGINFO("pulled first blocks");
   // always reset start_height to 0 to force short_chain_ history to be used on
   // subsequent pulls in this refresh.
   start_height = 0;
@@ -1680,18 +1688,24 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
   {
     try
     {
+      MGINFO("loop start");
       // pull the next set of blocks while we're processing the current one
       uint64_t next_blocks_start_height;
       std::list<cryptonote::block_complete_entry> next_blocks;
       std::vector<cryptonote::COMMAND_RPC_GET_BLOCKS_FAST::block_output_indices> next_o_indices;
       bool error = false;
+      MGINFO("loop starting pull_thread from " << start_height);
       pull_thread = boost::thread([&]{pull_next_blocks(start_height, next_blocks_start_height, short_chain_history, blocks, next_blocks, next_o_indices, error);});
 
+      MGINFO("loop processing blocks from " << blocks_start_height);
       process_blocks(blocks_start_height, blocks, o_indices, added_blocks);
+      MGINFO("loop blocks processed");
       blocks_fetched += added_blocks;
       pull_thread.join();
+      MGINFO("loop pull_thread joined: blocks_start_height " << blocks_start_height << ", next_blocks_start_height " << next_blocks_start_height);
       if(blocks_start_height == next_blocks_start_height)
       {
+        MGINFO("loop breaking");
         m_node_rpc_proxy.set_height(m_blockchain.size());
         break;
       }
@@ -1731,7 +1745,11 @@ void wallet2::refresh(uint64_t start_height, uint64_t & blocks_fetched, bool& re
   {
     // If stop() is called we don't need to check pending transactions
     if(m_run.load(std::memory_order_relaxed))
+    {
+      MGINFO("updating pool");
       update_pool_state();
+      MGINFO("updated pool");
+    }
   }
   catch (...)
   {
