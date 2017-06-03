@@ -50,6 +50,7 @@ namespace tools
     //       wallet_internal_error
     //         unexpected_txin_type
     //         wallet_not_initialized
+    //         multisig_export_needed
     //   std::logic_error
     //     wallet_logic_error *
     //       file_exists
@@ -182,6 +183,13 @@ namespace tools
     {
       explicit wallet_not_initialized(std::string&& loc)
         : wallet_internal_error(std::move(loc), "wallet is not initialized")
+      {
+      }
+    };
+    struct multisig_export_needed : public wallet_internal_error
+    {
+      explicit multisig_export_needed(std::string&& loc)
+        : wallet_internal_error(std::move(loc), "This signature was made with stale data: export fresh multisig data, which other participants must then use")
       {
       }
     };
