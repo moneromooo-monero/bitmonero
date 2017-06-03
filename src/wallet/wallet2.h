@@ -105,7 +105,7 @@ namespace tools
     };
 
   private:
-    wallet2(const wallet2&) : m_run(true), m_callback(0), m_testnet(false), m_always_confirm_transfers(true), m_print_ring_members(false), m_store_tx_info(true), m_default_mixin(0), m_default_priority(0), m_refresh_type(RefreshOptimizeCoinbase), m_auto_refresh(true), m_refresh_from_block_height(0), m_confirm_missing_payment_id(true), m_ask_password(true), m_min_output_count(0), m_min_output_value(0), m_merge_destinations(false), m_is_initialized(false),m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex) {}
+    wallet2(const wallet2&) : m_multisig_rescan_info(NULL), m_run(true), m_callback(0), m_testnet(false), m_always_confirm_transfers(true), m_print_ring_members(false), m_store_tx_info(true), m_default_mixin(0), m_default_priority(0), m_refresh_type(RefreshOptimizeCoinbase), m_auto_refresh(true), m_refresh_from_block_height(0), m_confirm_missing_payment_id(true), m_ask_password(true), m_min_output_count(0), m_min_output_value(0), m_merge_destinations(false), m_is_initialized(false),m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex) {}
 
   public:
     static const char* tr(const char* str);
@@ -129,9 +129,22 @@ namespace tools
     //! Just parses variables.
     static std::unique_ptr<wallet2> make_dummy(const boost::program_options::variables_map& vm);
 
-    static bool verify_password(const std::string& keys_file_name, const std::string& password, bool watch_only);
+    static bool verify_password(const std::string& keys_file_name, const std::string& password, bool no_spend_key);
 
-    wallet2(bool testnet = false, bool restricted = false) : m_run(true), m_callback(0), m_testnet(testnet), m_always_confirm_transfers(true), m_print_ring_members(false), m_store_tx_info(true), m_default_mixin(0), m_default_priority(0), m_refresh_type(RefreshOptimizeCoinbase), m_auto_refresh(true), m_refresh_from_block_height(0), m_confirm_missing_payment_id(true), m_ask_password(true), m_min_output_count(0), m_min_output_value(0), m_merge_destinations(false), m_is_initialized(false), m_restricted(restricted), is_old_file_format(false), m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex) {}
+    wallet2(bool testnet = false, bool restricted = false) : m_multisig_rescan_info(NULL), m_run(true), m_callback(0), m_testnet(testnet), m_always_confirm_transfers(true), m_print_ring_members(false), m_store_tx_info(true), m_default_mixin(0), m_default_priority(0), m_refresh_type(RefreshOptimizeCoinbase), m_auto_refresh(true), m_refresh_from_block_height(0), m_confirm_missing_payment_id(true), m_ask_password(true), m_min_output_count(0), m_min_output_value(0), m_merge_destinations(false), m_is_initialized(false), m_restricted(restricted), is_old_file_format(false), m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex) {}
+
+    struct multisig_info
+    {
+      crypto::key_image m_partial_key_image;
+      rct::key m_L;
+      rct::key m_R;
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(m_partial_key_image)
+        FIELD(m_L)
+        FIELD(m_R)
+      END_SERIALIZE()
+    };
 
     struct transfer_details
     {
@@ -148,6 +161,9 @@ namespace tools
       bool m_rct;
       bool m_key_image_known;
       size_t m_pk_index;
+      bool m_key_image_partial;
+      rct::key m_multisig_k;
+      std::vector<multisig_info> m_multisig_info;
 
       bool is_rct() const { return m_rct; }
       uint64_t amount() const { return m_amount; }
@@ -167,6 +183,9 @@ namespace tools
         FIELD(m_rct)
         FIELD(m_key_image_known)
         FIELD(m_pk_index)
+        FIELD(m_key_image_partial)
+        FIELD(m_multisig_k)
+        FIELD(m_multisig_info)
       END_SERIALIZE()
     };
 
@@ -236,6 +255,7 @@ namespace tools
       std::string key_images;
       crypto::secret_key tx_key;
       std::vector<cryptonote::tx_destination_entry> dests;
+      rct::multisig_out msout;
 
       tx_construction_data construction_data;
     };
@@ -252,6 +272,12 @@ namespace tools
     {
       std::vector<pending_tx> ptx;
       std::vector<crypto::key_image> key_images;
+    };
+
+    struct multisig_tx_set
+    {
+      std::vector<pending_tx> m_ptx;
+      std::unordered_set<crypto::hash> m_signers;
     };
 
     struct keys_file_data
@@ -333,6 +359,16 @@ namespace tools
      */
     bool verify_multisig_info(const std::string &data, crypto::secret_key &skey, crypto::public_key &pkey) const;
     /*!
+     * Export multisig info
+     * This will generate and remember new k values
+     */
+    std::vector<tools::wallet2::multisig_info> export_multisig();
+    /*!
+     * Import a set of multisig info from multisig partners
+     * \return the number of inputs which were imported
+     */
+    size_t import_multisig(std::vector<std::vector<tools::wallet2::multisig_info>> info);
+    /*!
      * \brief Rewrites to the wallet file for wallet upgrade (doesn't generate key, assumes it's already there)
      * \param wallet_name Name of wallet file (should exist)
      * \param password    Password for wallet file
@@ -403,6 +439,7 @@ namespace tools
     bool restricted() const { return m_restricted; }
     bool watch_only() const { return m_watch_only; }
     bool multisig(uint32_t *threshold = NULL, uint32_t *total = NULL) const;
+    bool has_multisig_partial_key_images() const;
 
     uint64_t balance() const;
     uint64_t unlocked_balance() const;
@@ -424,6 +461,8 @@ namespace tools
     void commit_tx(pending_tx& ptx_vector);
     void commit_tx(std::vector<pending_tx>& ptx_vector);
     bool save_tx(const std::vector<pending_tx>& ptx_vector, const std::string &filename);
+    bool save_multisig_tx(multisig_tx_set txs, const std::string &filename);
+    bool save_multisig_tx(const std::vector<pending_tx>& ptx_vector, const std::string &filename);
     // load unsigned tx from file and sign it. Takes confirmation callback as argument. Used by the cli wallet
     bool sign_tx(const std::string &unsigned_filename, const std::string &signed_filename, std::vector<wallet2::pending_tx> &ptx, std::function<bool(const unsigned_tx_set&)> accept_func = NULL);
     // sign unsigned tx. Takes unsigned_tx_set as argument. Used by GUI
@@ -431,6 +470,9 @@ namespace tools
     // load unsigned_tx_set from file. 
     bool load_unsigned_tx(const std::string &unsigned_filename, unsigned_tx_set &exported_txs);
     bool load_tx(const std::string &signed_filename, std::vector<tools::wallet2::pending_tx> &ptx, std::function<bool(const signed_tx_set&)> accept_func = NULL);
+    bool load_multisig_tx(const std::string &filename, multisig_tx_set &exported_txs, std::function<bool(const multisig_tx_set&)> accept_func = NULL);
+    bool sign_multisig_tx(const std::string &filename, std::vector<crypto::hash> &txids, std::function<bool(const multisig_tx_set&)> accept_func);
+    bool sign_multisig_tx(multisig_tx_set &exported_txs, const std::string &filename, std::vector<crypto::hash> &txids);
     std::vector<pending_tx> create_transactions(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
     std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
     std::vector<wallet2::pending_tx> create_transactions_all(uint64_t below, const cryptonote::account_public_address &address, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
@@ -666,10 +708,14 @@ namespace tools
     void set_spent(size_t idx, uint64_t height);
     void set_unspent(size_t idx);
     void get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count);
-    bool wallet_generate_key_image_helper(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki);
+    bool wallet_generate_key_image_helper(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, bool multisig_export = false) const;
     crypto::public_key get_tx_pub_key_from_received_outs(const tools::wallet2::transfer_details &td) const;
     bool should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
     std::vector<size_t> get_only_rct(const std::vector<size_t> &unused_dust_indices, const std::vector<size_t> &unused_transfers_indices) const;
+    rct::multisig_kLRki get_multisig_composite_LRki(size_t n, const rct::key &k) const;
+    rct::multisig_kLRki get_multisig_LRki(size_t n, const rct::key &k) const;
+    rct::key get_multisig_k(size_t idx) const;
+    void update_multisig_rescan_info(const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n);
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -692,6 +738,7 @@ namespace tools
     std::unordered_map<crypto::hash, std::string> m_tx_notes;
     std::vector<tools::wallet2::address_book_row> m_address_book;
     uint64_t m_upper_transaction_size_limit; //TODO: auto-calc this value or request from daemon, now use some fixed value
+    const std::vector<std::vector<tools::wallet2::multisig_info>> *m_multisig_rescan_info;
 
     std::atomic<bool> m_run;
 
@@ -725,7 +772,9 @@ namespace tools
   };
 }
 BOOST_CLASS_VERSION(tools::wallet2, 18)
-BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 7)
+BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 9)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_tx_set, 1)
 BOOST_CLASS_VERSION(tools::wallet2::payment_details, 1)
 BOOST_CLASS_VERSION(tools::wallet2::unconfirmed_transfer_details, 6)
 BOOST_CLASS_VERSION(tools::wallet2::confirmed_transfer_details, 4)
@@ -733,7 +782,7 @@ BOOST_CLASS_VERSION(tools::wallet2::address_book_row, 16)
 BOOST_CLASS_VERSION(tools::wallet2::unsigned_tx_set, 0)
 BOOST_CLASS_VERSION(tools::wallet2::signed_tx_set, 0)
 BOOST_CLASS_VERSION(tools::wallet2::tx_construction_data, 0)
-BOOST_CLASS_VERSION(tools::wallet2::pending_tx, 0)
+BOOST_CLASS_VERSION(tools::wallet2::pending_tx, 1)
 
 namespace boost
 {
@@ -766,6 +815,15 @@ namespace boost
         if (ver < 7)
         {
           x.m_pk_index = 0;
+        }
+        if (ver < 8)
+        {
+          x.m_key_image_partial = false;
+          x.m_multisig_info.clear();
+        }
+        if (ver < 8)
+        {
+          x.m_multisig_k = rct::zero();
         }
     }
 
@@ -834,6 +892,34 @@ namespace boost
         return;
       }
       a & x.m_pk_index;
+      if (ver < 8)
+      {
+        initialize_transfer_details(a, x, ver);
+        return;
+      }
+      a & x.m_multisig_info;
+      if (ver < 9)
+      {
+        initialize_transfer_details(a, x, ver);
+        return;
+      }
+      a & x.m_multisig_k;
+      a & x.m_key_image_partial;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multisig_info &x, const boost::serialization::version_type ver)
+    {
+      a & x.m_partial_key_image;
+      a & x.m_L;
+      a & x.m_R;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multisig_tx_set &x, const boost::serialization::version_type ver)
+    {
+      a & x.m_ptx;
+      a & x.m_signers;
     }
 
     template <class Archive>
@@ -979,6 +1065,9 @@ namespace boost
       a & x.tx_key;
       a & x.dests;
       a & x.construction_data;
+      if (ver < 1)
+        return;
+      a & x.msout;
     }
   }
 }
@@ -1152,6 +1241,10 @@ namespace tools
       src.real_out_tx_key = get_tx_pub_key_from_extra(td.m_tx);
       src.real_output = interted_it - src.outputs.begin();
       src.real_output_in_tx_index = td.m_internal_output_index;
+      if (m_multisig)
+        src.multisig_kLRki = get_multisig_composite_LRki(idx, get_multisig_k(idx));
+      else
+        src.multisig_kLRki = rct::multisig_kLRki({rct::zero(), rct::zero(), rct::zero(), rct::zero()});
       detail::print_source_entry(src);
       ++i;
     }
@@ -1177,7 +1270,10 @@ namespace tools
     }
 
     crypto::secret_key tx_key;
-    bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), sources, splitted_dsts, extra, tx, unlock_time, tx_key);
+    rct::multisig_out msout;
+    if (m_multisig)
+      msout.seed = crypto::rand<uint64_t>();
+    bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), sources, splitted_dsts, extra, tx, unlock_time, tx_key, false, m_multisig ? &msout : NULL);
     THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_testnet);
     THROW_WALLET_EXCEPTION_IF(upper_transaction_size_limit <= get_object_blobsize(tx), error::tx_too_big, tx, upper_transaction_size_limit);
 
@@ -1204,6 +1300,7 @@ namespace tools
     ptx.selected_transfers = selected_transfers;
     ptx.tx_key = tx_key;
     ptx.dests = dsts;
+    ptx.msout = msout;
     ptx.construction_data.sources = sources;
     ptx.construction_data.change_dts = change_dts;
     ptx.construction_data.splitted_dsts = splitted_dsts;
