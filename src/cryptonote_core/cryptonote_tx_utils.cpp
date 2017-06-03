@@ -156,7 +156,7 @@ namespace cryptonote
     return destinations[0].addr.m_view_public_key;
   }
   //---------------------------------------------------------------
-  bool construct_tx_and_get_tx_key(const account_keys& sender_account_keys, const std::vector<tx_source_entry>& sources, const std::vector<tx_destination_entry>& destinations, std::vector<uint8_t> extra, transaction& tx, uint64_t unlock_time, crypto::secret_key &tx_key, bool rct)
+  bool construct_tx_with_tx_key(const account_keys& sender_account_keys, const std::vector<tx_source_entry>& sources, const std::vector<tx_destination_entry>& destinations, std::vector<uint8_t> extra, transaction& tx, uint64_t unlock_time, const crypto::secret_key &tx_key, bool rct, uint32_t threshold)
   {
     std::vector<rct::key> amount_keys;
     tx.set_null();
@@ -166,10 +166,10 @@ namespace cryptonote
     tx.unlock_time = unlock_time;
 
     tx.extra = extra;
-    keypair txkey = keypair::generate();
     remove_field_from_tx_extra(tx.extra, typeid(tx_extra_pub_key));
-    add_tx_pub_key_to_extra(tx, txkey.pub);
-    tx_key = txkey.sec;
+    crypto::public_key txkey_pub;
+    crypto::secret_key_to_public_key(tx_key, txkey_pub);
+    add_tx_pub_key_to_extra(tx, txkey_pub);
 
     // if we have a stealth payment id, find it and encrypt it with the tx key now
     std::vector<tx_extra_field> tx_extra_fields;
@@ -189,7 +189,7 @@ namespace cryptonote
             return false;
           }
 
-          if (!encrypt_payment_id(payment_id, view_key_pub, txkey.sec))
+          if (!encrypt_payment_id(payment_id, view_key_pub, tx_key))
           {
             LOG_ERROR("Failed to encrypt payment id");
             return false;
@@ -275,8 +275,8 @@ namespace cryptonote
       CHECK_AND_ASSERT_MES(dst_entr.amount > 0 || tx.version > 1, false, "Destination with wrong amount: " << dst_entr.amount);
       crypto::key_derivation derivation;
       crypto::public_key out_eph_public_key;
-      bool r = crypto::generate_key_derivation(dst_entr.addr.m_view_public_key, txkey.sec, derivation);
-      CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" << dst_entr.addr.m_view_public_key << ", " << txkey.sec << ")");
+      bool r = crypto::generate_key_derivation(dst_entr.addr.m_view_public_key, tx_key, derivation);
+      CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" << dst_entr.addr.m_view_public_key << ", " << tx_key << ")");
 
       if (tx.version > 1)
       {
@@ -384,6 +384,7 @@ namespace cryptonote
       rct::keyV destinations;
       std::vector<uint64_t> inamounts, outamounts;
       std::vector<unsigned int> index;
+      rct::ctkeyV LR;
       for (size_t i = 0; i < sources.size(); ++i)
       {
         rct::ctkey ctkey;
@@ -396,6 +397,13 @@ namespace cryptonote
         inSk.push_back(ctkey);
         // inPk: (public key, commitment)
         // will be done when filling in mixRing
+        if (threshold > 1)
+        {
+          rct::ctkey LRi;
+          LRi.dest = rct::pk2rct(sources[i].multisig_L);
+          LRi.mask = rct::pk2rct(sources[i].multisig_R);
+          LR.push_back(LRi);
+        }
       }
       for (size_t i = 0; i < tx.vout.size(); ++i)
       {
@@ -445,9 +453,9 @@ namespace cryptonote
       get_transaction_prefix_hash(tx, tx_prefix_hash);
       rct::ctkeyV outSk;
       if (use_simple_rct)
-        tx.rct_signatures = rct::genRctSimple(rct::hash2rct(tx_prefix_hash), inSk, destinations, inamounts, outamounts, amount_in - amount_out, mixRing, amount_keys, index, outSk);
+        tx.rct_signatures = rct::genRctSimple(rct::hash2rct(tx_prefix_hash), inSk, destinations, inamounts, outamounts, amount_in - amount_out, mixRing, amount_keys, LR, index, outSk);
       else
-        tx.rct_signatures = rct::genRct(rct::hash2rct(tx_prefix_hash), inSk, destinations, outamounts, mixRing, amount_keys, sources[0].real_output, outSk); // same index assumption
+        tx.rct_signatures = rct::genRct(rct::hash2rct(tx_prefix_hash), inSk, destinations, outamounts, mixRing, amount_keys, LR, sources[0].real_output, outSk); // same index assumption
 
       CHECK_AND_ASSERT_MES(tx.vout.size() == outSk.size(), false, "outSk size does not match vout");
 
@@ -457,6 +465,13 @@ namespace cryptonote
     tx.invalidate_hashes();
 
     return true;
+  }
+  //---------------------------------------------------------------
+  bool construct_tx_and_get_tx_key(const account_keys& sender_account_keys, const std::vector<tx_source_entry>& sources, const std::vector<tx_destination_entry>& destinations, std::vector<uint8_t> extra, transaction& tx, uint64_t unlock_time, crypto::secret_key &tx_key, bool rct, uint32_t threshold)
+  {
+    keypair txkey = keypair::generate();
+    tx_key = txkey.sec;
+    return construct_tx_with_tx_key(sender_account_keys, sources, destinations, extra, tx, unlock_time, tx_key, rct, threshold);
   }
   //---------------------------------------------------------------
   bool construct_tx(const account_keys& sender_account_keys, const std::vector<tx_source_entry>& sources, const std::vector<tx_destination_entry>& destinations, std::vector<uint8_t> extra, transaction& tx, uint64_t unlock_time)

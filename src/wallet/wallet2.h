@@ -146,6 +146,9 @@ namespace tools
       bool m_rct;
       bool m_key_image_known;
       size_t m_pk_index;
+      bool m_key_image_partial;
+      crypto::public_key m_multisig_L;
+      crypto::public_key m_multisig_R;
 
       bool is_rct() const { return m_rct; }
       uint64_t amount() const { return m_amount; }
@@ -165,7 +168,17 @@ namespace tools
         FIELD(m_rct)
         FIELD(m_key_image_known)
         FIELD(m_pk_index)
+        FIELD(m_key_image_partial)
+        FIELD(m_multisig_L)
+        FIELD(m_multisig_R)
       END_SERIALIZE()
+    };
+
+    struct multisig_info
+    {
+      crypto::key_image m_partial_key_image;
+      crypto::public_key m_L;
+      crypto::public_key m_R;
     };
 
     struct payment_details
@@ -251,6 +264,12 @@ namespace tools
       std::vector<crypto::key_image> key_images;
     };
 
+    struct multisig_tx_set
+    {
+      std::vector<pending_tx> m_ptx;
+      std::unordered_set<crypto::hash> m_signers;
+    };
+
     struct keys_file_data
     {
       crypto::chacha8_iv iv;
@@ -329,6 +348,14 @@ namespace tools
      * Verifies and extracts keys from a packaged multisig information string
      */
     bool verify_multisig_info(const std::string &data, crypto::secret_key &skey, crypto::public_key &pkey) const;
+    /*!
+     * Export multisig info
+     */
+    std::vector<tools::wallet2::multisig_info> export_multisig() const;
+    /*!
+     * Import a set of multisig info from multisig partners
+     */
+    size_t import_multisig(const std::vector<std::vector<tools::wallet2::multisig_info>> &info, bool trusted_daemon = false);
     /*!
      * \brief Rewrites to the wallet file for wallet upgrade (doesn't generate key, assumes it's already there)
      * \param wallet_name Name of wallet file (should exist)
@@ -421,6 +448,7 @@ namespace tools
     void commit_tx(pending_tx& ptx_vector);
     void commit_tx(std::vector<pending_tx>& ptx_vector);
     bool save_tx(const std::vector<pending_tx>& ptx_vector, const std::string &filename);
+    bool save_multisig_tx(const std::vector<pending_tx>& ptx_vector, const std::string &filename);
     // load unsigned tx from file and sign it. Takes confirmation callback as argument. Used by the cli wallet
     bool sign_tx(const std::string &unsigned_filename, const std::string &signed_filename, std::vector<wallet2::pending_tx> &ptx, std::function<bool(const unsigned_tx_set&)> accept_func = NULL);
     // sign unsigned tx. Takes unsigned_tx_set as argument. Used by GUI
@@ -428,6 +456,9 @@ namespace tools
     // load unsigned_tx_set from file. 
     bool load_unsigned_tx(const std::string &unsigned_filename, unsigned_tx_set &exported_txs);
     bool load_tx(const std::string &signed_filename, std::vector<tools::wallet2::pending_tx> &ptx, std::function<bool(const signed_tx_set&)> accept_func = NULL);
+    bool load_multisig_tx(const std::string &filename, multisig_tx_set &exported_txs, std::function<bool(const multisig_tx_set&)> accept_func = NULL);
+    bool sign_multisig_tx(const std::string &filename, std::vector<crypto::hash> &txids, std::function<bool(const multisig_tx_set&)> accept_func);
+    bool sign_multisig_tx(multisig_tx_set &exported_txs, const std::string &filename, std::vector<crypto::hash> &txids);
     std::vector<pending_tx> create_transactions(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
     std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
     std::vector<wallet2::pending_tx> create_transactions_all(uint64_t below, const cryptonote::account_public_address &address, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
@@ -665,6 +696,8 @@ namespace tools
     crypto::public_key get_tx_pub_key_from_received_outs(const tools::wallet2::transfer_details &td) const;
     bool should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
     std::vector<size_t> get_only_rct(const std::vector<size_t> &unused_dust_indices, const std::vector<size_t> &unused_transfers_indices) const;
+    void get_multisig_LR(size_t n, crypto::public_key &L, crypto::public_key &R) const;
+    crypto::secret_key get_multisig_k(size_t idx) const;
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -719,7 +752,9 @@ namespace tools
   };
 }
 BOOST_CLASS_VERSION(tools::wallet2, 18)
-BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 7)
+BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 8)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_tx_set, 1)
 BOOST_CLASS_VERSION(tools::wallet2::payment_details, 1)
 BOOST_CLASS_VERSION(tools::wallet2::unconfirmed_transfer_details, 6)
 BOOST_CLASS_VERSION(tools::wallet2::confirmed_transfer_details, 3)
@@ -760,6 +795,12 @@ namespace boost
         if (ver < 7)
         {
           x.m_pk_index = 0;
+        }
+        if (ver < 8)
+        {
+          x.m_key_image_partial = false;
+          x.m_multisig_L = cryptonote::null_pkey;
+          x.m_multisig_R = cryptonote::null_pkey;
         }
     }
 
@@ -828,6 +869,29 @@ namespace boost
         return;
       }
       a & x.m_pk_index;
+      if (ver < 8)
+      {
+        initialize_transfer_details(a, x, ver);
+        return;
+      }
+      a & x.m_key_image_partial;
+      a & x.m_multisig_L;
+      a & x.m_multisig_R;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multisig_info &x, const boost::serialization::version_type ver)
+    {
+      a & x.m_partial_key_image;
+      a & x.m_L;
+      a & x.m_R;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multisig_tx_set &x, const boost::serialization::version_type ver)
+    {
+      a & x.m_ptx;
+      a & x.m_signers;
     }
 
     template <class Archive>
@@ -1139,6 +1203,8 @@ namespace tools
       src.real_out_tx_key = get_tx_pub_key_from_extra(td.m_tx);
       src.real_output = interted_it - src.outputs.begin();
       src.real_output_in_tx_index = td.m_internal_output_index;
+      src.multisig_L = td.m_multisig_L;
+      src.multisig_R = td.m_multisig_R;
       detail::print_source_entry(src);
       ++i;
     }
