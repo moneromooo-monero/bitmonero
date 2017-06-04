@@ -3540,17 +3540,9 @@ bool wallet2::load_tx(const std::string &signed_filename, std::vector<tools::wal
   return true;
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::save_multisig_tx(const std::vector<pending_tx>& ptx_vector, const std::string &filename)
+bool wallet2::save_multisig_tx(const multisig_tx_set &txs, const std::string &filename)
 {
-  LOG_PRINT_L0("saving " << ptx_vector.size() << " transactions");
-  multisig_tx_set txs;
-  for (auto &ptx: ptx_vector)
-  {
-    txs.m_ptx.push_back(ptx);
-  }
-  crypto::hash hash;
-  cn_fast_hash(&get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (char*)&hash);
-  txs.m_signers.insert(hash);
+  LOG_PRINT_L0("saving " << txs.m_ptx.size() << " multisig transactions");
 
   // save as binary
   std::ostringstream oss;
@@ -3564,7 +3556,18 @@ bool wallet2::save_multisig_tx(const std::vector<pending_tx>& ptx_vector, const 
     return false;
   }
   LOG_PRINT_L2("Saving multisig unsigned tx data: " << oss.str());
-  return epee::file_io_utils::save_string_to_file(filename, std::string(MULTISIG_UNSIGNED_TX_PREFIX) + oss.str());  
+  std::string ciphertext = encrypt_with_view_secret_key(oss.str());
+  return epee::file_io_utils::save_string_to_file(filename, std::string(MULTISIG_UNSIGNED_TX_PREFIX) + ciphertext);  
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::save_multisig_tx(const std::vector<pending_tx>& ptx_vector, const std::string &filename)
+{
+  multisig_tx_set txs;
+  txs.m_ptx = ptx_vector;
+  crypto::hash hash;
+  cn_fast_hash(&get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (char*)&hash);
+  txs.m_signers.insert(hash);
+  return save_multisig_tx(txs, filename);
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::load_multisig_tx(const std::string &filename, multisig_tx_set &exported_txs, std::function<bool(const multisig_tx_set&)> accept_func)
@@ -3588,7 +3591,15 @@ bool wallet2::load_multisig_tx(const std::string &filename, multisig_tx_set &exp
     LOG_PRINT_L0("Bad magic from " << filename);
     return false;
   }
-  s = s.substr(magiclen);
+  try
+  {
+    s = decrypt_with_view_secret_key(std::string(s, magiclen));
+  }
+  catch (const std::exception &e)
+  {
+    fail_msg_writer() << "Failed to decrypt " << filename << ": " << e.what();
+    return 0;
+  }
   try
   {
     std::istringstream iss(s);
@@ -3600,6 +3611,15 @@ bool wallet2::load_multisig_tx(const std::string &filename, multisig_tx_set &exp
     LOG_PRINT_L0("Failed to parse data from " << filename);
     return false;
   }
+
+  // sanity checks
+  for (const auto &ptx: exported_txs.m_ptx)
+  {
+    CHECK_AND_ASSERT_MES(ptx.selected_transfers.size() == ptx.tx.vin.size(), false, "Mismatched selected_transfers/vin sizes");
+    CHECK_AND_ASSERT_MES(ptx.construction_data.selected_transfers.size() == ptx.tx.vin.size(), false, "Mismatched cd selected_transfers/vin sizes");
+    CHECK_AND_ASSERT_MES(ptx.construction_data.sources.size() == ptx.tx.vin.size(), false, "Mismatched sources/vin sizes");
+  }
+
   LOG_PRINT_L1("Loaded multisig tx unsigned data from binary: " << exported_txs.m_ptx.size() << " transactions");
   for (auto &ptx: exported_txs.m_ptx) LOG_PRINT_L0(cryptonote::obj_to_json_str(ptx.tx));
 
@@ -3644,6 +3664,16 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, const std::string 
     // and if we really go over limit, the daemon will reject when it gets submitted. Chances are it's
     // OK anyway since it was generated in the first place, and rerolling should be within a few bytes.
 
+    // Tests passed, sign
+    rct::keyV k;
+    for (size_t idx: sd.selected_transfers)
+      k.push_back(rct::sk2rct(get_multisig_k(idx)));
+    std::vector<unsigned int> indices;
+    for (const auto &source: sd.sources)
+      indices.push_back(source.real_output);
+    THROW_WALLET_EXCEPTION_IF(!rct::signMultisig(ptx.tx.rct_signatures, rct::sk2rct(get_account().get_keys().m_spend_secret_key), indices, k),
+        error::wallet_internal_error, "Failed signing, transaction likely malformed");
+
     // normally, the tx keys are saved in commit_tx, when the tx is actually sent to the daemon.
     // we can't do that here since the tx will be sent from the compromised wallet, which we don't want
     // to see that info, so we save it here
@@ -3675,8 +3705,7 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, const std::string 
   {
     return false;
   }
-  LOG_PRINT_L3("Saving multisig tx data: " << oss.str());
-  return epee::file_io_utils::save_string_to_file(filename, std::string(MULTISIG_UNSIGNED_TX_PREFIX) + oss.str());  
+  return save_multisig_tx(exported_txs, filename);
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::sign_multisig_tx(const std::string &filename, std::vector<crypto::hash> &txids, std::function<bool(const multisig_tx_set&)> accept_func)
@@ -3689,6 +3718,10 @@ bool wallet2::sign_multisig_tx(const std::string &filename, std::vector<crypto::
   cn_fast_hash(&get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (char*)&hash);
   THROW_WALLET_EXCEPTION_IF(exported_txs.m_signers.find(hash) != exported_txs.m_signers.end(),
       error::wallet_internal_error, "Transaction already signed by this private key");
+  THROW_WALLET_EXCEPTION_IF(exported_txs.m_signers.size() > m_multisig_threshold,
+      error::wallet_internal_error, "Transaction was signed by too many signers");
+  THROW_WALLET_EXCEPTION_IF(exported_txs.m_signers.size() == m_multisig_threshold,
+      error::wallet_internal_error, "Transaction is already fully signed");
 
   if (accept_func && !accept_func(exported_txs))
   {
@@ -5810,7 +5843,7 @@ std::string wallet2::decrypt(const std::string &ciphertext, const crypto::secret
     crypto::secret_key_to_public_key(skey, pkey);
     const crypto::signature &signature = *(const crypto::signature*)&ciphertext[ciphertext.size() - sizeof(crypto::signature)];
     THROW_WALLET_EXCEPTION_IF(!crypto::check_signature(hash, pkey, signature),
-      error::wallet_internal_error, "Failed to authenticate criphertext");
+      error::wallet_internal_error, "Failed to authenticate ciphertext");
   }
   crypto::chacha8(ciphertext.data() + sizeof(iv), ciphertext.size() - prefix_size, key, iv, &plaintext[0]);
   return plaintext;

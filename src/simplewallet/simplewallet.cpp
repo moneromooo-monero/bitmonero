@@ -756,7 +756,8 @@ bool simple_wallet::sign_multisig(const std::vector<std::string> &args)
 
 bool simple_wallet::submit_multisig(const std::vector<std::string> &args)
 {
-  if (!m_wallet->multisig())
+  uint32_t threshold;
+  if (!m_wallet->multisig(&threshold))
   {
     fail_msg_writer() << tr("This is not a multisig wallet");
     return true;
@@ -779,6 +780,12 @@ bool simple_wallet::submit_multisig(const std::vector<std::string> &args)
     if (!r)
     {
       fail_msg_writer() << tr("Failed to load multisig transaction from file");
+      return true;
+    }
+    if (txs.m_signers.size() < threshold)
+    {
+      fail_msg_writer() << (boost::format(tr("Multisig transaction signed by only %u signers, needs %u more signatures"))
+          % txs.m_signers.size() % (threshold - txs.m_signers.size())).str();
       return true;
     }
 
