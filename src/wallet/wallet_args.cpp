@@ -71,6 +71,7 @@ namespace wallet_args
   boost::optional<boost::program_options::variables_map> main(
     int argc, char** argv,
     const char* const usage,
+    const char* const notice,
     boost::program_options::options_description desc_params,
     const boost::program_options::positional_options_description& positional_options,
     const char *default_log_name,
@@ -150,8 +151,8 @@ namespace wallet_args
     if (command_line::get_arg(vm, command_line::arg_help))
     {
       tools::msg_writer() << "Monero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")" << ENDL;
-      tools::msg_writer() << wallet_args::tr("This is the command line monero wallet. It needs to connect to a monero\n"
-												"daemon to work correctly.") << ENDL;
+      if (notice)
+        tools::msg_writer() << notice << ENDL;
       tools::msg_writer() << wallet_args::tr("Usage:") << ENDL << "  " << usage;
       tools::msg_writer() << desc_all;
       return boost::none;
