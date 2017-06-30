@@ -251,6 +251,7 @@ namespace net_utils
 				if (ec)
 				{
 					LOG_PRINT_L3("Problems at write: " << ec.message());
+          shutdown();
           m_connected = false;
 					return false;
 				}else
@@ -309,6 +310,7 @@ namespace net_utils
 				if (!writen || ec)
 				{
 					LOG_PRINT_L3("Problems at write: " << ec.message());
+          shutdown();
           m_connected = false;
 					return false;
 				}else
@@ -320,6 +322,7 @@ namespace net_utils
 			catch(const boost::system::system_error& er)
 			{
 				LOG_ERROR("Some problems at send, message: " << er.what());
+        shutdown();
         m_connected = false;
 				return false;
 			}
@@ -390,6 +393,7 @@ namespace net_utils
                     }
 
 					MDEBUG("Problems at read: " << ec.message());
+                    shutdown();
                     m_connected = false;
 					return false;
 				}else
@@ -408,6 +412,7 @@ namespace net_utils
 			catch(const boost::system::system_error& er)
 			{
 				LOG_ERROR("Some problems at read, message: " << er.what());
+        shutdown();
         m_connected = false;
 				return false;
 			}
@@ -464,6 +469,7 @@ namespace net_utils
 				if (ec)
 				{
 					LOG_PRINT_L3("Problems at read: " << ec.message());
+          shutdown();
           m_connected = false;
 					return false;
 				}else
@@ -483,6 +489,7 @@ namespace net_utils
 			catch(const boost::system::system_error& er)
 			{
 				LOG_ERROR("Some problems at read, message: " << er.what());
+        shutdown();
         m_connected = false;
 				return false;
 			}
