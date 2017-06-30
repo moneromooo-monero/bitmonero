@@ -71,6 +71,7 @@ namespace wallet_args
   boost::optional<boost::program_options::variables_map> main(
     int argc, char** argv,
     const char* const usage,
+    const char* const notice,
     boost::program_options::options_description desc_params,
     const boost::program_options::positional_options_description& positional_options,
     const char *default_log_name,
@@ -163,6 +164,9 @@ namespace wallet_args
     {
       mlog_set_log(command_line::get_arg(vm, arg_log_level).c_str());
     }
+
+    if (notice)
+      tools::msg_writer() << notice << ENDL;
 
     if(command_line::has_arg(vm, arg_max_concurrency))
       tools::set_max_concurrency(command_line::get_arg(vm, arg_max_concurrency));
