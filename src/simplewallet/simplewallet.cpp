@@ -6096,6 +6096,7 @@ int main(int argc, char* argv[])
   const auto vm = wallet_args::main(
    argc, argv,
    "monero-wallet-cli [--wallet-file=<file>|--generate-new-wallet=<file>] [<COMMAND>]",
+    sw::tr("This is the command line monero wallet. It needs to connect to a monero\ndaemon to work correctly."),
     desc_params,
     positional_options,
     "monero-wallet-cli.log"

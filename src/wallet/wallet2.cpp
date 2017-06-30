@@ -7403,7 +7403,6 @@ size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig
     break;
   }
 
-  MFATAL("import_multisig: updating from import");
   for (size_t n = 0; n < n_outputs && n < m_transfers.size(); ++n)
   {
     update_multisig_rescan_info(k, info, n);
@@ -7413,7 +7412,6 @@ size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig
   m_multisig_rescan_info = &info;
   try
   {
-    MFATAL("import_multisig: refreshing");
     refresh();
   }
   catch (...) {}
