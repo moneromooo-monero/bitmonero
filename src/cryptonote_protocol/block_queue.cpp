@@ -180,20 +180,38 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     return std::make_pair(first_block_height, std::min(last_block_height - first_block_height + 1, max_blocks));
   }
 
-  std::vector<uint8_t> bitmap(max_block_height + 1, 0);
-  for (const auto &span: blocks)
+  uint64_t base = 0;
+  block_map::const_iterator i = blocks.begin();
+  if (i != blocks.end() && is_blockchain_placeholder(*i))
   {
-    memset(bitmap.data() + span.start_block_height, 1, span.nblocks);
+    base = i->start_block_height + i->nblocks;
+    ++i;
+    for (block_map::const_iterator j = i; j != blocks.end(); ++j)
+    {
+      if (j->start_block_height < base)
+        base = j->start_block_height;
+    }
+  }
+  if (base > first_block_height)
+    base = first_block_height;
+
+  CHECK_AND_ASSERT_MES (base <= max_block_height + 1, std::make_pair(0, 0), "Blockchain placeholder larger than max block height");
+  std::vector<uint8_t> bitmap(max_block_height + 1 - base, 0);
+  while (i != blocks.end())
+  {
+    CHECK_AND_ASSERT_MES (i->start_block_height >= base, std::make_pair(0, 0), "Span starts before blochckain placeholder");
+    memset(bitmap.data() + i->start_block_height - base, 1, i->nblocks);
+    ++i;
   }
 
-  const uint8_t *ptr = (const uint8_t*)memchr(bitmap.data() + first_block_height, 0, bitmap.size() - first_block_height);
+  const uint8_t *ptr = (const uint8_t*)memchr(bitmap.data() + first_block_height - base, 0, bitmap.size() - (first_block_height - base));
   if (!ptr)
   {
     MDEBUG("reserve_span: 0 not found in bitmap: " << first_block_height << " " << bitmap.size());
     print();
     return std::make_pair(0, 0);
   }
-  uint64_t start_block_height = ptr - bitmap.data();
+  uint64_t start_block_height = ptr - bitmap.data() + base;
   if (start_block_height > last_block_height)
   {
     MDEBUG("reserve_span: start_block_height > last_block_height: " << start_block_height << " < " << last_block_height);
@@ -206,7 +224,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
   }
 
   uint64_t nblocks = 1;
-  while (start_block_height + nblocks <= last_block_height && nblocks < max_blocks && bitmap[start_block_height + nblocks] == 0)
+  while (start_block_height + nblocks <= last_block_height && nblocks < max_blocks && bitmap[start_block_height + nblocks - base] == 0)
     ++nblocks;
 
   MDEBUG("Reserving span " << start_block_height << " - " << (start_block_height + nblocks - 1) << " for " << connection_id);
