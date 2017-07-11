@@ -1353,7 +1353,6 @@ skip:
                            << "\r\nm_last_response_height=" << context.m_last_response_height
                            << "\r\nm_remote_blockchain_height=" << context.m_remote_blockchain_height
                            << "\r\nm_needed_objects.size()=" << context.m_needed_objects.size()
-                           << "\r\nm_requested_objects.size()=" << context.m_requested_objects.size()
                            << "\r\non connection [" << epee::net_utils::print_connection_context_short(context)<< "]");
 
       context.m_state = cryptonote_connection_context::state_normal;
