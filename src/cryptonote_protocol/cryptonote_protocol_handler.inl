@@ -886,7 +886,8 @@ namespace cryptonote
         uint64_t subchain_height = start_height + arg.blocks.size();
         if (subchain_height <= m_core.get_current_blockchain_height())
         {
-          LOG_DEBUG_CC(context, "These are old blocks, ignoring");
+          LOG_DEBUG_CC(context, "These are old blocks, ignoring: blocks " << start_height << " - " << (subchain_height-1) << ", blockchain height " << m_core.get_current_blockchain_height());
+          context.m_requested_objects.clear();
           goto skip;
         }
       }
@@ -1181,6 +1182,7 @@ skip:
     m_block_queue.flush_stale_spans(live_connections);
 
     // if we don't need to get next span, and the block queue is full enough, wait a bit
+    bool start_from_current_chain = false;
     if (!force_next_span)
     {
       bool first = true;
@@ -1233,6 +1235,14 @@ skip:
       if (force_next_span)
       {
         MDEBUG("force_next_span is true, trying next span");
+        span = m_block_queue.get_start_gap_span();
+        if (span.second > 0)
+        {
+          context.m_needed_objects.clear();
+          context.m_last_response_height = 0;
+          start_from_current_chain = true;
+          goto skip;
+        }
         std::list<crypto::hash> hashes;
         boost::uuids::uuid span_connection_id;
         boost::posix_time::ptime time;
@@ -1331,10 +1341,13 @@ skip:
       NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
       m_core.get_short_chain_history(r.block_ids);
 
-      // we'll want to start off from where we are on the download side, which may not be added yet
-      crypto::hash last_known_hash = m_block_queue.get_last_known_hash();
-      if (last_known_hash != cryptonote::null_hash && r.block_ids.front() != last_known_hash)
-        r.block_ids.push_front(last_known_hash);
+      if (!start_from_current_chain)
+      {
+        // we'll want to start off from where we are on the download side, which may not be added yet
+        crypto::hash last_known_hash = m_block_queue.get_last_known_hash();
+        if (last_known_hash != cryptonote::null_hash && r.block_ids.front() != last_known_hash)
+          r.block_ids.push_front(last_known_hash);
+      }
 
       handler_request_blocks_history( r.block_ids ); // change the limit(?), sleep(?)
 

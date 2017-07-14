@@ -239,6 +239,25 @@ bool block_queue::is_blockchain_placeholder(const span &span) const
   return span.connection_id == uuid0;
 }
 
+std::pair<uint64_t, uint64_t> block_queue::get_start_gap_span() const
+{
+  boost::unique_lock<boost::recursive_mutex> lock(mutex);
+  if (blocks.empty())
+    return std::make_pair(0, 0);
+  block_map::const_iterator i = blocks.begin();
+  if (!is_blockchain_placeholder(*i))
+    return std::make_pair(0, 0);
+  uint64_t current_height = i->start_block_height + i->nblocks - 1;
+  ++i;
+  if (i == blocks.end())
+    return std::make_pair(0, 0);
+  uint64_t first_span_height = i->start_block_height;
+  if (first_span_height <= current_height)
+    return std::make_pair(0, 0);
+  MDEBUG("Found gap at start of spans");
+  return std::make_pair(current_height + 1, first_span_height - current_height);
+}
+
 std::pair<uint64_t, uint64_t> block_queue::get_next_span_if_scheduled(std::list<crypto::hash> &hashes, boost::uuids::uuid &connection_id, boost::posix_time::ptime &time) const
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
