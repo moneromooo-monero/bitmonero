@@ -216,6 +216,8 @@ DNSResolver::DNSResolver() : m_data(new DNSResolverData())
   // init libunbound context
   m_data->m_ub_context = ub_ctx_create();
 
+  ub_ctx_debuglevel(m_data->m_ub_context, 3);
+
   if (use_dns_public)
   {
     ub_ctx_set_fwd(m_data->m_ub_context, string_copy(dns_public_addr));
@@ -262,6 +264,10 @@ std::vector<std::string> DNSResolver::get_record(const std::string& url, int rec
   {
     dnssec_available = (result->secure || (!result->secure && result->bogus));
     dnssec_valid = result->secure && !result->bogus;
+    MDEBUG(url << ": secure " << result->secure << ", bogus " << result->bogus);
+    MDEBUG(url << ": available " << dnssec_available << ", valid " << dnssec_valid);
+    if (!result->secure && result->bogus)
+      MWARNING("DNSSEC validation failed for " << url << ": " << result->why_bogus);
     if (result->havedata)
     {
       for (size_t i=0; result->data[i] != NULL; i++)
@@ -270,6 +276,39 @@ std::vector<std::string> DNSResolver::get_record(const std::string& url, int rec
       }
     }
   }
+
+#if 0
+  // now check DNSSEC
+  dnssec_available = false;
+  const char *dpart = url.c_str();
+  while (dpart)
+  {
+    MDEBUG("Resolving NSEC DNS record for " << dpart);
+    if (ub_resolve(m_data->m_ub_context, string_copy(dpart), DNS_TYPE_NSEC, DNS_CLASS_IN, &result))
+    {
+      MWARNING("Failed to resolve NSEC DNS record for " << dpart);
+      dnssec_valid = false;
+      return addresses;
+    }
+    dnssec_available = true;
+
+    if (result->havedata)
+    {
+      MGINFO("Got data for part " << dpart << ": ");
+      for (size_t i=0; result->data[i] != NULL; i++)
+      {
+        MGINFO("  " << result->data[i]);
+      }
+    }
+    else
+    {
+      MGINFO("Got no data for part " << dpart);
+    }
+    dpart = strchr(dpart, '.');
+    if (dpart)
+      ++dpart;
+  }
+#endif
 
   return addresses;
 }

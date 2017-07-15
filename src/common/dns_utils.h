@@ -38,6 +38,7 @@ const static int DNS_CLASS_IN  = 1;
 const static int DNS_TYPE_A    = 1;
 const static int DNS_TYPE_TXT  = 16;
 const static int DNS_TYPE_AAAA = 8;
+const static int DNS_TYPE_NSEC = 47;
 
 struct DNSResolverData;
 
