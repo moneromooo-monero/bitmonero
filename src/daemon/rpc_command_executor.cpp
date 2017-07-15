@@ -1752,11 +1752,11 @@ bool t_rpc_command_executor::sync_info()
       std::string address = pad(s.remote_address, 24);
       if (s.size == 0)
       {
-        tools::success_msg_writer() << address << "  " << s.nblocks << "  -";
+        tools::success_msg_writer() << address << "  " << s.nblocks << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ")  -";
       }
       else
       {
-        tools::success_msg_writer() << address << "  " << s.nblocks << " (" << (uint64_t)(s.size/1e3) << " kB)  " << (unsigned)(s.rate/1e3) << " kB/s (" << s.speed/100.0f << ")";
+        tools::success_msg_writer() << address << "  " << s.nblocks << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ", " << (uint64_t)(s.size/1e3) << " kB)  " << (unsigned)(s.rate/1e3) << " kB/s (" << s.speed/100.0f << ")";
       }
     }
 

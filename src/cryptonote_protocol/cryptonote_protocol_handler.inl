@@ -930,7 +930,7 @@ namespace cryptonote
       // add that new span to the block queue
       const boost::posix_time::time_duration dt = now - context.m_last_request_time;
       const float rate = size * 1e6 / (dt.total_microseconds() + 1);
-      MDEBUG("Adding span: " << arg.blocks.size() << " at height " << start_height << ", " << dt.total_microseconds()/1e6 << " seconds, " << (rate/1e3) << " kB/s, size now " << (m_block_queue.get_data_size() + blocks_size) / 1048576.f << " MB");
+      MDEBUG(context << " adding span: " << arg.blocks.size() << " at height " << start_height << ", " << dt.total_microseconds()/1e6 << " seconds, " << (rate/1e3) << " kB/s, size now " << (m_block_queue.get_data_size() + blocks_size) / 1048576.f << " MB");
       m_block_queue.add_blocks(start_height, arg.blocks, context.m_connection_id, rate, blocks_size);
 
       if (m_core.get_test_drop_download() && m_core.get_test_drop_download_height()) { // DISCARD BLOCKS for testing
@@ -944,7 +944,7 @@ namespace cryptonote
           MINFO("Failed to lock m_sync_lock, going back to download");
           goto skip;
         }
-        MDEBUG("Lock m_sync_lock, adding blocks to chain...");
+        MDEBUG(context << " lock m_sync_lock, adding blocks to chain...");
 
         m_core.pause_mine();
         epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler(
@@ -959,14 +959,14 @@ namespace cryptonote
           m_block_queue.mark_last_block(previous_height - 1);
           if (!m_block_queue.get_next_span(start_height, blocks, span_connection_id))
           {
-            MDEBUG("No next span found, going back to download");
+            MDEBUG(context << " no next span found, going back to download");
             break;
           }
-          MDEBUG("Next span in the queue has blocks " << start_height << "-" << (start_height + blocks.size() - 1)
+          MDEBUG(context << " next span in the queue has blocks " << start_height << "-" << (start_height + blocks.size() - 1)
               << ", we need " << previous_height);
           if (previous_height < start_height || previous_height >= start_height + blocks.size())
           {
-            MDEBUG("This span is not what we need, going back to download");
+            MDEBUG(context << " this span is not what we need, going back to download");
             break;
           }
 
@@ -1134,7 +1134,7 @@ skip:
         return false;
       if (height > m_core.get_current_blockchain_height())
       {
-        MDEBUG("We should download it as the next block isn't scheduled");
+        MDEBUG(context << " we should download it as the next block isn't scheduled");
         return true;
       }
       return false;
@@ -1145,7 +1145,7 @@ skip:
 
     float span_speed = m_block_queue.get_speed(span_connection_id);
     float speed = m_block_queue.get_speed(context.m_connection_id);
-    MDEBUG("Next span is scheduled for " << span_connection_id << ", speed " << span_speed << ", ours " << speed);
+    MDEBUG(context << " next span is scheduled for " << span_connection_id << ", speed " << span_speed << ", ours " << speed);
 
     // we try for that span too if:
     //  - we're substantially faster, or:
@@ -1153,18 +1153,18 @@ skip:
     //  - the other one asked at least 5 seconds ago
     if (span_speed < .25 && speed > .75f)
     {
-      MDEBUG("We should download it as we're substantially faster");
+      MDEBUG(context << " we should download it as we're substantially faster");
       return true;
     }
     if (speed == 1.0f && span_speed != 1.0f)
     {
-      MDEBUG("We should download it as we're the fastest peer");
+      MDEBUG(context << " we should download it as we're the fastest peer");
       return true;
     }
     const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
     if ((now - request_time).total_microseconds() > REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD)
     {
-      MDEBUG("We should download it as this span was requested long ago");
+      MDEBUG(context << " we should download it as this span was requested long ago");
       return true;
     }
     return false;
@@ -1201,7 +1201,7 @@ skip:
 
         if (should_download_next_span(context))
         {
-          MDEBUG("We should try for that next span too, we think we could get it faster, resuming");
+          MDEBUG(context << " we should try for that next span too, we think we could get it faster, resuming");
           context.m_needed_objects.clear();
           context.m_last_response_height = 0;
           force_next_span = true;
@@ -1222,7 +1222,7 @@ skip:
       }
     }
 
-    MDEBUG("request_missing_objects: check " << check_having_blocks << ", force_next_span " << force_next_span << ", m_needed_objects " << context.m_needed_objects.size() << " lrh " << context.m_last_response_height << ", chain " << m_core.get_current_blockchain_height());
+    MDEBUG(context << " request_missing_objects: check " << check_having_blocks << ", force_next_span " << force_next_span << ", m_needed_objects " << context.m_needed_objects.size() << " lrh " << context.m_last_response_height << ", chain " << m_core.get_current_blockchain_height());
     if(context.m_needed_objects.size() || force_next_span)
     {
       //we know objects that we need, request this objects
@@ -1230,11 +1230,10 @@ skip:
       bool is_next = false;
       size_t count = 0;
       const size_t count_limit = m_core.get_block_sync_size();
-      MDEBUG("Setting count_limit: " << count_limit);
       std::pair<uint64_t, uint64_t> span = std::make_pair(0, 0);
       if (force_next_span)
       {
-        MDEBUG("force_next_span is true, trying next span");
+        MDEBUG(context << " force_next_span is true, trying next span");
         span = m_block_queue.get_start_gap_span();
         if (span.second > 0)
         {
@@ -1259,21 +1258,21 @@ skip:
       }
       if (span.second == 0)
       {
-        MDEBUG("span size is 0");
+        MDEBUG(context << " span size is 0");
         if (context.m_last_response_height + 1 < context.m_needed_objects.size())
         {
-          MERROR("ERROR: inconsistent context: lrh " << context.m_last_response_height << ", nos " << context.m_needed_objects.size());
+          MERROR(context << " ERROR: inconsistent context: lrh " << context.m_last_response_height << ", nos " << context.m_needed_objects.size());
           context.m_needed_objects.clear();
           context.m_last_response_height = 0;
           goto skip;
         }
         const uint64_t first_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
         span = m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit, context.m_connection_id);
-        MDEBUG("span from " << first_block_height << ": " << span.first << "/" << span.second);
+        MDEBUG(context << " span from " << first_block_height << ": " << span.first << "/" << span.second);
       }
       if (span.second == 0 && !force_next_span)
       {
-        MDEBUG("Still no span reserved, we're likely in the corner case of next span scheduled and everything else scheduled/filled: requesting next, it should be scheduled");
+        MDEBUG(context << " still no span reserved, we're likely in the corner case of next span scheduled and everything else scheduled/filled: requesting next, it should be scheduled");
         std::list<crypto::hash> hashes;
         boost::uuids::uuid span_connection_id;
         boost::posix_time::ptime time;
@@ -1288,7 +1287,7 @@ skip:
           }
         }
       }
-      MDEBUG("span: " << span.first << "/" << span.second << " (" << span.first << " - " << (span.first + span.second - 1) << ")");
+      MDEBUG(context << " span: " << span.first << "/" << span.second << " (" << span.first << " - " << (span.first + span.second - 1) << ")");
       if (span.second > 0)
       {
         if (!is_next)
@@ -1354,9 +1353,9 @@ skip:
       //std::string blob; // for calculate size of request
       //epee::serialization::store_t_to_binary(r, blob);
       //epee::net_utils::network_throttle_manager::get_global_throttle_inreq().logger_handle_net("log/dr-monero/net/req-all.data", sec, get_avg_block_size());
-      LOG_PRINT_CCONTEXT_L1("r = " << 200);
+      //LOG_PRINT_CCONTEXT_L1("r = " << 200);
 
-      LOG_PRINT_CCONTEXT_L1("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() );
+      LOG_PRINT_CCONTEXT_L1("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() << ", start_from_current_chain " << start_from_current_chain);
       post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
     }else
     {
