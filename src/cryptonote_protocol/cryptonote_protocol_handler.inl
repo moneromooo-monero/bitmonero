@@ -1237,22 +1237,34 @@ skip:
         span = m_block_queue.get_start_gap_span();
         if (span.second > 0)
         {
-          context.m_needed_objects.clear();
-          context.m_last_response_height = 0;
-          start_from_current_chain = true;
-          goto skip;
-        }
-        std::list<crypto::hash> hashes;
-        boost::uuids::uuid span_connection_id;
-        boost::posix_time::ptime time;
-        span = m_block_queue.get_next_span_if_scheduled(hashes, span_connection_id, time);
-        if (span.second > 0)
-        {
-          is_next = true;
-          for (const auto &hash: hashes)
+          const uint64_t first_block_height_known = context.m_last_response_height - context.m_needed_objects.size() + 1;
+          const uint64_t last_block_height_known = context.m_last_response_height;
+          const uint64_t first_block_height_needed = span.first;
+          const uint64_t last_block_height_needed = span.first + std::min(span.second, count_limit) - 1;
+          if (first_block_height_needed < first_block_height_known || last_block_height_needed > last_block_height_known)
           {
-            req.blocks.push_back(hash);
-            context.m_requested_objects.insert(hash);
+            MDEBUG(context << " we are missing some of the necessary hashes for this gap, requesting chain again");
+            context.m_needed_objects.clear();
+            context.m_last_response_height = 0;
+            start_from_current_chain = true;
+            goto skip;
+          }
+          MDEBUG(context << " we have the hashes for this gap");
+        }
+        if (span.second == 0)
+        {
+          std::list<crypto::hash> hashes;
+          boost::uuids::uuid span_connection_id;
+          boost::posix_time::ptime time;
+          span = m_block_queue.get_next_span_if_scheduled(hashes, span_connection_id, time);
+          if (span.second > 0)
+          {
+            is_next = true;
+            for (const auto &hash: hashes)
+            {
+              req.blocks.push_back(hash);
+              context.m_requested_objects.insert(hash);
+            }
           }
         }
       }
