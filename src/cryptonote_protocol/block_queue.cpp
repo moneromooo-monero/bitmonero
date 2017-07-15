@@ -192,8 +192,8 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
         base = j->start_block_height;
     }
   }
-  if (base > first_block_height)
-    base = first_block_height;
+  if (base > first_block_height + 1)
+    base = first_block_height + 1;
 
   CHECK_AND_ASSERT_MES (base <= max_block_height + 1, std::make_pair(0, 0), "Blockchain placeholder larger than max block height");
   std::vector<uint8_t> bitmap(max_block_height + 1 - base, 0);
@@ -217,9 +217,9 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     MDEBUG("reserve_span: start_block_height > last_block_height: " << start_block_height << " < " << last_block_height);
     return std::make_pair(0, 0);
   }
-  if (start_block_height + max_blocks < first_block_height)
+  if (start_block_height + max_blocks - 1 < first_block_height)
   {
-    MDEBUG("reserve_span: start_block_height + max_blocks < first_block_height: " << start_block_height << " + " << max_blocks << " < " << first_block_height);
+    MDEBUG("reserve_span: start_block_height + max_blocks - 1 < first_block_height: " << start_block_height << " + " << max_blocks << " - 1 < " << first_block_height);
     return std::make_pair(0, 0);
   }
 
