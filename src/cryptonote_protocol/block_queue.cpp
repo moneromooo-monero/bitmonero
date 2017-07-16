@@ -181,11 +181,12 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     return std::make_pair(first_block_height, std::min(last_block_height - first_block_height + 1, max_blocks));
   }
 
-  uint64_t base = 0;
+  uint64_t base = 0, last_placeholder_block = 0;
   block_map::const_iterator i = blocks.begin();
   if (i != blocks.end() && is_blockchain_placeholder(*i))
   {
     base = i->start_block_height + i->nblocks;
+    last_placeholder_block = base - 1;
     ++i;
     for (block_map::const_iterator j = i; j != blocks.end(); ++j)
     {
@@ -198,6 +199,8 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 
   CHECK_AND_ASSERT_MES (base <= max_block_height + 1, std::make_pair(0, 0), "Blockchain placeholder larger than max block height");
   std::vector<uint8_t> bitmap(max_block_height + 1 - base, 0);
+  if (last_placeholder_block >= base)
+    memset(bitmap.data(), 1, last_placeholder_block + 1 - base);
   while (i != blocks.end())
   {
     CHECK_AND_ASSERT_MES (i->start_block_height >= base, std::make_pair(0, 0), "Span starts before blochckain placeholder");
