@@ -146,7 +146,7 @@ void block_queue::print() const
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
   MDEBUG("Block queue has " << blocks.size() << " spans");
   for (const auto &span: blocks)
-    MDEBUG("  " << span.start_block_height << " - " << (span.start_block_height+span.nblocks-1) << " (" << span.nblocks << ") - " << (span.blocks.empty() ? "scheduled" : "filled    ") << "  " << span.connection_id << " (" << span.rate << " bytes/s");
+    MDEBUG("  " << span.start_block_height << " - " << (span.start_block_height+span.nblocks-1) << " (" << span.nblocks << ") - " << (span.blocks.empty() ? "scheduled" : "filled    ") << "  " << span.connection_id << " (" << (span.rate*10/1024.f)/10.f << " kB/s");
 }
 
 std::string block_queue::get_overview() const
@@ -259,7 +259,7 @@ std::pair<uint64_t, uint64_t> block_queue::get_start_gap_span() const
   uint64_t first_span_height = i->start_block_height;
   if (first_span_height <= current_height + 1)
     return std::make_pair(0, 0);
-  MDEBUG("Found gap at start of spans: last blockchain block height" << current_height << ", first span's block height " << first_span_height);
+  MDEBUG("Found gap at start of spans: last blockchain block height " << current_height << ", first span's block height " << first_span_height);
   print();
   return std::make_pair(current_height + 1, first_span_height - current_height - 1);
 }
