@@ -1241,6 +1241,8 @@ skip:
           const uint64_t last_block_height_known = context.m_last_response_height;
           const uint64_t first_block_height_needed = span.first;
           const uint64_t last_block_height_needed = span.first + std::min(span.second, count_limit) - 1;
+          MDEBUG(context << " gap found, span: " << span.first << " - " << span.first + span.second - 1 << " (" << last_block_height_needed << ")");
+          MDEBUG(context << " current known hashes from from " << first_block_height_known << " to " << last_block_height_known);
           if (first_block_height_needed < first_block_height_known || last_block_height_needed > last_block_height_known)
           {
             MDEBUG(context << " we are missing some of the necessary hashes for this gap, requesting chain again");

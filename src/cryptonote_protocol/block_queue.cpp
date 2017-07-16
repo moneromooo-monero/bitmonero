@@ -125,6 +125,7 @@ void block_queue::mark_last_block(uint64_t last_block_height)
   boost::uuids::uuid uuid0;
   memset(uuid0.data, 0, sizeof(uuid0.data));
   add_blocks(0, last_block_height + 1, uuid0);
+  MDEBUG("last blocked marked at " << last_block_height);
 }
 
 uint64_t block_queue::get_max_block_height() const
@@ -145,7 +146,7 @@ void block_queue::print() const
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
   MDEBUG("Block queue has " << blocks.size() << " spans");
   for (const auto &span: blocks)
-    MDEBUG("  " << span.start_block_height << " - " << (span.start_block_height+span.nblocks-1) << " - " << (span.blocks.empty() ? "scheduled" : "filled    ") << "  " << span.connection_id << " (" << span.rate << " bytes/s");
+    MDEBUG("  " << span.start_block_height << " - " << (span.start_block_height+span.nblocks-1) << " (" << span.nblocks << ") - " << (span.blocks.empty() ? "scheduled" : "filled    ") << "  " << span.connection_id << " (" << span.rate << " bytes/s");
 }
 
 std::string block_queue::get_overview() const
@@ -252,10 +253,11 @@ std::pair<uint64_t, uint64_t> block_queue::get_start_gap_span() const
   if (i == blocks.end())
     return std::make_pair(0, 0);
   uint64_t first_span_height = i->start_block_height;
-  if (first_span_height <= current_height)
+  if (first_span_height <= current_height + 1)
     return std::make_pair(0, 0);
-  MDEBUG("Found gap at start of spans");
-  return std::make_pair(current_height + 1, first_span_height - current_height);
+  MDEBUG("Found gap at start of spans: last blockchain block height" << current_height << ", first span's block height " << first_span_height);
+  print();
+  return std::make_pair(current_height + 1, first_span_height - current_height - 1);
 }
 
 std::pair<uint64_t, uint64_t> block_queue::get_next_span_if_scheduled(std::list<crypto::hash> &hashes, boost::uuids::uuid &connection_id, boost::posix_time::ptime &time) const
