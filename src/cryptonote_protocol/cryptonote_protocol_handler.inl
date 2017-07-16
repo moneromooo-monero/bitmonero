@@ -316,6 +316,11 @@ namespace cryptonote
     MLOG_P2P_MESSAGE("Received NOTIFY_NEW_BLOCK (hop " << arg.hop << ", " << arg.b.txs.size() << " txes)");
     if(context.m_state != cryptonote_connection_context::state_normal)
       return 1;
+    if(!is_synchronized()) // can happen if a peer connection goes to normal but another thread still hasn't finished adding queued blocks
+    {
+      LOG_DEBUG_CC(context, "Received new block while syncing, ignored");
+      return 1;
+    }
     m_core.pause_mine();
     std::list<block_complete_entry> blocks;
     blocks.push_back(arg.b);
@@ -369,6 +374,11 @@ namespace cryptonote
     MLOG_P2P_MESSAGE("Received NOTIFY_NEW_FLUFFY_BLOCK (height " << arg.current_blockchain_height << ", hop " << arg.hop << ", " << arg.b.txs.size() << " txes)");
     if(context.m_state != cryptonote_connection_context::state_normal)
       return 1;
+    if(!is_synchronized()) // can happen if a peer connection goes to normal but another thread still hasn't finished adding queued blocks
+    {
+      LOG_DEBUG_CC(context, "Received new block while syncing, ignored");
+      return 1;
+    }
     
     m_core.pause_mine();
       

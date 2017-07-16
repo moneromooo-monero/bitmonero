@@ -146,7 +146,7 @@ void block_queue::print() const
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
   MDEBUG("Block queue has " << blocks.size() << " spans");
   for (const auto &span: blocks)
-    MDEBUG("  " << span.start_block_height << " - " << (span.start_block_height+span.nblocks-1) << " (" << span.nblocks << ") - " << (span.blocks.empty() ? "scheduled" : "filled    ") << "  " << span.connection_id << " (" << (span.rate*10/1024.f)/10.f << " kB/s");
+    MDEBUG("  " << span.start_block_height << " - " << (span.start_block_height+span.nblocks-1) << " (" << span.nblocks << ") - " << (is_blockchain_placeholder(span) ? "blockchain" : span.blocks.empty() ? "scheduled" : "filled    ") << "  " << span.connection_id << " (" << ((unsigned)(span.rate*10/1024.f))/10.f << " kB/s)");
 }
 
 std::string block_queue::get_overview() const
@@ -239,8 +239,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 
 bool block_queue::is_blockchain_placeholder(const span &span) const
 {
-  boost::uuids::uuid uuid0;
-  memset(uuid0.data, 0, sizeof(uuid0));
+  static const boost::uuids::uuid uuid0 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   return span.connection_id == uuid0;
 }
 
