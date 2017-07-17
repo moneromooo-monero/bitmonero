@@ -866,6 +866,7 @@ namespace cryptonote
     block_hashes.reserve(arg.blocks.size());
     const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
     uint64_t start_height = std::numeric_limits<uint64_t>::max();
+    cryptonote::block b;
     for(const block_complete_entry& block_entry: arg.blocks)
     {
       if (m_stopping)
@@ -873,7 +874,6 @@ namespace cryptonote
         return 1;
       }
 
-      block b;
       if(!parse_and_validate_block_from_blob(block_entry.block, b))
       {
         LOG_ERROR_CCONTEXT("sent wrong block: failed to parse and validate block: "
@@ -891,16 +891,7 @@ namespace cryptonote
         return 1;
       }
       if (start_height == std::numeric_limits<uint64_t>::max())
-      {
         start_height = boost::get<txin_gen>(b.miner_tx.vin[0]).height;
-        uint64_t subchain_height = start_height + arg.blocks.size();
-        if (subchain_height <= m_core.get_current_blockchain_height())
-        {
-          LOG_DEBUG_CC(context, "These are old blocks, ignoring: blocks " << start_height << " - " << (subchain_height-1) << ", blockchain height " << m_core.get_current_blockchain_height());
-          context.m_requested_objects.clear();
-          goto skip;
-        }
-      }
 
       const crypto::hash block_hash = get_block_hash(b);
       auto req_it = context.m_requested_objects.find(block_hash);
@@ -932,6 +923,14 @@ namespace cryptonote
       m_p2p->drop_connection(context);
       m_block_queue.flush_spans(context.m_connection_id);
       return 1;
+    }
+
+    // get the last parsed block, which should be the highest one
+    if(m_core.have_block(cryptonote::get_block_hash(b)))
+    {
+      const uint64_t subchain_height = start_height + arg.blocks.size();
+      LOG_DEBUG_CC(context, "These are old blocks, ignoring: blocks " << start_height << " - " << (subchain_height-1) << ", blockchain height " << m_core.get_current_blockchain_height());
+      goto skip;
     }
 
     {
