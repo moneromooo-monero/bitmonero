@@ -1211,8 +1211,6 @@ skip:
         if (should_download_next_span(context))
         {
           MDEBUG(context << " we should try for that next span too, we think we could get it faster, resuming");
-//          context.m_needed_objects.clear();
-//          context.m_last_response_height = 0;
           force_next_span = true;
           break;
         }
