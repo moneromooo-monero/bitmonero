@@ -582,7 +582,14 @@ bool simple_wallet::make_multisig(const std::vector<std::string> &args)
 
   try
   {
-    m_wallet->make_multisig(orig_pwd_container->password(), secret_keys, public_keys, threshold);
+    std::string multisig_extra_info = m_wallet->make_multisig(orig_pwd_container->password(), secret_keys, public_keys, threshold);
+    if (!multisig_extra_info.empty())
+    {
+      success_msg_writer() << tr("Another step is needed");
+      success_msg_writer() << multisig_extra_info;
+      success_msg_writer() << tr("Send this multisig info to all other participants, then use finalize_multisig <info1> [<info2>...] with others' multisig info");
+      return true;
+    }
   }
   catch (const std::exception &e)
   {
@@ -593,6 +600,48 @@ bool simple_wallet::make_multisig(const std::vector<std::string> &args)
   uint32_t total = secret_keys.size() + 1;
   success_msg_writer() << std::to_string(threshold) << "/" << total << tr(" multisig address: ")
       << m_wallet->get_account().get_public_address_str(m_wallet->testnet());
+
+  return true;
+}
+
+bool simple_wallet::finalize_multisig(const std::vector<std::string> &args)
+{
+  if (!m_wallet->multisig())
+  {
+    fail_msg_writer() << tr("This wallet is not multisig");
+    return true;
+  }
+
+  const auto orig_pwd_container = get_and_verify_password();
+  if(orig_pwd_container == boost::none)
+  {
+    fail_msg_writer() << tr("Your original password was incorrect.");
+    return true;
+  }
+
+  if (args.size() < 2)
+  {
+    fail_msg_writer() << tr("usage: finalize_multisig <multisiginfo1> [<multisiginfo2>...]");
+    return true;
+  }
+
+  // parse all multisig info
+  std::unordered_set<crypto::public_key> public_keys;
+  for (size_t i = 1; i < args.size(); ++i)
+  {
+    if (!m_wallet->verify_extra_multisig_info(args[i], public_keys))
+    {
+      fail_msg_writer() << tr("Bad multisig info: ") << args[i];
+      return true;
+    }
+  }
+
+  // we have all pubkeys now
+  if (!m_wallet->finalize_multisig(orig_pwd_container->password(), public_keys))
+  {
+    fail_msg_writer() << tr("Failed to finalize multisig");
+    return true;
+  }
 
   return true;
 }

@@ -135,14 +135,25 @@ namespace tools
 
     struct multisig_info
     {
-      crypto::key_image m_partial_key_image;
-      rct::key m_L;
-      rct::key m_R;
+      struct entry
+      {
+        crypto::hash m_signing_key;
+        crypto::key_image m_partial_key_image;
+        rct::key m_L;
+        rct::key m_R;
+
+        BEGIN_SERIALIZE_OBJECT()
+          FIELD(m_signing_key)
+          FIELD(m_partial_key_image)
+          FIELD(m_L)
+          FIELD(m_R)
+        END_SERIALIZE()
+      };
+
+      std::vector<entry> m_entries;
 
       BEGIN_SERIALIZE_OBJECT()
-        FIELD(m_partial_key_image)
-        FIELD(m_L)
-        FIELD(m_R)
+        FIELD(m_entries)
       END_SERIALIZE()
     };
 
@@ -162,7 +173,7 @@ namespace tools
       bool m_key_image_known;
       size_t m_pk_index;
       bool m_key_image_partial;
-      rct::key m_multisig_k;
+      std::vector<rct::key> m_multisig_k;
       std::vector<multisig_info> m_multisig_info;
 
       bool is_rct() const { return m_rct; }
@@ -278,6 +289,7 @@ namespace tools
     {
       std::vector<pending_tx> m_ptx;
       std::unordered_set<crypto::hash> m_signers;
+      std::unordered_set<crypto::hash> m_signing_keys;
     };
 
     struct keys_file_data
@@ -345,11 +357,17 @@ namespace tools
       const crypto::secret_key& viewkey = crypto::secret_key());
     /*!
      * \brief Creates a multisig wallet
+     * \return empty if done, non empty if we need to send another string
+     * to other participants
      */
-    void make_multisig(const std::string &password,
+    std::string make_multisig(const std::string &password,
       const std::vector<crypto::secret_key> &view_keys,
       const std::vector<crypto::public_key> &spend_keys,
       uint32_t threshold);
+    /*!
+     * \brief Finalizes creation of a multisig wallet
+     */
+    bool finalize_multisig(const std::string &password,const std::unordered_set<crypto::public_key> &pkeys);
     /*!
      * Get a packaged multisig information string
      */
@@ -358,6 +376,10 @@ namespace tools
      * Verifies and extracts keys from a packaged multisig information string
      */
     bool verify_multisig_info(const std::string &data, crypto::secret_key &skey, crypto::public_key &pkey) const;
+    /*!
+     * Verifies and extracts keys from a packaged multisig information string
+     */
+    bool verify_extra_multisig_info(const std::string &data, std::unordered_set<crypto::public_key> &pkeys) const;
     /*!
      * Export multisig info
      * This will generate and remember new k values
@@ -474,6 +496,7 @@ namespace tools
     bool load_tx(const std::string &signed_filename, std::vector<tools::wallet2::pending_tx> &ptx, std::function<bool(const signed_tx_set&)> accept_func = NULL);
     bool load_multisig_tx(const std::string &filename, multisig_tx_set &exported_txs, std::function<bool(const multisig_tx_set&)> accept_func = NULL);
     bool sign_multisig_tx(const std::string &filename, std::vector<crypto::hash> &txids, std::function<bool(const multisig_tx_set&)> accept_func);
+    bool sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto::hash> &txids);
     bool sign_multisig_tx(multisig_tx_set &exported_txs, const std::string &filename, std::vector<crypto::hash> &txids);
     std::vector<pending_tx> create_transactions(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
     std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t> extra, bool trusted_daemon);
@@ -720,14 +743,16 @@ namespace tools
     void set_spent(size_t idx, uint64_t height);
     void set_unspent(size_t idx);
     void get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::list<size_t> &selected_transfers, size_t fake_outputs_count);
-    bool wallet_generate_key_image_helper(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, bool multisig_export = false) const;
+    bool wallet_generate_key_image_helper(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki) const;
+    bool wallet_generate_key_image_helper_export(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, size_t multisig_key_index) const;
     crypto::public_key get_tx_pub_key_from_received_outs(const tools::wallet2::transfer_details &td) const;
     bool should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
     std::vector<size_t> get_only_rct(const std::vector<size_t> &unused_dust_indices, const std::vector<size_t> &unused_transfers_indices) const;
     rct::multisig_kLRki get_multisig_composite_LRki(size_t n, const rct::key &k) const;
     rct::multisig_kLRki get_multisig_LRki(size_t n, const rct::key &k) const;
-    rct::key get_multisig_k(size_t idx) const;
-    void update_multisig_rescan_info(const std::vector<rct::key> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n);
+    rct::key get_multisig_k(size_t idx, size_t signer_idx) const;
+    rct::key get_multisig_k_all(size_t idx) const;
+    void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n);
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -751,7 +776,7 @@ namespace tools
     std::vector<tools::wallet2::address_book_row> m_address_book;
     uint64_t m_upper_transaction_size_limit; //TODO: auto-calc this value or request from daemon, now use some fixed value
     const std::vector<std::vector<tools::wallet2::multisig_info>> *m_multisig_rescan_info;
-    const std::vector<rct::key> *m_multisig_rescan_k;
+    const std::vector<std::vector<rct::key>> *m_multisig_rescan_k;
 
     std::atomic<bool> m_run;
 
@@ -788,6 +813,7 @@ namespace tools
 BOOST_CLASS_VERSION(tools::wallet2, 18)
 BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 9)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_info::entry, 0)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_tx_set, 1)
 BOOST_CLASS_VERSION(tools::wallet2::payment_details, 1)
 BOOST_CLASS_VERSION(tools::wallet2::unconfirmed_transfer_details, 6)
@@ -834,10 +860,6 @@ namespace boost
         {
           x.m_key_image_partial = false;
           x.m_multisig_info.clear();
-        }
-        if (ver < 8)
-        {
-          x.m_multisig_k = rct::zero();
         }
     }
 
@@ -922,11 +944,18 @@ namespace boost
     }
 
     template <class Archive>
-    inline void serialize(Archive &a, tools::wallet2::multisig_info &x, const boost::serialization::version_type ver)
+    inline void serialize(Archive &a, tools::wallet2::multisig_info::entry &x, const boost::serialization::version_type ver)
     {
+      a & x.m_signing_key;
       a & x.m_partial_key_image;
       a & x.m_L;
       a & x.m_R;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multisig_info &x, const boost::serialization::version_type ver)
+    {
+      a & x.m_entries;
     }
 
     template <class Archive>
@@ -934,6 +963,7 @@ namespace boost
     {
       a & x.m_ptx;
       a & x.m_signers;
+      a & x.m_signing_keys;
     }
 
     template <class Archive>
@@ -1256,7 +1286,7 @@ namespace tools
       src.real_output = interted_it - src.outputs.begin();
       src.real_output_in_tx_index = td.m_internal_output_index;
       if (m_multisig)
-        src.multisig_kLRki = get_multisig_composite_LRki(idx, get_multisig_k(idx));
+        src.multisig_kLRki = get_multisig_composite_LRki(idx, get_multisig_k_all(idx));
       else
         src.multisig_kLRki = rct::multisig_kLRki({rct::zero(), rct::zero(), rct::zero(), rct::zero()});
       detail::print_source_entry(src);
