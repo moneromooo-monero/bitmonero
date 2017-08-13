@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include <boost/serialization/version.hpp>
 #include "cryptonote_basic.h"
 #include "crypto/crypto.h"
 #include "serialization/keyvalue_serialization.h"
@@ -60,7 +61,8 @@ namespace cryptonote
     crypto::secret_key generate(const crypto::secret_key& recovery_key = crypto::secret_key(), bool recover = false, bool two_random = false);
     void create_from_keys(const cryptonote::account_public_address& address, const crypto::secret_key& spendkey, const crypto::secret_key& viewkey);
     void create_from_viewkey(const cryptonote::account_public_address& address, const crypto::secret_key& viewkey);
-    bool make_multisig(const crypto::secret_key &view_secret_key, const crypto::public_key &spend_public_key);
+    bool make_multisig(const crypto::secret_key &view_secret_key, const crypto::public_key &spend_public_key, const std::vector<crypto::secret_key> &multisig_keys);
+    bool finalize_multisig(const crypto::public_key &spend_public_key);
     const account_keys& get_keys() const;
     std::string get_public_address_str(bool testnet) const;
     std::string get_public_integrated_address_str(const crypto::hash8 &payment_id, bool testnet) const;
@@ -72,22 +74,29 @@ namespace cryptonote
     bool store(const std::string& file_path);
 
     void forget_spend_key();
+    const std::vector<crypto::secret_key> &get_multisig_keys() const { return m_multisig_keys; }
 
     template <class t_archive>
-    inline void serialize(t_archive &a, const unsigned int /*ver*/)
+    inline void serialize(t_archive &a, const unsigned int ver)
     {
       a & m_keys;
       a & m_creation_timestamp;
+      if (ver < 1)
+        return;
+      a & m_multisig_keys;
     }
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(m_keys)
       KV_SERIALIZE(m_creation_timestamp)
+      KV_SERIALIZE_CONTAINER_POD_AS_BLOB(m_multisig_keys)
     END_KV_SERIALIZE_MAP()
 
   private:
     void set_null();
     account_keys m_keys;
+    std::vector<crypto::secret_key> m_multisig_keys;
     uint64_t m_creation_timestamp;
   };
 }
+BOOST_CLASS_VERSION(cryptonote::account_base, 1)
