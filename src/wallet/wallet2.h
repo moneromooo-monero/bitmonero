@@ -278,6 +278,7 @@ namespace tools
     {
       std::vector<pending_tx> m_ptx;
       std::unordered_set<crypto::hash> m_signers;
+      std::unordered_set<crypto::hash> m_signing_keys;
     };
 
     struct keys_file_data
@@ -345,11 +346,17 @@ namespace tools
       const crypto::secret_key& viewkey = crypto::secret_key());
     /*!
      * \brief Creates a multisig wallet
+     * \return empty if done, non empty if we need to send another string
+     * to other participants
      */
-    void make_multisig(const std::string &password,
+    std::string make_multisig(const std::string &password,
       const std::vector<crypto::secret_key> &view_keys,
       const std::vector<crypto::public_key> &spend_keys,
       uint32_t threshold);
+    /*!
+     * \brief Finalizes creation of a multisig wallet
+     */
+    bool finalize_multisig(const std::string &password,const std::unordered_set<crypto::public_key> &pkeys);
     /*!
      * Get a packaged multisig information string
      */
@@ -358,6 +365,10 @@ namespace tools
      * Verifies and extracts keys from a packaged multisig information string
      */
     bool verify_multisig_info(const std::string &data, crypto::secret_key &skey, crypto::public_key &pkey) const;
+    /*!
+     * Verifies and extracts keys from a packaged multisig information string
+     */
+    bool verify_extra_multisig_info(const std::string &data, std::unordered_set<crypto::public_key> &pkeys) const;
     /*!
      * Export multisig info
      * This will generate and remember new k values
@@ -923,6 +934,7 @@ namespace boost
     {
       a & x.m_ptx;
       a & x.m_signers;
+      a & x.m_signing_keys;
     }
 
     template <class Archive>

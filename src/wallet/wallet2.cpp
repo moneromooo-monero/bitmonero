@@ -2399,7 +2399,7 @@ void wallet2::generate(const std::string& wallet_, const std::string& password,
     store();
 }
 
-void wallet2::make_multisig(const std::string &password,
+std::string wallet2::make_multisig(const std::string &password,
   const std::vector<crypto::secret_key> &view_keys,
   const std::vector<crypto::public_key> &spend_keys,
   uint32_t threshold)
@@ -2407,26 +2407,61 @@ void wallet2::make_multisig(const std::string &password,
   CHECK_AND_ASSERT_THROW_MES(!view_keys.empty(), "empty view keys");
   CHECK_AND_ASSERT_THROW_MES(view_keys.size() == spend_keys.size(), "Mismatched view/spend key sizes");
   CHECK_AND_ASSERT_THROW_MES(threshold > 1 && threshold <= spend_keys.size() + 1, "Invalid threshold");
-  CHECK_AND_ASSERT_THROW_MES(/*threshold == spend_keys.size() ||*/ threshold == spend_keys.size() + 1, "Unsupported threshold case");
+  CHECK_AND_ASSERT_THROW_MES(threshold == spend_keys.size() || threshold == spend_keys.size() + 1, "Unsupported threshold case");
+
+  std::string extra_multisig_info;
 
   clear();
 
   MINFO("Creating spend key...");
-  rct::key spend_pkey = rct::pk2rct(get_account().get_keys().m_account_address.m_spend_public_key);
+  std::vector<crypto::secret_key> multisig_keys;
+  rct::key spend_pkey;
   if (threshold == spend_keys.size() + 1)
   {
     // the multisig spend public key is the sum of all spend public keys
+    spend_pkey = rct::pk2rct(get_account().get_keys().m_account_address.m_spend_public_key);
     for (const auto &k: spend_keys)
       rct::addKeys(spend_pkey, spend_pkey, rct::pk2rct(k));
+    multisig_keys.push_back(get_account().get_keys().m_spend_secret_key);
+  }
+  else if (threshold == spend_keys.size())
+  {
+    spend_pkey = rct::zero();
+
+    // create all our composite private keys
+    for (const auto &k: spend_keys)
+    {
+      rct::keyV data;
+      data.push_back(rct::scalarmultKey(rct::pk2rct(k), rct::sk2rct(get_account().get_keys().m_spend_secret_key)));
+      static const rct::key salt = { {'M', 'u', 'l', 't' , 'i', 's', 'i', 'g' , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00  } };
+      data.push_back(salt);
+      rct::key msk = rct::hash_to_scalar(data);
+      multisig_keys.push_back(rct::rct2sk(msk));
+    }
+
+    // We need an extra step, so we package all the composite public keys
+    // we know about, and make a signed string out of them
+    std::string data;
+    const crypto::public_key &pkey = get_account().get_keys().m_account_address.m_spend_public_key;
+    data += std::string((const char *)&pkey, sizeof(crypto::public_key));
+
+    for (const auto &msk: multisig_keys)
+    {
+      rct::key pmsk = rct::scalarmultBase(rct::sk2rct(msk));
+      data += std::string((const char *)&pmsk, sizeof(crypto::public_key));
+    }
+
+    data.resize(data.size() + sizeof(crypto::signature));
+    crypto::hash hash;
+    crypto::cn_fast_hash(data.data(), data.size() - sizeof(signature), hash);
+    crypto::signature &signature = *(crypto::signature*)&data[data.size() - sizeof(crypto::signature)];
+    crypto::generate_signature(hash, pkey, get_account().get_keys().m_spend_secret_key, signature);
+
+    extra_multisig_info = std::string("MultisigxV1") + tools::base58::encode(data);
   }
   else
   {
-    // the multisig spend public key is the sum of keys derived from all spend public keys
-    const rct::key spend_skey = rct::sk2rct(get_account().get_keys().m_spend_secret_key); // WRONG
-    for (const auto &k: spend_keys)
-    {
-      rct::addKeys(spend_pkey, spend_pkey, rct::scalarmultBase(rct::hash_to_scalar(rct::scalarmultKey(rct::pk2rct(k), spend_skey))));
-    }
+    CHECK_AND_ASSERT_THROW_MES(false, "Unsupported threshold case");
   }
 
   // the multisig view key is shared by all, make one all can derive
@@ -2437,7 +2472,7 @@ void wallet2::make_multisig(const std::string &password,
   sc_reduce32(view_skey.bytes);
 
   MINFO("Creating multisig address...");
-  CHECK_AND_ASSERT_THROW_MES(m_account.make_multisig(rct::rct2sk(view_skey), rct::rct2pk(spend_pkey)),
+  CHECK_AND_ASSERT_THROW_MES(m_account.make_multisig(rct::rct2sk(view_skey), rct::rct2pk(spend_pkey), multisig_keys),
       "Failed to create multisig wallet due to bad keys");
 
   m_account_public_address = m_account.get_keys().m_account_address;
@@ -2461,6 +2496,35 @@ void wallet2::make_multisig(const std::string &password,
 
   if (!m_wallet_file.empty())
     store();
+
+  return extra_multisig_info;
+}
+
+bool wallet2::finalize_multisig(const std::string &password, const std::unordered_set<crypto::public_key> &pkeys)
+{
+  CHECK_AND_ASSERT_THROW_MES(!pkeys.empty(), "empty pkeys");
+
+  rct::key spend_public_key = rct::zero();
+  for (const auto &pk: pkeys)
+  {
+    rct::addKeys(spend_public_key, spend_public_key, rct::pk2rct(pk));
+  }
+  m_account_public_address.m_spend_public_key = rct::rct2pk(spend_public_key);
+  m_account.finalize_multisig(m_account_public_address.m_spend_public_key);
+
+  if (!m_wallet_file.empty())
+  {
+    bool r = store_keys(m_keys_file, password, false);
+    THROW_WALLET_EXCEPTION_IF(!r, error::file_save_error, m_keys_file);
+
+    r = file_io_utils::save_string_to_file(m_wallet_file + ".address.txt", m_account.get_public_address_str(m_testnet));
+    if(!r) MERROR("String with address text not saved");
+  }
+
+  if (!m_wallet_file.empty())
+    store();
+
+  return true;
 }
 
 std::string wallet2::get_multisig_info() const
@@ -2515,6 +2579,54 @@ bool wallet2::verify_multisig_info(const std::string &data, crypto::secret_key &
   {
     MERROR("Multisig info signature is invalid");
     return false;
+  }
+
+  return true;
+}
+
+bool wallet2::verify_extra_multisig_info(const std::string &data, std::unordered_set<crypto::public_key> &pkeys) const
+{
+  const size_t header_len = strlen("MultisigxV1");
+  if (data.size() < header_len || data.substr(0, header_len) != "MultisigxV1")
+  {
+    MERROR("Multisig info header check error");
+    return false;
+  }
+  std::string decoded;
+  if (!tools::base58::decode(data.substr(header_len), decoded))
+  {
+    MERROR("Multisig info decoding error");
+    return false;
+  }
+  if (decoded.size() < sizeof(crypto::public_key) + sizeof(crypto::signature))
+  {
+    MERROR("Multisig info is corrupt");
+    return false;
+  }
+  if ((decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::signature))) % sizeof(crypto::public_key))
+  {
+    MERROR("Multisig info is corrupt");
+    return false;
+  }
+
+  const size_t n_keys = (decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::signature))) / sizeof(crypto::public_key);
+  const crypto::public_key &pkey = *(const crypto::public_key*)decoded.data();
+  const crypto::signature &signature = *(const crypto::signature*)(decoded.data() + sizeof(crypto::public_key) + n_keys * sizeof(crypto::public_key));
+
+  crypto::hash hash;
+  crypto::cn_fast_hash(decoded.data(), decoded.size() - sizeof(signature), hash);
+  if (!crypto::check_signature(hash, pkey, signature))
+  {
+    MERROR("Multisig info signature is invalid");
+    return false;
+  }
+
+  size_t offset = sizeof(crypto::public_key);
+  for (size_t n = 0; n < n_keys; ++n)
+  {
+    crypto::public_key mspk = *(const crypto::public_key*)(decoded.data() + offset);
+    pkeys.insert(mspk);
+    offset += sizeof(mspk);
   }
 
   return true;
@@ -3713,6 +3825,11 @@ std::string wallet2::save_multisig_tx(const std::vector<pending_tx>& ptx_vector)
   multisig_tx_set txs;
   txs.m_ptx = ptx_vector;
   crypto::hash hash;
+  for (const crypto::secret_key &msk: get_account().get_multisig_keys())
+  {
+    cn_fast_hash(&msk, sizeof(crypto::secret_key), (char*)&hash);
+    txs.m_signing_keys.insert(hash);
+  }
   cn_fast_hash(&get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (char*)&hash);
   txs.m_signers.insert(hash);
   return save_multisig_tx(txs);
@@ -3843,8 +3960,18 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, const std::string 
     std::vector<unsigned int> indices;
     for (const auto &source: sd.sources)
       indices.push_back(source.real_output);
-    THROW_WALLET_EXCEPTION_IF(!rct::signMultisig(ptx.tx.rct_signatures, indices, k, ptx.msout, rct::sk2rct(get_account().get_keys().m_spend_secret_key)),
-        error::wallet_internal_error, "Failed signing, transaction likely malformed");
+    for (const auto &msk: get_account().get_multisig_keys())
+    {
+      crypto::hash hash;
+      cn_fast_hash(&msk, sizeof(crypto::secret_key), (char*)&hash);
+
+      if (exported_txs.m_signing_keys.find(hash) == exported_txs.m_signing_keys.end())
+      {
+        THROW_WALLET_EXCEPTION_IF(!rct::signMultisig(ptx.tx.rct_signatures, indices, k, ptx.msout, rct::sk2rct(msk)),
+            error::wallet_internal_error, "Failed signing, transaction likely malformed");
+        exported_txs.m_signing_keys.insert(hash);
+      }
+    }
 
     const bool is_last = exported_txs.m_signers.size() + 1 >= m_multisig_threshold;
     if (is_last)
