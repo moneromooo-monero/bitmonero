@@ -1257,6 +1257,12 @@ skip:
           break;
         }
 
+        if (m_block_queue.has_next_span(context.m_connection_id))
+        {
+          MDEBUG(context << " we have the next span, and it is scheduled, resuming");
+          return 1;
+        }
+
         if (should_download_next_span(context))
         {
           MDEBUG(context << " we should try for that next span too, we think we could get it faster, resuming");
