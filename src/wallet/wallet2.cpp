@@ -883,8 +883,6 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
             td.m_key_image = ki[o];
             td.m_key_image_known = !m_watch_only && !m_multisig;
             td.m_key_image_partial = m_multisig;
-            if (m_multisig)
-              td.m_multisig_k = rct::skGen();
             td.m_amount = tx.vout[o].amount;
             td.m_pk_index = pk_index - 1;
             if (td.m_amount == 0)
@@ -907,8 +905,13 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
             if (!m_multisig)
 	      m_key_images[td.m_key_image] = m_transfers.size()-1;
 	    m_pub_keys[in_ephemeral[o].pub] = m_transfers.size()-1;
-            if (m_multisig && m_multisig_rescan_info && m_multisig_rescan_info->front().size() >= m_transfers.size())
-              update_multisig_rescan_info(*m_multisig_rescan_info, m_transfers.size() - 1);
+            if (m_multisig)
+            {
+              if (m_multisig_rescan_info && m_multisig_rescan_info->front().size() >= m_transfers.size())
+                update_multisig_rescan_info(*m_multisig_rescan_k, *m_multisig_rescan_info, m_transfers.size() - 1);
+              else
+                td.m_multisig_k = rct::skGen();
+            }
 	    LOG_PRINT_L0("Received money: " << print_money(td.amount()) << ", with tx: " << txid);
 	    if (0 != m_callback)
 	      m_callback->on_money_received(height, txid, tx, td.m_amount);
@@ -937,8 +940,6 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
 	    td.m_global_output_index = o_indices[o];
 	    td.m_tx = (const cryptonote::transaction_prefix&)tx;
 	    td.m_txid = txid;
-            if (m_multisig)
-              td.m_multisig_k = rct::skGen();
             td.m_amount = tx.vout[o].amount;
             td.m_pk_index = pk_index - 1;
             if (td.m_amount == 0)
@@ -957,8 +958,13 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
               td.m_mask = rct::identity();
               td.m_rct = false;
             }
-            if (m_multisig && m_multisig_rescan_info && m_multisig_rescan_info->front().size() >= m_transfers.size())
-              update_multisig_rescan_info(*m_multisig_rescan_info, m_transfers.size() - 1);
+            if (m_multisig)
+            {
+              if (m_multisig_rescan_info && m_multisig_rescan_info->front().size() >= m_transfers.size())
+                update_multisig_rescan_info(*m_multisig_rescan_k, *m_multisig_rescan_info, m_transfers.size() - 1);
+              else
+                td.m_multisig_k = rct::skGen();
+            }
             THROW_WALLET_EXCEPTION_IF(td.get_public_key() != in_ephemeral[o].pub, error::wallet_internal_error, "Inconsistent public keys");
 	    THROW_WALLET_EXCEPTION_IF(td.m_spent, error::wallet_internal_error, "Inconsistent spent status");
 
@@ -6085,21 +6091,24 @@ std::vector<tools::wallet2::multisig_info> wallet2::export_multisig()
   return info;
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::update_multisig_rescan_info(const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n)
+void wallet2::update_multisig_rescan_info(const std::vector<rct::key> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n)
 {
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad index in update_multisig_info");
+  CHECK_AND_ASSERT_THROW_MES(multisig_k.size() >= m_transfers.size(), "Mismatched sizes of multisig_k and info");
 
   MDEBUG("update_multisig_rescan_info: updating index " << n);
   transfer_details &td = m_transfers[n];
   td.m_multisig_info.clear();
   for (const auto &pi: info)
   {
+    CHECK_AND_ASSERT_THROW_MES(n < pi.size(), "Bad pi size");
     td.m_multisig_info.push_back(pi[n]);
   }
   m_key_images.erase(td.m_key_image);
   td.m_key_image = rct::rct2ki(get_multisig_composite_LRki(n, rct::skGen()).ki);
   td.m_key_image_known = true;
   td.m_key_image_partial = false;
+  td.m_multisig_k = multisig_k[n];
   m_key_images[td.m_key_image] = n;
 }
 //----------------------------------------------------------------------------------------------------
@@ -6107,6 +6116,11 @@ size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig
 {
   CHECK_AND_ASSERT_THROW_MES(m_multisig, "Wallet is not multisig");
   CHECK_AND_ASSERT_THROW_MES(info.size() + 1 == m_multisig_total, "Wrong number of multisig sources");
+
+  std::vector<rct::key> k;
+  k.reserve(m_transfers.size());
+  for (const auto &td: m_transfers)
+    k.push_back(td.m_multisig_k);
 
   // how many outputs we're going to update
   size_t n_outputs = m_transfers.size();
@@ -6132,9 +6146,10 @@ size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig
   MFATAL("import_multisig: updating from import");
   for (size_t n = 0; n < n_outputs && n < m_transfers.size(); ++n)
   {
-    update_multisig_rescan_info(info, n);
+    update_multisig_rescan_info(k, info, n);
   }
 
+  m_multisig_rescan_k = &k;
   m_multisig_rescan_info = &info;
   try
   {
@@ -6143,6 +6158,7 @@ size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig
   }
   catch (...) {}
   m_multisig_rescan_info = NULL;
+  m_multisig_rescan_k = NULL;
 
   return n_outputs;
 }
