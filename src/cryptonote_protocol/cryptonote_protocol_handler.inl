@@ -1185,9 +1185,17 @@ skip:
     std::list<crypto::hash> hashes;
     boost::uuids::uuid span_connection_id;
     boost::posix_time::ptime request_time;
-    std::pair<uint64_t, uint64_t> span = m_block_queue.get_next_span_if_scheduled(hashes, span_connection_id, request_time);
+    std::pair<uint64_t, uint64_t> span;
+
+    span = m_block_queue.get_start_gap_span();
+    if (span.second > 0)
+    {
+      MDEBUG(context << " we should download it as there is a gap");
+      return true;
+    }
 
     // if the next span is not scheduled (or there is none)
+    span = m_block_queue.get_next_span_if_scheduled(hashes, span_connection_id, request_time);
     if (span.second == 0)
     {
       // we might be in a weird case where there is a filled next span,
@@ -1302,9 +1310,8 @@ skip:
       size_t count = 0;
       const size_t count_limit = m_core.get_block_sync_size(m_core.get_current_blockchain_height());
       std::pair<uint64_t, uint64_t> span = std::make_pair(0, 0);
-      if (force_next_span)
       {
-        MDEBUG(context << " force_next_span is true, trying next span");
+        MDEBUG(context << " checking for gap");
         span = m_block_queue.get_start_gap_span();
         if (span.second > 0)
         {
@@ -1324,6 +1331,9 @@ skip:
           }
           MDEBUG(context << " we have the hashes for this gap");
         }
+      }
+      if (force_next_span)
+      {
         if (span.second == 0)
         {
           std::list<crypto::hash> hashes;
