@@ -133,6 +133,7 @@ namespace cryptonote
     bool should_download_next_span(cryptonote_connection_context& context) const;
     void drop_connection(cryptonote_connection_context &context, bool add_fail, bool flush_all_spans);
     bool kick_idle_peers();
+    int try_add_next_blocks(cryptonote_connection_context &context);
 
     t_core& m_core;
 

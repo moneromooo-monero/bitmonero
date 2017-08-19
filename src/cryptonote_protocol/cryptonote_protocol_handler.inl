@@ -819,8 +819,6 @@ namespace cryptonote
   {
     MLOG_P2P_MESSAGE("Received NOTIFY_RESPONSE_GET_OBJECTS (" << arg.blocks.size() << " blocks, " << arg.txs.size() << " txes)");
 
-    bool force_next_span = false;
-
     // calculate size of request
     size_t size = 0;
     for (const auto &element : arg.txs) size += element.size();
@@ -938,19 +936,33 @@ namespace cryptonote
 
       context.m_last_known_hash = cryptonote::get_blob_hash(arg.blocks.back().block);
 
-      if (m_core.get_test_drop_download() && m_core.get_test_drop_download_height()) { // DISCARD BLOCKS for testing
+      if (!m_core.get_test_drop_download() || !m_core.get_test_drop_download_height()) { // DISCARD BLOCKS for testing
+        return 1;
+      }
+    }
 
-        // We try to lock the sync lock. If we can, it means no other thread is
-        // currently adding blocks, so we do that for as long as we can from the
-        // block queue. Then, we go back to download.
-        const boost::unique_lock<boost::mutex> sync{m_sync_lock, boost::try_to_lock};
-        if (!sync.owns_lock())
-        {
-          MINFO("Failed to lock m_sync_lock, going back to download");
-          goto skip;
-        }
-        MDEBUG(context << " lock m_sync_lock, adding blocks to chain...");
+skip:
+    try_add_next_blocks(context);
+    return 1;
+  }
 
+  template<class t_core>
+  int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connection_context& context)
+  {
+    bool force_next_span = false;
+
+    // We try to lock the sync lock. If we can, it means no other thread is
+    // currently adding blocks, so we do that for as long as we can from the
+    // block queue. Then, we go back to download.
+    const boost::unique_lock<boost::mutex> sync{m_sync_lock, boost::try_to_lock};
+    if (!sync.owns_lock())
+    {
+      MINFO("Failed to lock m_sync_lock, going back to download");
+      goto skip;
+    }
+    MDEBUG(context << " lock m_sync_lock, adding blocks to chain...");
+
+      {
         m_core.pause_mine();
         epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler(
           boost::bind(&t_core::resume_mine, &m_core));
@@ -1110,15 +1122,14 @@ namespace cryptonote
                 << timing_message);
           }
         }
-      } // if not DISCARD BLOCK
 
-      if (should_download_next_span(context))
-      {
-        context.m_needed_objects.clear();
-        context.m_last_response_height = 0;
-        force_next_span = true;
+        if (should_download_next_span(context))
+        {
+          context.m_needed_objects.clear();
+          context.m_last_response_height = 0;
+          force_next_span = true;
+        }
       }
-    }
 
 skip:
     if (!request_missing_objects(context, true, force_next_span))
@@ -1259,10 +1270,11 @@ skip:
           break;
         }
 
-        if (m_block_queue.has_next_span(context.m_connection_id))
+        bool filled;
+        if (m_block_queue.has_next_span(context.m_connection_id, filled) && !filled)
         {
           MDEBUG(context << " we have the next span, and it is scheduled, resuming");
-          return 1;
+          return try_add_next_blocks(context);
         }
 
         if (should_download_next_span(context))
