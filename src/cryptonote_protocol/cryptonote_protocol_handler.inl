@@ -996,15 +996,7 @@ skip:
             //  - later in an alt chain
             //  - orphan
             // if it was requested, then it'll be resolved later, otherwise it's an orphan
-            bool parent_requested = false;
-	    m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
-	      if (context.m_requested_objects.find(new_block.prev_id) != context.m_requested_objects.end())
-              {
-                parent_requested = true;
-                return false;
-              }
-	      return true;
-	    });
+            bool parent_requested = m_block_queue.requested(new_block.prev_id);
             if (!parent_requested)
             {
               // this can happen if a connection was sicced onto a late span, if it did not have those blocks,
