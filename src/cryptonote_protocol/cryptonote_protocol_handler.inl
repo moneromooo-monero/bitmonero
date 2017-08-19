@@ -951,16 +951,17 @@ skip:
   {
     bool force_next_span = false;
 
-    // We try to lock the sync lock. If we can, it means no other thread is
-    // currently adding blocks, so we do that for as long as we can from the
-    // block queue. Then, we go back to download.
-    const boost::unique_lock<boost::mutex> sync{m_sync_lock, boost::try_to_lock};
-    if (!sync.owns_lock())
     {
-      MINFO("Failed to lock m_sync_lock, going back to download");
-      goto skip;
-    }
-    MDEBUG(context << " lock m_sync_lock, adding blocks to chain...");
+      // We try to lock the sync lock. If we can, it means no other thread is
+      // currently adding blocks, so we do that for as long as we can from the
+      // block queue. Then, we go back to download.
+      const boost::unique_lock<boost::mutex> sync{m_sync_lock, boost::try_to_lock};
+      if (!sync.owns_lock())
+      {
+        MINFO("Failed to lock m_sync_lock, going back to download");
+        goto skip;
+      }
+      MDEBUG(context << " lock m_sync_lock, adding blocks to chain...");
 
       {
         m_core.pause_mine();
@@ -1115,14 +1116,15 @@ skip:
                 << timing_message);
           }
         }
-
-        if (should_download_next_span(context))
-        {
-          context.m_needed_objects.clear();
-          context.m_last_response_height = 0;
-          force_next_span = true;
-        }
       }
+
+      if (should_download_next_span(context))
+      {
+        context.m_needed_objects.clear();
+        context.m_last_response_height = 0;
+        force_next_span = true;
+      }
+    }
 
 skip:
     if (!request_missing_objects(context, true, force_next_span))
