@@ -1021,6 +1021,7 @@ skip:
           }
 
           const boost::posix_time::ptime start = boost::posix_time::microsec_clock::universal_time();
+          context.m_last_request_time = start;
 
           m_core.prepare_handle_incoming_blocks(blocks);
 
