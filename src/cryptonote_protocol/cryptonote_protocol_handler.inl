@@ -1603,8 +1603,15 @@ skip:
   {
     if (add_fail)
       m_p2p->add_host_fail(context.m_remote_address);
+
     m_p2p->drop_connection(context);
 
+    m_block_queue.flush_spans(context.m_connection_id, flush_all_spans);
+  }
+  //------------------------------------------------------------------------------------------------------------------------
+  template<class t_core>
+  void t_cryptonote_protocol_handler<t_core>::on_connection_close(cryptonote_connection_context &context)
+  {
     uint64_t target = 0;
     m_p2p->for_each_connection([&](const connection_context& cntxt, nodetool::peerid_type peer_id, uint32_t support_flags) {
       if (cntxt.m_state >= cryptonote_connection_context::state_synchronizing && cntxt.m_connection_id != context.m_connection_id)
@@ -1618,7 +1625,7 @@ skip:
       m_core.set_target_blockchain_height(target);
     }
 
-    m_block_queue.flush_spans(context.m_connection_id, flush_all_spans);
+    m_block_queue.flush_spans(context.m_connection_id, false);
   }
 
   //------------------------------------------------------------------------------------------------------------------------
