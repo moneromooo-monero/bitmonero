@@ -106,6 +106,11 @@ namespace cryptonote
       LOG_PRINT_CCONTEXT_L2("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() );
       post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
     }
+    else if(context.m_state == cryptonote_connection_context::state_standby)
+    {
+      context.m_state = cryptonote_connection_context::state_synchronizing;
+      try_add_next_blocks(context);
+    }
 
     return true;
   }
@@ -1273,13 +1278,6 @@ skip:
           break;
         }
 
-        bool filled;
-        if (m_block_queue.has_next_span(context.m_connection_id, filled) && !filled)
-        {
-          MDEBUG(context << " we have the next span, and it is scheduled, resuming");
-          return try_add_next_blocks(context);
-        }
-
         if (should_download_next_span(context))
         {
           MDEBUG(context << " we should try for that next span too, we think we could get it faster, resuming");
@@ -1293,6 +1291,17 @@ skip:
           first = false;
           context.m_state = cryptonote_connection_context::state_standby;
         }
+
+        // this needs doing after we went to standby, so the callback knows what to do
+        bool filled;
+        if (m_block_queue.has_next_span(context.m_connection_id, filled) && !filled)
+        {
+          MDEBUG(context << " we have the next span, and it is scheduled, resuming");
+          ++context.m_callback_request_count;
+          m_p2p->request_callback(context);
+          return 1;
+        }
+
         for (size_t n = 0; n < 50; ++n)
         {
           if (m_stopping)
