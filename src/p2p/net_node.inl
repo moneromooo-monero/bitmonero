@@ -1092,7 +1092,7 @@ namespace nodetool
         continue;
       }
 
-      MDEBUG("Selected peer: " << pe.id << " " << pe.adr.str()
+      MDEBUG("Selected peer: " << epee::string_tools::pad_string(boost::lexical_cast<std::string>(pe.id), 16, '0', true) << " " << pe.adr.str()
                                << "[peer_type=" << anchor
                                << "] first_seen: " << epee::misc_utils::get_time_interval_string(time(NULL) - pe.first_seen));
 
@@ -1158,7 +1158,7 @@ namespace nodetool
       if(is_addr_recently_failed(pe.adr))
         continue;
 
-      MDEBUG("Selected peer: " << pe.id << " " << pe.adr.str()
+      MDEBUG("Selected peer: " << epee::string_tools::pad_string(boost::lexical_cast<std::string>(pe.id), 16, '0', true) << " " << pe.adr.str()
                     << "[peer_list=" << (use_white_list ? white : gray)
                     << "] last_seen: " << (pe.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - pe.last_seen) : "never"));
 
