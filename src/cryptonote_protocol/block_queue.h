@@ -71,7 +71,7 @@ namespace cryptonote
     void add_blocks(uint64_t height, uint64_t nblocks, const boost::uuids::uuid &connection_id, boost::posix_time::ptime time = boost::date_time::min_date_time);
     void flush_spans(const boost::uuids::uuid &connection_id, bool all = false);
     void flush_stale_spans(const std::set<boost::uuids::uuid> &live_connections);
-    void remove_span(uint64_t start_block_height);
+    bool remove_span(uint64_t start_block_height, std::list<crypto::hash> *hashes = NULL);
     void remove_spans(const boost::uuids::uuid &connection_id, uint64_t start_block_height);
     uint64_t get_max_block_height() const;
     void print() const;
