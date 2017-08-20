@@ -471,13 +471,14 @@ POP_WARNINGS
     ge_p3 image_unp;
     ge_dsmp image_pre;
     ec_scalar sum, h;
-    rs_comm *const buf = reinterpret_cast<rs_comm *>(alloca(rs_comm_size(pubs_count)));
+    rs_comm *const buf = reinterpret_cast<rs_comm *>(malloc(rs_comm_size(pubs_count)));
 #if !defined(NDEBUG)
     for (i = 0; i < pubs_count; i++) {
       assert(check_key(*pubs[i]));
     }
 #endif
     if (ge_frombytes_vartime(&image_unp, &image) != 0) {
+      free(buf);
       return false;
     }
     ge_dsm_precomp(image_pre, &image_unp);
@@ -487,9 +488,11 @@ POP_WARNINGS
       ge_p2 tmp2;
       ge_p3 tmp3;
       if (sc_check(&sig[i].c) != 0 || sc_check(&sig[i].r) != 0) {
+        free(buf);
         return false;
       }
       if (ge_frombytes_vartime(&tmp3, &*pubs[i]) != 0) {
+        free(buf);
         return false;
       }
       ge_double_scalarmult_base_vartime(&tmp2, &sig[i].c, &tmp3, &sig[i].r);
@@ -501,6 +504,7 @@ POP_WARNINGS
     }
     hash_to_scalar(buf, rs_comm_size(pubs_count), h);
     sc_sub(&h, &h, &sum);
+    free(buf);
     return sc_isnonzero(&h) == 0;
   }
 }
