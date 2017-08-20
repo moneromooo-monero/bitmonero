@@ -1394,7 +1394,12 @@ skip:
           for (const auto &hash: hashes)
           {
             req.blocks.push_back(hash);
+            ++count;
             context.m_requested_objects.insert(hash);
+            // that's atrocious O(n) wise, but this is rare
+            auto i = std::find(context.m_needed_objects.begin(), context.m_needed_objects.end(), hash);
+            if (i != context.m_needed_objects.end())
+              context.m_needed_objects.erase(i);
           }
         }
       }
@@ -1418,14 +1423,12 @@ skip:
             return false;
           }
 
-          std::list<crypto::hash> hashes;
           auto it = context.m_needed_objects.begin();
           for (size_t n = 0; n < span.second; ++n)
           {
             req.blocks.push_back(*it);
             ++count;
             context.m_requested_objects.insert(*it);
-            hashes.push_back(*it);
             auto j = it++;
             context.m_needed_objects.erase(j);
           }
@@ -1433,7 +1436,7 @@ skip:
 
         context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
         LOG_PRINT_CCONTEXT_L1("-->>NOTIFY_REQUEST_GET_OBJECTS: blocks.size()=" << req.blocks.size() << ", txs.size()=" << req.txs.size()
-            << "requested blocks count=" << count << " / " << count_limit << " from " << span.first);
+            << "requested blocks count=" << count << " / " << count_limit << " from " << span.first << ", first hash " << req.blocks.front());
         //epee::net_utils::network_throttle_manager::get_global_throttle_inreq().logger_handle_net("log/dr-monero/net/req-all.data", sec, get_avg_block_size());
 
         post_notify<NOTIFY_REQUEST_GET_OBJECTS>(req, context);
