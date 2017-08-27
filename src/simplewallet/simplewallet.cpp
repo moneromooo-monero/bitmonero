@@ -391,6 +391,35 @@ bool simple_wallet::payment_id(const std::vector<std::string> &args/* = std::vec
   return true;
 }
 
+bool simple_wallet::print_fee_info(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
+{
+  if (!try_connect_to_daemon())
+  {
+    fail_msg_writer() << tr("Cannot connect to daemon");
+    return true;
+  }
+  uint64_t per_kb_fee = m_wallet->get_per_kb_fee();
+  const uint64_t typical_size_kb = 13;
+  message_writer() << (boost::format(tr("Current fee is %s monero per kB")) % print_money(per_kb_fee)).str();
+  for (uint32_t priority = 1; priority <= 4; ++priority)
+  {
+    uint64_t mult = m_wallet->get_fee_multiplier(priority);
+    uint64_t nblocks_low = m_wallet->estimate_backlog(typical_size_kb * 1024, per_kb_fee * typical_size_kb * mult);
+    uint64_t nblocks_high = m_wallet->estimate_backlog(typical_size_kb * 1024 + 1023, per_kb_fee * typical_size_kb * mult);
+    if (nblocks_low > 0)
+    {
+      uint64_t minutes_low = nblocks_low * DIFFICULTY_TARGET_V2 / 60, minutes_high = nblocks_high * DIFFICULTY_TARGET_V2 / 60;
+      if (nblocks_high == nblocks_low)
+        message_writer() << (boost::format(tr("%u block (%u minutes) backlog at priority %u")) % nblocks_low % minutes_low % priority).str();
+      else
+        message_writer() << (boost::format(tr("%u to %u block (%u to %u minutes) backlog at priority %u")) % nblocks_low % nblocks_high % minutes_low % minutes_high % priority).str();
+    }
+    else
+      message_writer() << tr("No backlog at priority ") << priority;
+  }
+  return true;
+}
+
 bool simple_wallet::set_always_confirm_transfers(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   const auto pwd_container = get_and_verify_password();
@@ -722,6 +751,7 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("show_transfer", boost::bind(&simple_wallet::show_transfer, this, _1), tr("Show information about a transfer to/from this address"));
   m_cmd_binder.set_handler("password", boost::bind(&simple_wallet::change_password, this, _1), tr("Change wallet password"));
   m_cmd_binder.set_handler("payment_id", boost::bind(&simple_wallet::payment_id, this, _1), tr("Generate a new random full size payment id - these will be unencrypted on the blockchain, see integrated_address for encrypted short payment ids"));
+  m_cmd_binder.set_handler("fee", boost::bind(&simple_wallet::print_fee_info, this, _1), tr("Print information about fee and current transaction backlog"));
   m_cmd_binder.set_handler("help", boost::bind(&simple_wallet::help, this, _1), tr("Show this help"));
 }
 //----------------------------------------------------------------------------------------------------
