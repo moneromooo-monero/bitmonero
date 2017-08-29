@@ -398,19 +398,45 @@ bool simple_wallet::print_fee_info(const std::vector<std::string> &args/* = std:
     fail_msg_writer() << tr("Cannot connect to daemon");
     return true;
   }
-  uint64_t per_kb_fee = m_wallet->get_per_kb_fee();
+  const uint64_t per_kb_fee = m_wallet->get_per_kb_fee();
   const uint64_t typical_size_kb = 13;
   message_writer() << (boost::format(tr("Current fee is %s monero per kB")) % print_money(per_kb_fee)).str();
+
+  std::vector<uint64_t> fees;
   for (uint32_t priority = 1; priority <= 4; ++priority)
   {
     uint64_t mult = m_wallet->get_fee_multiplier(priority);
-    uint64_t nblocks_low = m_wallet->estimate_backlog(typical_size_kb * 1024, per_kb_fee * typical_size_kb * mult);
-    uint64_t nblocks_high = m_wallet->estimate_backlog(typical_size_kb * 1024 + 1023, per_kb_fee * typical_size_kb * mult);
+    fees.push_back(per_kb_fee * typical_size_kb * mult);
+  }
+  std::vector<std::pair<uint64_t, uint64_t>> blocks;
+  try
+  {
+    uint64_t base_size = typical_size_kb * 1024;
+    blocks = m_wallet->estimate_backlog(base_size, base_size + 1023, fees);
+  }
+  catch (const std::exception &e)
+  {
+    fail_msg_writer() << tr("Error: failed to estimate backlog array size: ") << e.what();
+    return true;
+  }
+  if (blocks.size() != 4)
+  {
+    fail_msg_writer() << tr("Error: bad estimated backlog array size");
+    return true;
+  }
+
+  for (uint32_t priority = 1; priority <= 4; ++priority)
+  {
+    uint64_t nblocks_low = blocks[priority - 1].first;
+    uint64_t nblocks_high = blocks[priority - 1].second;
     if (nblocks_low > 0)
     {
+      std::string msg;
+      if (priority == m_wallet->get_default_priority() || (m_wallet->get_default_priority() == 0 && priority == 2))
+        msg = tr(" (current)");
       uint64_t minutes_low = nblocks_low * DIFFICULTY_TARGET_V2 / 60, minutes_high = nblocks_high * DIFFICULTY_TARGET_V2 / 60;
       if (nblocks_high == nblocks_low)
-        message_writer() << (boost::format(tr("%u block (%u minutes) backlog at priority %u")) % nblocks_low % minutes_low % priority).str();
+        message_writer() << (boost::format(tr("%u block (%u minutes) backlog at priority %u%s")) % nblocks_low % minutes_low % priority % msg).str();
       else
         message_writer() << (boost::format(tr("%u to %u block (%u to %u minutes) backlog at priority %u")) % nblocks_low % nblocks_high % minutes_low % minutes_high % priority).str();
     }
@@ -2491,9 +2517,16 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       }
       try
       {
-        uint64_t nblocks = m_wallet->estimate_backlog(size, fee);
-        if (nblocks > 0)
-          prompt << (boost::format(tr("There is currently a %u block backlog at that fee level. Is this okay?  (Y/Yes/N/No)")) % nblocks).str();
+        std::vector<std::pair<uint64_t, uint64_t>> nblocks = m_wallet->estimate_backlog(size, size, {fee});
+        if (nblocks.size() != 1)
+        {
+          prompt << "Internal error checking for backlog. " << tr("Is this okay anyway?  (Y/Yes/N/No): ");
+        }
+        else
+        {
+          if (nblocks[0].first > 0)
+            prompt << (boost::format(tr("There is currently a %u block backlog at that fee level. Is this okay?  (Y/Yes/N/No)")) % nblocks[0].first).str();
+        }
       }
       catch (const std::exception &e)
       {

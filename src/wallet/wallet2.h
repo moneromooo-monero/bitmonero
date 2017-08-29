@@ -604,7 +604,7 @@ namespace tools
 
     bool is_synced() const;
 
-    uint64_t estimate_backlog(uint64_t blob_size, uint64_t fee);
+    std::vector<std::pair<uint64_t, uint64_t>> estimate_backlog(uint64_t min_blob_size, uint64_t max_blob_size, const std::vector<uint64_t> &fees);
 
     uint64_t get_fee_multiplier(uint32_t priority, int fee_algorithm = -1);
     uint64_t get_per_kb_fee();
