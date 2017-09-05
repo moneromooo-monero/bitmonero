@@ -60,3 +60,11 @@ namespace std { \
     } \
   }; \
 }
+
+#define CRYPTO_MAKE_ORDERABLE(type) \
+CRYPTO_MAKE_HASHABLE(type) \
+  namespace crypto { \
+    inline bool operator<(const crypto::type &_v0, const crypto::type &_v1) { \
+      return memcmp(&_v0, &_v1, sizeof(crypto::type)); \
+    } \
+  }

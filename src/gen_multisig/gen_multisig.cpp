@@ -99,7 +99,11 @@ static bool generate_multisig(uint32_t threshold, uint32_t total, const std::str
     std::vector<crypto::public_key> pk(total);
     for (size_t n = 0; n < total; ++n)
     {
-      wallets[n]->verify_multisig_info(wallets[n]->get_multisig_info(), sk[n], pk[n]);
+      if (!wallets[n]->verify_multisig_info(wallets[n]->get_multisig_info(), sk[n], pk[n]))
+      {
+        tools::fail_msg_writer() << tr("Failed to verify multisig info");
+        return false;
+      }
     }
 
     // make the wallets multisig
@@ -126,9 +130,10 @@ static bool generate_multisig(uint32_t threshold, uint32_t total, const std::str
     if (!extra_info[0].empty())
     {
       std::unordered_set<crypto::public_key> pkeys;
+      std::vector<crypto::hash> signers(total);
       for (size_t n = 0; n < total; ++n)
       {
-        if (!wallets[n]->verify_extra_multisig_info(extra_info[n], pkeys))
+        if (!wallets[n]->verify_extra_multisig_info(extra_info[n], pkeys, signers[n]))
         {
           tools::fail_msg_writer() << genms::tr("Error verifying multisig extra info");
           return false;
@@ -136,7 +141,7 @@ static bool generate_multisig(uint32_t threshold, uint32_t total, const std::str
       }
       for (size_t n = 0; n < total; ++n)
       {
-        if (!wallets[n]->finalize_multisig(pwd_container->password(), pkeys))
+        if (!wallets[n]->finalize_multisig(pwd_container->password(), pkeys, signers))
         {
           tools::fail_msg_writer() << genms::tr("Error finalizing multisig");
           return false;

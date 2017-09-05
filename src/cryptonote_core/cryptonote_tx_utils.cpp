@@ -175,6 +175,7 @@ namespace cryptonote
     crypto::public_key txkey_pub;
     crypto::secret_key_to_public_key(tx_key, txkey_pub);
     add_tx_pub_key_to_extra(tx, txkey_pub);
+MGINFO("using txkey: sec " << tx_key << ", pub " << txkey_pub);
 
     // if we have a stealth payment id, find it and encrypt it with the tx key now
     std::vector<tx_extra_field> tx_extra_fields;
@@ -400,6 +401,7 @@ namespace cryptonote
         index.push_back(sources[i].real_output);
         // inSk: (secret key, mask)
         ctkey.dest = rct::sk2rct(in_contexts[i].in_ephemeral.sec);
+MGINFO("source " << i << ": in_ephemeral sec " << in_contexts[i].in_ephemeral.sec << ", pub " << in_contexts[i].in_ephemeral.pub);
         ctkey.mask = sources[i].mask;
         inSk.push_back(ctkey);
         // inPk: (public key, commitment)
@@ -464,6 +466,8 @@ namespace cryptonote
       {
         tx.rct_signatures = rct::genRct(rct::hash2rct(tx_prefix_hash), inSk, destinations, outamounts, mixRing, amount_keys, msout ? &kLRki[0] : NULL, msout, sources[0].real_output, outSk); // same index assumption
       }
+MGINFO("c out:");
+for (const auto &c: msout->c) MGINFO("  " << c);
 
       CHECK_AND_ASSERT_MES(tx.vout.size() == outSk.size(), false, "outSk size does not match vout");
 
@@ -477,8 +481,14 @@ namespace cryptonote
   //---------------------------------------------------------------
   bool construct_tx_and_get_tx_key(const account_keys& sender_account_keys, const std::vector<tx_source_entry>& sources, const std::vector<tx_destination_entry>& destinations, std::vector<uint8_t> extra, transaction& tx, uint64_t unlock_time, crypto::secret_key &tx_key, bool rct, rct::multisig_out *msout)
   {
-    keypair txkey = keypair::generate();
+    //keypair txkey = keypair::generate();
+    //tx_key = txkey.sec;
+    keypair txkey;
+    crypto::secret_key rec;
+    memset(&rec, 0, 32);
+    crypto::generate_keys(txkey.pub, txkey.sec, rec, true);
     tx_key = txkey.sec;
+
     return construct_tx_with_tx_key(sender_account_keys, sources, destinations, extra, tx, unlock_time, tx_key, rct, msout);
   }
   //---------------------------------------------------------------

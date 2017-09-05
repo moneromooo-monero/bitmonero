@@ -627,9 +627,10 @@ bool simple_wallet::finalize_multisig(const std::vector<std::string> &args)
 
   // parse all multisig info
   std::unordered_set<crypto::public_key> public_keys;
+  std::vector<crypto::hash> signers(args.size() - 1, cryptonote::null_hash);
   for (size_t i = 1; i < args.size(); ++i)
   {
-    if (!m_wallet->verify_extra_multisig_info(args[i], public_keys))
+    if (!m_wallet->verify_extra_multisig_info(args[i], public_keys, signers[i - 1]))
     {
       fail_msg_writer() << tr("Bad multisig info: ") << args[i];
       return true;
@@ -637,7 +638,7 @@ bool simple_wallet::finalize_multisig(const std::vector<std::string> &args)
   }
 
   // we have all pubkeys now
-  if (!m_wallet->finalize_multisig(orig_pwd_container->password(), public_keys))
+  if (!m_wallet->finalize_multisig(orig_pwd_container->password(), public_keys, signers))
   {
     fail_msg_writer() << tr("Failed to finalize multisig");
     return true;
@@ -664,7 +665,7 @@ bool simple_wallet::export_multisig(const std::vector<std::string> &args)
   const std::string filename = args[0];
   try
   {
-    std::vector<tools::wallet2::multisig_info> outs = m_wallet->export_multisig();
+    std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>> outs = m_wallet->export_multisig();
 
     std::stringstream oss;
     boost::archive::portable_binary_oarchive ar(oss);
@@ -713,7 +714,7 @@ bool simple_wallet::import_multisig(const std::vector<std::string> &args)
   if (m_wallet->ask_password() && !get_and_verify_password())
     return true;
 
-  std::vector<std::vector<tools::wallet2::multisig_info>> info;
+  std::vector<std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>>> info;
   std::unordered_set<crypto::hash> seen;
   for (size_t n = 0; n < args.size(); ++n)
   {
@@ -776,10 +777,15 @@ bool simple_wallet::import_multisig(const std::vector<std::string> &args)
       std::string body(data, headerlen);
       std::stringstream iss;
       iss << body;
-      std::vector<tools::wallet2::multisig_info> i;
+      std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>> i;
       boost::archive::portable_binary_iarchive ar(iss);
       ar >> i;
-      message_writer() << (boost::format(tr("%u outputs found in %s")) % boost::lexical_cast<std::string>(i.size()) % filename).str();
+      if (hash != i.first)
+      {
+        fail_msg_writer() << (boost::format(tr("Multisig info from %s has inconsistent participant hash")) % filename).str();
+        return true;
+      }
+      message_writer() << (boost::format(tr("%u outputs found in %s")) % boost::lexical_cast<std::string>(i.second.size()) % filename).str();
       info.push_back(std::move(i));
     }
     catch (const std::exception &e)
