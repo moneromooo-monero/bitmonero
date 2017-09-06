@@ -137,7 +137,7 @@ namespace tools
     {
       struct partial_key_image
       {
-        crypto::hash m_signing_key;
+        crypto::public_key m_signing_key;
         crypto::key_image m_partial_key_image;
 
         BEGIN_SERIALIZE_OBJECT()
@@ -148,18 +148,16 @@ namespace tools
 
       struct LR
       {
-        crypto::hash m_k;
         rct::key m_L;
         rct::key m_R;
 
         BEGIN_SERIALIZE_OBJECT()
-          FIELD(m_k)
           FIELD(m_L)
           FIELD(m_R)
         END_SERIALIZE()
       };
 
-      crypto::hash m_signer;
+      crypto::public_key m_signer;
       std::vector<LR> m_LR; // one per other participant
       std::vector<partial_key_image> m_partial_key_images; // one per key the participant has
 
@@ -268,10 +266,10 @@ namespace tools
 
     struct multisig_sig
     {
-      std::vector<rct::mgSig> sigs;
-      crypto::hash ignore;
-      std::unordered_set<crypto::hash> used_k;
-      std::unordered_set<crypto::hash> signing_keys;
+      rct::rctSig sigs;
+      crypto::public_key ignore;
+      std::unordered_set<rct::key> used_L;
+      std::unordered_set<crypto::public_key> signing_keys;
     };
 
     // The convention for destinations is:
@@ -310,7 +308,7 @@ namespace tools
     struct multisig_tx_set
     {
       std::vector<pending_tx> m_ptx;
-      std::unordered_set<crypto::hash> m_signers;
+      std::unordered_set<crypto::public_key> m_signers;
     };
 
     struct keys_file_data
@@ -388,7 +386,7 @@ namespace tools
     /*!
      * \brief Finalizes creation of a multisig wallet
      */
-    bool finalize_multisig(const std::string &password,const std::unordered_set<crypto::public_key> &pkeys, const std::vector<crypto::hash> &signers);
+    bool finalize_multisig(const std::string &password,const std::unordered_set<crypto::public_key> &pkeys, const std::vector<crypto::public_key> &signers);
     /*!
      * Get a packaged multisig information string
      */
@@ -400,17 +398,17 @@ namespace tools
     /*!
      * Verifies and extracts keys from a packaged multisig information string
      */
-    bool verify_extra_multisig_info(const std::string &data, std::unordered_set<crypto::public_key> &pkeys, crypto::hash &signer) const;
+    bool verify_extra_multisig_info(const std::string &data, std::unordered_set<crypto::public_key> &pkeys, crypto::public_key &signer) const;
     /*!
      * Export multisig info
      * This will generate and remember new k values
      */
-    std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>> export_multisig();
+    std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> export_multisig();
     /*!
      * Import a set of multisig info from multisig partners
      * \return the number of inputs which were imported
      */
-    size_t import_multisig(std::vector<std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>>> info);
+    size_t import_multisig(std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> info);
     /*!
      * \brief Rewrites to the wallet file for wallet upgrade (doesn't generate key, assumes it's already there)
      * \param wallet_name Name of wallet file (should exist)
@@ -718,6 +716,10 @@ namespace tools
     uint64_t get_fee_multiplier(uint32_t priority, int fee_algorithm = -1);
     uint64_t get_per_kb_fee();
 
+    crypto::public_key get_multisig_signer_public_key() const;
+    crypto::public_key get_multisig_signing_public_key(size_t idx) const;
+    crypto::public_key get_multisig_signing_public_key(const crypto::secret_key &skey) const;
+
   private:
     /*!
      * \brief  Stores wallet information to wallet file.
@@ -770,11 +772,11 @@ namespace tools
     bool should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
     std::vector<size_t> get_only_rct(const std::vector<size_t> &unused_dust_indices, const std::vector<size_t> &unused_transfers_indices) const;
     crypto::key_image get_multisig_composite_key_image(size_t n) const;
-    rct::multisig_kLRki get_multisig_composite_kLRki(size_t n, const crypto::hash &ignore, std::unordered_set<crypto::hash> &used_k, std::unordered_set<crypto::hash> &new_used_k) const;
+    rct::multisig_kLRki get_multisig_composite_kLRki(size_t n, const crypto::public_key &ignore, std::unordered_set<rct::key> &used_L, std::unordered_set<rct::key> &new_used_L) const;
     rct::multisig_kLRki get_multisig_kLRki(size_t n, const rct::key &k) const;
     rct::key get_multisig_k(size_t idx, size_t k_idx) const;
-    rct::key get_multisig_k(size_t idx, const std::unordered_set<crypto::hash> &used_k) const;
-    void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>>> &info, size_t n);
+    rct::key get_multisig_k(size_t idx, const std::unordered_set<rct::key> &used_L) const;
+    void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> &info, size_t n);
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -797,7 +799,7 @@ namespace tools
     std::unordered_map<crypto::hash, std::string> m_tx_notes;
     std::vector<tools::wallet2::address_book_row> m_address_book;
     uint64_t m_upper_transaction_size_limit; //TODO: auto-calc this value or request from daemon, now use some fixed value
-    const std::vector<std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>>> *m_multisig_rescan_info;
+    const std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> *m_multisig_rescan_info;
     const std::vector<std::vector<rct::key>> *m_multisig_rescan_k;
 
     std::atomic<bool> m_run;
@@ -812,7 +814,7 @@ namespace tools
     bool m_watch_only; /*!< no spend key */
     bool m_multisig; /*!< if > 1 spend secret key will not match spend public key */
     uint32_t m_multisig_threshold;
-    std::vector<crypto::hash> m_multisig_signers;
+    std::vector<crypto::public_key> m_multisig_signers;
     bool m_always_confirm_transfers;
     bool m_print_ring_members;
     bool m_store_tx_info; /*!< request txkey to be returned in RPC, and store in the wallet cache file */
@@ -976,7 +978,6 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive &a, tools::wallet2::multisig_info::LR &x, const boost::serialization::version_type ver)
     {
-      a & x.m_k;
       a & x.m_L;
       a & x.m_R;
     }
@@ -1131,7 +1132,7 @@ namespace boost
     {
       a & x.sigs;
       a & x.ignore;
-      a & x.used_k;
+      a & x.used_L;
       a & x.signing_keys;
     }
 

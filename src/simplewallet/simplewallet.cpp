@@ -627,7 +627,7 @@ bool simple_wallet::finalize_multisig(const std::vector<std::string> &args)
 
   // parse all multisig info
   std::unordered_set<crypto::public_key> public_keys;
-  std::vector<crypto::hash> signers(args.size() - 1, cryptonote::null_hash);
+  std::vector<crypto::public_key> signers(args.size() - 1, cryptonote::null_pkey);
   for (size_t i = 1; i < args.size(); ++i)
   {
     if (!m_wallet->verify_extra_multisig_info(args[i], public_keys, signers[i - 1]))
@@ -665,7 +665,7 @@ bool simple_wallet::export_multisig(const std::vector<std::string> &args)
   const std::string filename = args[0];
   try
   {
-    std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>> outs = m_wallet->export_multisig();
+    std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> outs = m_wallet->export_multisig();
 
     std::stringstream oss;
     boost::archive::portable_binary_oarchive ar(oss);
@@ -676,9 +676,8 @@ bool simple_wallet::export_multisig(const std::vector<std::string> &args)
     std::string header;
     header += std::string((const char *)&keys.m_spend_public_key, sizeof(crypto::public_key));
     header += std::string((const char *)&keys.m_view_public_key, sizeof(crypto::public_key));
-    crypto::hash hash;
-    cn_fast_hash(&m_wallet->get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (char*)&hash);
-    header += std::string((const char *)&hash, sizeof(crypto::hash));
+    crypto::public_key signer = m_wallet->get_multisig_signer_public_key();
+    header += std::string((const char *)&signer, sizeof(crypto::public_key));
     std::string ciphertext = m_wallet->encrypt_with_view_secret_key(header + oss.str());
     bool r = epee::file_io_utils::save_string_to_file(filename, magic + ciphertext);
     if (!r)
@@ -714,8 +713,8 @@ bool simple_wallet::import_multisig(const std::vector<std::string> &args)
   if (m_wallet->ask_password() && !get_and_verify_password())
     return true;
 
-  std::vector<std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>>> info;
-  std::unordered_set<crypto::hash> seen;
+  std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> info;
+  std::unordered_set<crypto::public_key> seen;
   for (size_t n = 0; n < args.size(); ++n)
   {
     const std::string filename = args[n];
@@ -751,36 +750,34 @@ bool simple_wallet::import_multisig(const std::vector<std::string> &args)
     }
     const crypto::public_key &public_spend_key = *(const crypto::public_key*)&data[0];
     const crypto::public_key &public_view_key = *(const crypto::public_key*)&data[sizeof(crypto::public_key)];
-    const crypto::hash &hash = *(const crypto::hash*)&data[2*sizeof(crypto::public_key)];
+    const crypto::public_key &signer = *(const crypto::public_key*)&data[2*sizeof(crypto::public_key)];
     const cryptonote::account_public_address &keys = m_wallet->get_account().get_keys().m_account_address;
     if (public_spend_key != keys.m_spend_public_key || public_view_key != keys.m_view_public_key)
     {
       fail_msg_writer() << (boost::format(tr("Multisig info from %s is for a different account")) % filename).str();
       return true;
     }
-    crypto::hash this_hash;
-    cn_fast_hash(&m_wallet->get_account().get_keys().m_spend_secret_key, sizeof(crypto::secret_key), (char*)&this_hash);
-    if (this_hash == hash)
+    if (m_wallet->get_multisig_signer_public_key() == signer)
     {
       message_writer() << (boost::format(tr("Multisig info from %s is from this wallet, ignored")) % filename).str();
       continue;
     }
-    if (seen.find(hash) != seen.end())
+    if (seen.find(signer) != seen.end())
     {
       message_writer() << (boost::format(tr("Multisig info from %s already seen, ignored")) % filename).str();
       continue;
     }
-    seen.insert(hash);
+    seen.insert(signer);
 
     try
     {
       std::string body(data, headerlen);
       std::stringstream iss;
       iss << body;
-      std::pair<crypto::hash,std::vector<tools::wallet2::multisig_info>> i;
+      std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> i;
       boost::archive::portable_binary_iarchive ar(iss);
       ar >> i;
-      if (hash != i.first)
+      if (signer != i.first)
       {
         fail_msg_writer() << (boost::format(tr("Multisig info from %s has inconsistent participant hash")) % filename).str();
         return true;

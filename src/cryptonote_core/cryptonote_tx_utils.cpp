@@ -466,8 +466,10 @@ MGINFO("source " << i << ": in_ephemeral sec " << in_contexts[i].in_ephemeral.se
       {
         tx.rct_signatures = rct::genRct(rct::hash2rct(tx_prefix_hash), inSk, destinations, outamounts, mixRing, amount_keys, msout ? &kLRki[0] : NULL, msout, sources[0].real_output, outSk); // same index assumption
       }
+if (msout) {
 MGINFO("c out:");
 for (const auto &c: msout->c) MGINFO("  " << c);
+}
 
       CHECK_AND_ASSERT_MES(tx.vout.size() == outSk.size(), false, "outSk size does not match vout");
 

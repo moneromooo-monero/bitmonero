@@ -130,7 +130,7 @@ static bool generate_multisig(uint32_t threshold, uint32_t total, const std::str
     if (!extra_info[0].empty())
     {
       std::unordered_set<crypto::public_key> pkeys;
-      std::vector<crypto::hash> signers(total);
+      std::vector<crypto::public_key> signers(total);
       for (size_t n = 0; n < total; ++n)
       {
         if (!wallets[n]->verify_extra_multisig_info(extra_info[n], pkeys, signers[n]))
