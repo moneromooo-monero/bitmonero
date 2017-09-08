@@ -159,7 +159,7 @@ namespace tools
 
       crypto::public_key m_signer;
       std::vector<LR> m_LR; // one per other participant
-      std::vector<partial_key_image> m_partial_key_images; // one per key the participant has
+      std::vector<crypto::key_image> m_partial_key_images; // one per key the participant has
 
       BEGIN_SERIALIZE_OBJECT()
         FIELD(m_signer)
@@ -403,12 +403,12 @@ namespace tools
      * Export multisig info
      * This will generate and remember new k values
      */
-    std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> export_multisig();
+    std::vector<tools::wallet2::multisig_info> export_multisig();
     /*!
      * Import a set of multisig info from multisig partners
      * \return the number of inputs which were imported
      */
-    size_t import_multisig(std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> info);
+    size_t import_multisig(std::vector<std::vector<tools::wallet2::multisig_info>> info);
     /*!
      * \brief Rewrites to the wallet file for wallet upgrade (doesn't generate key, assumes it's already there)
      * \param wallet_name Name of wallet file (should exist)
@@ -776,7 +776,7 @@ namespace tools
     rct::multisig_kLRki get_multisig_kLRki(size_t n, const rct::key &k) const;
     rct::key get_multisig_k(size_t idx, size_t k_idx) const;
     rct::key get_multisig_k(size_t idx, const std::unordered_set<rct::key> &used_L) const;
-    void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> &info, size_t n);
+    void update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n);
 
     cryptonote::account_base m_account;
     boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -799,7 +799,7 @@ namespace tools
     std::unordered_map<crypto::hash, std::string> m_tx_notes;
     std::vector<tools::wallet2::address_book_row> m_address_book;
     uint64_t m_upper_transaction_size_limit; //TODO: auto-calc this value or request from daemon, now use some fixed value
-    const std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> *m_multisig_rescan_info;
+    const std::vector<std::vector<tools::wallet2::multisig_info>> *m_multisig_rescan_info;
     const std::vector<std::vector<rct::key>> *m_multisig_rescan_k;
 
     std::atomic<bool> m_run;

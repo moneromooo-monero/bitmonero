@@ -917,7 +917,7 @@ MGINFO("output scalar: " << (crypto::hash&)scalar);
 	    m_pub_keys[in_ephemeral[o].pub] = m_transfers.size()-1;
             if (m_multisig)
             {
-              if (m_multisig_rescan_info && m_multisig_rescan_info->front().second.size() >= m_transfers.size())
+              if (m_multisig_rescan_info && m_multisig_rescan_info->front().size() >= m_transfers.size())
                 update_multisig_rescan_info(*m_multisig_rescan_k, *m_multisig_rescan_info, m_transfers.size() - 1);
 //              else
 //                for (const crypto::secret_key &msk: get_account().get_multisig_keys())
@@ -971,7 +971,7 @@ MGINFO("output scalar: " << (crypto::hash&)scalar);
             }
             if (m_multisig)
             {
-              if (m_multisig_rescan_info && m_multisig_rescan_info->front().second.size() >= m_transfers.size())
+              if (m_multisig_rescan_info && m_multisig_rescan_info->front().size() >= m_transfers.size())
                 update_multisig_rescan_info(*m_multisig_rescan_k, *m_multisig_rescan_info, m_transfers.size() - 1);
 //              else
 //                for (const crypto::secret_key &msk: get_account().get_multisig_keys())
@@ -6363,13 +6363,15 @@ crypto::key_image wallet2::get_multisig_composite_key_image(size_t n) const
   cryptonote::keypair in_ephemeral;
   crypto::key_image ki;
   wallet_generate_key_image_helper(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, ki);
-  std::unordered_set<crypto::public_key> used;
+  std::unordered_set<crypto::key_image> used;
 MGINFO("STARTING PARTIAL from " << ki);
 
-  // insert the key we start from
-  for (const auto &msk: get_account().get_multisig_keys())
+  // insert the ones we start from
+  for (size_t m = 0; m < get_account().get_multisig_keys().size(); ++m)
   {
-    used.insert(get_multisig_signing_public_key(msk));
+    crypto::key_image pki;
+    wallet_generate_key_image_helper_export(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, pki, m);
+    used.insert(pki);
   }
 
   for (const auto &info: td.m_multisig_info)
@@ -6377,27 +6379,25 @@ MGINFO("STARTING PARTIAL from " << ki);
     for (const auto &pki: info.m_partial_key_images)
     {
       // don't add duplicates again
-      if (used.find(pki.m_signing_key) != used.end())
+      if (used.find(pki) != used.end())
         continue;
-      used.insert(pki.m_signing_key);
+      used.insert(pki);
 
-MGINFO("ADDING PARTIAL " << pki.m_partial_key_image);
-      rct::addKeys((rct::key&)ki, rct::ki2rct(ki), rct::ki2rct(pki.m_partial_key_image));
+MGINFO("ADDING PARTIAL " << pki);
+      rct::addKeys((rct::key&)ki, rct::ki2rct(ki), rct::ki2rct(pki));
     }
   }
 MGINFO("FULL FROM PARTIAL: " << ki);
   return ki;
 }
 //----------------------------------------------------------------------------------------------------
-std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> wallet2::export_multisig()
+std::vector<tools::wallet2::multisig_info> wallet2::export_multisig()
 {
   std::vector<tools::wallet2::multisig_info> info;
 
-  std::vector<crypto::public_key> signing_keys;
   for (const crypto::secret_key &msk: get_account().get_multisig_keys())
   {
 MGINFO("multisig secret key: " << msk << ", pub " << get_multisig_signing_public_key(msk));
-    signing_keys.push_back(get_multisig_signing_public_key(msk));
   }
   const crypto::public_key signer = get_multisig_signer_public_key();
 MGINFO("signer " << signer);
@@ -6420,7 +6420,7 @@ MGINFO("main spend key " << get_account().get_keys().m_spend_secret_key);
       crypto::key_image ki;
       wallet_generate_key_image_helper_export(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, ki, m);
 MGINFO("PARTIAL for " << get_account().get_multisig_keys()[m] << ": " << ki);
-      info.back().m_partial_key_images.push_back({signing_keys[m], ki});
+      info.back().m_partial_key_images.push_back(ki);
     }
 
     size_t nlr = m_multisig_threshold < m_multisig_signers.size() ? m_multisig_threshold - 1 : 1;
@@ -6434,11 +6434,10 @@ MGINFO("exporting XXXk " << td.m_multisig_k.back() << ", L " << kLRki.L);
     }
   }
 
-// TODO remove signer here ?
-  return std::make_pair(signer, info);
+  return info;
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> &info, size_t n)
+void wallet2::update_multisig_rescan_info(const std::vector<std::vector<rct::key>> &multisig_k, const std::vector<std::vector<tools::wallet2::multisig_info>> &info, size_t n)
 {
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad index in update_multisig_info");
   CHECK_AND_ASSERT_THROW_MES(multisig_k.size() >= m_transfers.size(), "Mismatched sizes of multisig_k and info");
@@ -6448,8 +6447,8 @@ void wallet2::update_multisig_rescan_info(const std::vector<std::vector<rct::key
   td.m_multisig_info.clear();
   for (const auto &pi: info)
   {
-    CHECK_AND_ASSERT_THROW_MES(n < pi.second.size(), "Bad pi size");
-    td.m_multisig_info.push_back(pi.second[n]);
+    CHECK_AND_ASSERT_THROW_MES(n < pi.size(), "Bad pi size");
+    td.m_multisig_info.push_back(pi[n]);
   }
   m_key_images.erase(td.m_key_image);
   td.m_key_image = get_multisig_composite_key_image(n);
@@ -6460,7 +6459,7 @@ MGINFO("update: replacing " << td.m_multisig_k.size() << " with " << multisig_k[
   m_key_images[td.m_key_image] = n;
 }
 //----------------------------------------------------------------------------------------------------
-size_t wallet2::import_multisig(std::vector<std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>>> info)
+size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig_info>> info)
 {
   CHECK_AND_ASSERT_THROW_MES(m_multisig, "Wallet is not multisig");
   CHECK_AND_ASSERT_THROW_MES(info.size() + 1 == m_multisig_signers.size(), "Wrong number of multisig sources");
@@ -6483,15 +6482,18 @@ for (const auto &td: m_transfers) MGINFO("  " << td.m_multisig_k.size());
   // how many outputs we're going to update
   size_t n_outputs = m_transfers.size();
   for (const auto &pi: info)
-    if (pi.second.size() < n_outputs)
-      n_outputs = pi.second.size();
+    if (pi.size() < n_outputs)
+      n_outputs = pi.size();
 
   // trim data we don't have info for from all participants
   for (auto &pi: info)
-    pi.second.resize(n_outputs);
+    pi.resize(n_outputs);
 
   // sort by signer
-  std::sort(info.begin(), info.end(), [](const std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> &i0, const std::pair<crypto::public_key,std::vector<tools::wallet2::multisig_info>> &i1){ return memcmp(&i0.first, &i1.first, sizeof(i0.first)); });
+  if (!info.empty() && !info.front().empty())
+  {
+    std::sort(info.begin(), info.end(), [](const std::vector<tools::wallet2::multisig_info> &i0, const std::vector<tools::wallet2::multisig_info> &i1){ return memcmp(&i0[0].m_signer, &i1[0].m_signer, sizeof(i0[0].m_signer)); });
+  }
 
   // first pass to determine where to detach the blockchain
   for (size_t n = 0; n < n_outputs; ++n)
