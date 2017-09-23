@@ -55,11 +55,13 @@ set(blockchain_export_sources
   blockchain_export.cpp
   bootstrap_file.cpp
   blocksdat_file.cpp
+  indexdat_file.cpp
   )
 
 set(blockchain_export_private_headers
   bootstrap_file.h
   blocksdat_file.h
+  indexdat_file.h
   bootstrap_serialization.h
   )
 

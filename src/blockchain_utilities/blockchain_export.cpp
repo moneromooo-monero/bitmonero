@@ -28,6 +28,7 @@
 
 #include "bootstrap_file.h"
 #include "blocksdat_file.h"
+#include "indexdat_file.h"
 #include "common/command_line.h"
 #include "cryptonote_core/tx_pool.h"
 #include "blockchain_db/blockchain_db.h"
@@ -54,6 +55,7 @@ int main(int argc, char* argv[])
   uint32_t log_level = 0;
   uint64_t block_stop = 0;
   bool blocks_dat = false;
+  bool index_dat = false;
 
   tools::sanitize_locale();
 
@@ -75,6 +77,7 @@ int main(int argc, char* argv[])
     "database", available_dbs.c_str(), default_db_type
   };
   const command_line::arg_descriptor<bool> arg_blocks_dat = {"blocksdat", "Output in blocks.dat format", blocks_dat};
+  const command_line::arg_descriptor<bool> arg_index_dat = {"indexdat", "Output in index.dat format", index_dat};
 
 
   command_line::add_arg(desc_cmd_sett, command_line::arg_data_dir, default_data_path.string());
@@ -85,6 +88,7 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_cmd_sett, arg_database);
   command_line::add_arg(desc_cmd_sett, arg_block_stop);
   command_line::add_arg(desc_cmd_sett, arg_blocks_dat);
+  command_line::add_arg(desc_cmd_sett, arg_index_dat);
 
   command_line::add_arg(desc_cmd_only, command_line::arg_help);
 
@@ -119,6 +123,7 @@ int main(int argc, char* argv[])
 
   bool opt_testnet = command_line::get_arg(vm, arg_testnet_on);
   bool opt_blocks_dat = command_line::get_arg(vm, arg_blocks_dat);
+  bool opt_index_dat = command_line::get_arg(vm, arg_index_dat);
 
   std::string m_config_folder;
 
@@ -186,6 +191,11 @@ int main(int argc, char* argv[])
   {
     BlocksdatFile blocksdat;
     r = blocksdat.store_blockchain_raw(core_storage, NULL, output_file_path, block_stop);
+  }
+  else if (opt_index_dat)
+  {
+    IndexdatFile indexdat;
+    r = indexdat.store_blockchain_raw(core_storage, NULL, output_file_path, block_stop);
   }
   else
   {
