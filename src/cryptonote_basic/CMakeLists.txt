@@ -38,7 +38,8 @@ set(cryptonote_basic_sources
   cryptonote_format_utils.cpp
   difficulty.cpp
   hardfork.cpp
-  miner.cpp)
+  miner.cpp
+  multisig.cpp)
 
 set(cryptonote_basic_headers)
 
@@ -54,6 +55,7 @@ set(cryptonote_basic_private_headers
   difficulty.h
   hardfork.h
   miner.h
+  multisig.h
   tx_extra.h
   verification_context.h)
 
