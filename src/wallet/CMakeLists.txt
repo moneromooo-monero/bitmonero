@@ -76,6 +76,7 @@ monero_add_library(wallet
   ${wallet_private_headers})
 target_link_libraries(wallet
   PUBLIC
+    multisig
     common
     cryptonote_core
     mnemonics
@@ -131,6 +132,7 @@ endif()
 if (BUILD_GUI_DEPS)
     set(libs_to_merge
             wallet
+            multisig
             cryptonote_core
             cryptonote_basic
             mnemonics
