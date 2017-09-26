@@ -44,6 +44,7 @@ using namespace epee;
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "misc_language.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
+#include "cryptonote_basic/multisig.h"
 #include "common/boost_serialization_helper.h"
 #include "common/command_line.h"
 #include "common/threadpool.h"
@@ -445,21 +446,6 @@ std::string strjoin(const std::vector<size_t> &V, const char *sep)
   return ss.str();
 }
 
-bool generate_key_image_helper_old(const account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, keypair& in_ephemeral, crypto::key_image& ki)
-{
-  crypto::key_derivation recv_derivation = AUTO_VAL_INIT(recv_derivation);
-  bool r = crypto::generate_key_derivation(tx_public_key, ack.m_view_secret_key, recv_derivation);
-  CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to generate_key_derivation(" << tx_public_key << ", " << ack.m_view_secret_key << ")");
-
-  r = crypto::derive_public_key(recv_derivation, real_output_index, ack.m_account_address.m_spend_public_key, in_ephemeral.pub);
-  CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to derive_public_key(" << recv_derivation << ", " << real_output_index <<  ", " << ack.m_account_address.m_spend_public_key << ")");
-
-  crypto::derive_secret_key(recv_derivation, real_output_index, ack.m_spend_secret_key, in_ephemeral.sec);
-
-  crypto::generate_key_image(in_ephemeral.pub, in_ephemeral.sec, ki);
-  return true;
-}
-
 bool wallet_generate_key_image_helper_old(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, bool multisig_export = false)
 {
   if (!generate_key_image_helper_old(ack, tx_public_key, real_output_index, in_ephemeral, ki))
@@ -472,6 +458,7 @@ bool wallet_generate_key_image_helper_old(const cryptonote::account_keys& ack, c
   return true;
 }
 
+  //-----------------------------------------------------------------
 } //namespace
 
 namespace tools
@@ -802,6 +789,12 @@ static uint64_t decodeRct(const rct::rctSig & rv, const crypto::key_derivation &
     LOG_ERROR("Failed to decode input " << i);
     return 0;
   }
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::wallet_generate_key_image_helper_export(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, size_t multisig_key_index) const
+{
+  THROW_WALLET_EXCEPTION_IF(multisig_key_index >= ack.m_multisig_keys.size(), error::wallet_internal_error, "Bad multisig_key_index");
+  return cryptonote::generate_multisig_key_image(ack, tx_public_key, real_output_index, in_ephemeral, ki, multisig_key_index);
 }
 //----------------------------------------------------------------------------------------------------
 void wallet2::scan_output(const cryptonote::account_keys &keys, const cryptonote::transaction &tx, const crypto::public_key &tx_pub_key, size_t i, tx_scan_info_t &tx_scan_info, int &num_vouts_received, std::unordered_map<cryptonote::subaddress_index, uint64_t> &tx_money_got_in_outs, std::vector<size_t> &outs)
@@ -2667,29 +2660,11 @@ std::string wallet2::make_multisig(const std::string &password,
   rct::key spend_pkey, spend_skey;
   if (threshold == spend_keys.size() + 1)
   {
-    // the multisig spend public key is the sum of all spend public keys
-    spend_pkey = rct::pk2rct(get_account().get_keys().m_account_address.m_spend_public_key);
-    for (const auto &k: spend_keys)
-      rct::addKeys(spend_pkey, spend_pkey, rct::pk2rct(k));
-    multisig_keys.push_back(get_account().get_keys().m_spend_secret_key);
-    spend_skey = rct::sk2rct(get_account().get_keys().m_spend_secret_key);
+    cryptonote::generate_multisig_N_N(get_account().get_keys(), view_keys, spend_keys, multisig_keys, spend_skey, spend_pkey);
   }
   else if (threshold == spend_keys.size())
   {
-    spend_pkey = rct::identity();
-    spend_skey = rct::zero();
-
-    // create all our composite private keys
-    for (const auto &k: spend_keys)
-    {
-      rct::keyV data;
-      data.push_back(rct::scalarmultKey(rct::pk2rct(k), rct::sk2rct(get_account().get_keys().m_spend_secret_key)));
-      static const rct::key salt = { {'M', 'u', 'l', 't' , 'i', 's', 'i', 'g' , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00 , 0x00, 0x00, 0x00,0x00  } };
-      data.push_back(salt);
-      rct::key msk = rct::hash_to_scalar(data);
-      multisig_keys.push_back(rct::rct2sk(msk));
-      sc_add(spend_skey.bytes, spend_skey.bytes, msk.bytes);
-    }
+    cryptonote::generate_multisig_N1_N(get_account().get_keys(), view_keys, spend_keys, multisig_keys, spend_skey, spend_pkey);
 
     // We need an extra step, so we package all the composite public keys
     // we know about, and make a signed string out of them
@@ -2719,13 +2694,10 @@ std::string wallet2::make_multisig(const std::string &password,
 
   // the multisig view key is shared by all, make one all can derive
   MINFO("Creating view key...");
-  crypto::cn_fast_hash(&get_account().get_keys().m_view_secret_key, sizeof(crypto::secret_key), hash);
-  rct::key view_skey = rct::hash2rct(hash);
-  for (const auto &k: view_keys)
-    sc_add(view_skey.bytes, view_skey.bytes, rct::sk2rct(k).bytes);
+  crypto::secret_key view_skey = cryptonote::generate_multisig_view_secret_key(get_account().get_keys().m_view_secret_key, view_keys);
 
   MINFO("Creating multisig address...");
-  CHECK_AND_ASSERT_THROW_MES(m_account.make_multisig(rct::rct2sk(view_skey), rct::rct2sk(spend_skey), rct::rct2pk(spend_pkey), multisig_keys),
+  CHECK_AND_ASSERT_THROW_MES(m_account.make_multisig(view_skey, rct::rct2sk(spend_skey), rct::rct2pk(spend_pkey), multisig_keys),
       "Failed to create multisig wallet due to bad keys");
 
   m_account_public_address = m_account.get_keys().m_account_address;
@@ -2767,15 +2739,12 @@ bool wallet2::finalize_multisig(const std::string &password, const std::unordere
   CHECK_AND_ASSERT_THROW_MES(!pkeys.empty(), "empty pkeys");
   CHECK_AND_ASSERT_THROW_MES(signers.size() == m_multisig_signers.size(), "Bad signers size");
 
-  rct::key spend_public_key = rct::identity();
-  for (const auto &pk: pkeys)
-  {
-    rct::addKeys(spend_public_key, spend_public_key, rct::pk2rct(pk));
-  }
+  crypto::public_key spend_public_key = cryptonote::generate_multisig_N1_N_spend_public_key(std::vector<crypto::public_key>(pkeys.begin(), pkeys.end()));
+  m_account_public_address.m_spend_public_key = spend_public_key;
+  m_account.finalize_multisig(spend_public_key);
+
   m_multisig_signers = signers;
   std::sort(m_multisig_signers.begin(), m_multisig_signers.end(), [](const crypto::public_key &e0, const crypto::public_key &e1){ return memcmp(&e0, &e1, sizeof(e0)); });
-  m_account_public_address.m_spend_public_key = rct::rct2pk(spend_public_key);
-  m_account.finalize_multisig(m_account_public_address.m_spend_public_key);
 
   if (!m_wallet_file.empty())
   {
@@ -2789,16 +2758,6 @@ bool wallet2::finalize_multisig(const std::string &password, const std::unordere
   if (!m_wallet_file.empty())
     store();
 
-  return true;
-}
-
-bool wallet2::wallet_generate_key_image_helper_export(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, size_t multisig_key_index) const
-{
-  THROW_WALLET_EXCEPTION_IF(multisig_key_index >= ack.m_multisig_keys.size(), error::wallet_internal_error, "Bad multisig_key_index");
-  if (!generate_key_image_helper_old(ack, tx_public_key, real_output_index, in_ephemeral, ki))
-    return false;
-  // we got the ephemeral keypair, but the key image isn't right as it's done as per our private spend key, which is multisig
-  crypto::generate_key_image(in_ephemeral.pub, ack.m_multisig_keys[multisig_key_index], ki);
   return true;
 }
 
@@ -7616,8 +7575,7 @@ rct::multisig_kLRki wallet2::get_multisig_kLRki(size_t n, const rct::key &k) con
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad m_transfers index");
   rct::multisig_kLRki kLRki;
   kLRki.k = k;
-  rct::scalarmultBase(kLRki.L, kLRki.k);
-  crypto::generate_key_image(m_transfers[n].get_public_key(), rct::rct2sk(kLRki.k), (crypto::key_image&)kLRki.R);
+  cryptonote::generate_multisig_LR(m_transfers[n].get_public_key(), rct::rct2sk(kLRki.k), (crypto::public_key&)kLRki.L, (crypto::public_key&)kLRki.R);
   kLRki.ki = rct::ki2rct(m_transfers[n].m_key_image);
   return kLRki;
 }
@@ -7658,32 +7616,13 @@ crypto::key_image wallet2::get_multisig_composite_key_image(size_t n) const
 
   const transfer_details &td = m_transfers[n];
   crypto::public_key tx_key = get_tx_pub_key_from_received_outs(td);
-  cryptonote::keypair in_ephemeral;
   crypto::key_image ki;
-  bool r = wallet_generate_key_image_helper_old(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, ki);
-  CHECK_AND_ASSERT_THROW_MES(r, "Failed to generate key image");
-  std::unordered_set<crypto::key_image> used;
-
-  // insert the ones we start from
-  for (size_t m = 0; m < get_account().get_multisig_keys().size(); ++m)
-  {
-    crypto::key_image pki;
-    wallet_generate_key_image_helper_export(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, pki, m);
-    used.insert(pki);
-  }
-
+  std::vector<crypto::key_image> pkis;
   for (const auto &info: td.m_multisig_info)
-  {
     for (const auto &pki: info.m_partial_key_images)
-    {
-      // don't add duplicates again
-      if (used.find(pki) != used.end())
-        continue;
-      used.insert(pki);
-
-      rct::addKeys((rct::key&)ki, rct::ki2rct(ki), rct::ki2rct(pki));
-    }
-  }
+      pkis.push_back(pki);
+  bool r = cryptonote::generate_multisig_composite_key_image(get_account().get_keys(), tx_key, td.m_internal_output_index, pkis, ki);
+  THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to generate key image");
   return ki;
 }
 //----------------------------------------------------------------------------------------------------
