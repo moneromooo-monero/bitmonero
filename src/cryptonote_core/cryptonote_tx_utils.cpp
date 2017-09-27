@@ -269,6 +269,10 @@ namespace cryptonote
       tx.vin.push_back(input_to_key);
     }
 
+    // "Shuffle" outs
+    std::vector<tx_destination_entry> shuffled_dsts(destinations);
+    std::random_shuffle(shuffled_dsts.begin(), shuffled_dsts.end(), [](unsigned int i) { return crypto::rand<unsigned int>() % i; });
+
     // sort ins by their key image
     std::vector<size_t> ins_order(sources.size());
     for (size_t n = 0; n < sources.size(); ++n)
