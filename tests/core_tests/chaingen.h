@@ -506,15 +506,15 @@ inline bool do_replay_file(const std::string& filename)
     account.generate();
 
 #define GENERATE_MULTISIG_ACCOUNT(account, threshold, total) \
-    static_assert(threshold >= 2 && threshold <= total, "Invalid multisig scheme"); \
-    cryptonote::account_base account[total]; \
+    CHECK_AND_ASSERT_MES(threshold >= 2 && threshold <= total, false, "Invalid multisig scheme"); \
+    std::vector<cryptonote::account_base> account(total); \
     do \
     { \
       for (size_t msidx = 0; msidx < total; ++msidx) \
         account[msidx].generate(); \
       std::unordered_set<crypto::public_key> all_multisig_keys; \
-      std::vector<crypto::secret_key> view_keys[total]; \
-      std::vector<crypto::public_key> spend_keys[total]; \
+      std::vector<std::vector<crypto::secret_key>> view_keys(total); \
+      std::vector<std::vector<crypto::public_key>> spend_keys(total); \
       for (size_t msidx = 0; msidx < total; ++msidx) \
       { \
         for (size_t msidx_inner = 0; msidx_inner < total; ++msidx_inner) \
