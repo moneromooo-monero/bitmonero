@@ -2605,7 +2605,7 @@ bool wallet2::verify_extra_multisig_info(const std::string &data, std::unordered
     return false;
   }
 
-  const size_t n_keys = (decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::hash) + sizeof(crypto::signature))) / sizeof(crypto::public_key);
+  const size_t n_keys = (decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::public_key) + sizeof(crypto::signature))) / sizeof(crypto::public_key);
   size_t offset = 0;
   const crypto::public_key &pkey = *(const crypto::public_key*)(decoded.data() + offset);
   offset += sizeof(pkey);
@@ -4710,7 +4710,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
     src.mask = td.m_mask;
     if (m_multisig)
     {
-      crypto::public_key ignore = m_multisig_threshold == m_multisig_signers.size() ? crypto::null_pkey : td.m_multisig_info.front().m_signer;
+      crypto::public_key ignore = m_multisig_threshold == m_multisig_signers.size() ? crypto::null_pkey : m_multisig_signers.front();
       src.multisig_kLRki = get_multisig_composite_kLRki(idx, ignore, used_L, used_L);
     }
     else
@@ -4755,7 +4755,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   std::vector<tools::wallet2::multisig_sig> multisig_sigs;
   if (m_multisig)
   {
-    crypto::public_key ignore = m_multisig_threshold == m_multisig_signers.size() ? crypto::null_pkey : m_transfers[selected_transfers.front()].m_multisig_info.front().m_signer;
+    crypto::public_key ignore = m_multisig_threshold == m_multisig_signers.size() ? crypto::null_pkey : m_multisig_signers.front();
     multisig_sigs.push_back({tx.rct_signatures, ignore, used_L, {}, msout});
 
     if (m_multisig_threshold < m_multisig_signers.size())
@@ -4772,7 +4772,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
         {
           cryptonote::tx_source_entry& src = sources[src_idx];
           const transfer_details& td = m_transfers[idx];
-          src.multisig_kLRki = get_multisig_composite_kLRki(idx, td.m_multisig_info[signer_index].m_signer, used_L, new_used_L);
+          src.multisig_kLRki = get_multisig_composite_kLRki(idx, m_multisig_signers[signer_index], used_L, new_used_L);
           ++src_idx;
         }
 
@@ -4783,7 +4783,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
         THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_testnet);
         THROW_WALLET_EXCEPTION_IF(upper_transaction_size_limit <= get_object_blobsize(tx), error::tx_too_big, tx, upper_transaction_size_limit);
         THROW_WALLET_EXCEPTION_IF(cryptonote::get_transaction_prefix_hash(ms_tx) != prefix_hash, error::wallet_internal_error, "Multisig txes do not share prefix");
-        multisig_sigs.push_back({ms_tx.rct_signatures, m_transfers[selected_transfers.front()].m_multisig_info[signer_index].m_signer, new_used_L, {}, msout});
+        multisig_sigs.push_back({ms_tx.rct_signatures, m_multisig_signers[signer_index], new_used_L, {}, msout});
 
         ms_tx.rct_signatures = tx.rct_signatures;
         THROW_WALLET_EXCEPTION_IF(cryptonote::get_transaction_hash(ms_tx) != cryptonote::get_transaction_hash(tx), error::wallet_internal_error, "Multisig txes differ by more than the signatures");
@@ -6334,12 +6334,17 @@ size_t wallet2::import_outputs(const std::vector<tools::wallet2::transfer_detail
   return m_transfers.size();
 }
 //----------------------------------------------------------------------------------------------------
+crypto::public_key wallet2::get_multisig_signer_public_key(const crypto::secret_key &spend_skey) const
+{
+  crypto::public_key pkey;
+  crypto::secret_key_to_public_key(spend_skey, pkey);
+  return pkey;
+}
+//----------------------------------------------------------------------------------------------------
 crypto::public_key wallet2::get_multisig_signer_public_key() const
 {
   CHECK_AND_ASSERT_THROW_MES(m_multisig, "Wallet is not multisig");
-  crypto::public_key pkey;
-  crypto::secret_key_to_public_key(get_account().get_keys().m_spend_secret_key, pkey);
-  return pkey;
+  return get_multisig_signer_public_key(get_account().get_keys().m_spend_secret_key);
 }
 //----------------------------------------------------------------------------------------------------
 crypto::public_key wallet2::get_multisig_signing_public_key(const crypto::secret_key &msk) const
@@ -6477,7 +6482,7 @@ std::vector<tools::wallet2::multisig_info> wallet2::export_multisig()
       // we want to export the partial key image, not the full one, so we can't use td.m_key_image
       crypto::key_image ki;
       wallet_generate_key_image_helper_export(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, ki, m);
-      info.back().m_partial_key_images.push_back(ki);
+      info[n].m_partial_key_images.push_back(ki);
     }
 
     size_t nlr = m_multisig_threshold < m_multisig_signers.size() ? m_multisig_threshold - 1 : 1;
@@ -6485,9 +6490,10 @@ std::vector<tools::wallet2::multisig_info> wallet2::export_multisig()
     {
       td.m_multisig_k.push_back(rct::skGen());
       const rct::multisig_kLRki kLRki = get_multisig_kLRki(n, td.m_multisig_k.back());
-      info.back().m_LR.push_back({kLRki.L, kLRki.R});
-      info.back().m_signer = signer;
+      info[n].m_LR.push_back({kLRki.L, kLRki.R});
     }
+
+    info[n].m_signer = signer;
   }
 
   return info;
@@ -6517,26 +6523,30 @@ void wallet2::update_multisig_rescan_info(const std::vector<std::vector<rct::key
 size_t wallet2::import_multisig(std::vector<std::vector<tools::wallet2::multisig_info>> info)
 {
   CHECK_AND_ASSERT_THROW_MES(m_multisig, "Wallet is not multisig");
-  CHECK_AND_ASSERT_THROW_MES(info.size() + 1 == m_multisig_signers.size(), "Wrong number of multisig sources");
+  CHECK_AND_ASSERT_THROW_MES(info.size() + 1 <= m_multisig_signers.size() && info.size() + 1 >= m_multisig_threshold, "Wrong number of multisig sources");
 
   std::vector<std::vector<rct::key>> k;
   k.reserve(m_transfers.size());
   for (const auto &td: m_transfers)
     k.push_back(td.m_multisig_k);
 
-  // check signers are consistent
-  for (const auto &td: m_transfers)
-  {
-    CHECK_AND_ASSERT_THROW_MES(td.m_multisig_info.size() == m_transfers[0].m_multisig_info.size(), "Mismatched m_multisig_info sizes");
-    for (size_t n = 0; n < td.m_multisig_info.size(); ++n)
-      CHECK_AND_ASSERT_THROW_MES(td.m_multisig_info[n].m_signer == m_transfers[0].m_multisig_info[n].m_signer, "Mismatched m_multisig_info signers");
-  }
-
   // how many outputs we're going to update
   size_t n_outputs = m_transfers.size();
   for (const auto &pi: info)
     if (pi.size() < n_outputs)
       n_outputs = pi.size();
+
+  if (n_outputs == 0)
+    return 0;
+
+  // check signers are consistent
+  for (const auto &pi: info)
+  {
+    CHECK_AND_ASSERT_THROW_MES(std::find(m_multisig_signers.begin(), m_multisig_signers.end(), pi[0].m_signer) != m_multisig_signers.end(),
+        "Signer is not a member of this multisig wallet");
+    for (size_t n = 1; n < n_outputs; ++n)
+      CHECK_AND_ASSERT_THROW_MES(pi[n].m_signer == pi[0].m_signer, "Mismatched signers in imported multisig info");
+  }
 
   // trim data we don't have info for from all participants
   for (auto &pi: info)
