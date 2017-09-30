@@ -1386,6 +1386,16 @@ skip:
             for (const auto &hash: hashes)
             {
               req.blocks.push_back(hash);
+              if (std::find(context.m_needed_objects.begin(), context.m_needed_objects.end(), hash) == context.m_needed_objects.end())
+              {
+                MDEBUG("We don't have a needed hash, we can get " << context.m_requested_objects.size() << " blocks so far");
+                if (context.m_requested_objects.empty())
+                {
+                  is_next = false;
+                  span.first = span.second = 0;
+                }
+                break;
+              }
               context.m_requested_objects.insert(hash);
             }
           }
@@ -1422,13 +1432,22 @@ skip:
           is_next = true;
           for (const auto &hash: hashes)
           {
+            // that's atrocious O(n) wise, but this is rare
+            auto i = std::find(context.m_needed_objects.begin(), context.m_needed_objects.end(), hash);
+            if (i == context.m_needed_objects.end())
+            {
+              MDEBUG("We don't have a needed hash, we can get " << context.m_requested_objects.size() << " blocks so far");
+              if (context.m_requested_objects.empty())
+              {
+                is_next = false;
+                span.first = span.second = 0;
+              }
+              break;
+            }
             req.blocks.push_back(hash);
             ++count;
             context.m_requested_objects.insert(hash);
-            // that's atrocious O(n) wise, but this is rare
-            auto i = std::find(context.m_needed_objects.begin(), context.m_needed_objects.end(), hash);
-            if (i != context.m_needed_objects.end())
-              context.m_needed_objects.erase(i);
+            context.m_needed_objects.erase(i);
           }
         }
       }
