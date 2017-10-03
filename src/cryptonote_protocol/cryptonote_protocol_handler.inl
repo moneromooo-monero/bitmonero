@@ -1173,7 +1173,7 @@ skip:
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::on_idle()
   {
-    m_idle_peer_kicker.do_call(boost::bind(&t_cryptonote_protocol_handler<t_core>::kick_idle_peers, this));
+    //m_idle_peer_kicker.do_call(boost::bind(&t_cryptonote_protocol_handler<t_core>::kick_idle_peers, this));
     return m_core.on_idle();
   }
   //------------------------------------------------------------------------------------------------------------------------
