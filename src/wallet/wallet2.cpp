@@ -446,18 +446,6 @@ std::string strjoin(const std::vector<size_t> &V, const char *sep)
   return ss.str();
 }
 
-bool wallet_generate_key_image_helper_old(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, bool multisig_export = false)
-{
-  if (!generate_key_image_helper_old(ack, tx_public_key, real_output_index, in_ephemeral, ki))
-    return false;
-  if (multisig_export)
-  {
-    // we got the ephemeral keypair, but the key image isn't right as it's done as per our private spend key, which is multisig
-    crypto::generate_key_image(in_ephemeral.pub, ack.m_spend_secret_key, ki);
-  }
-  return true;
-}
-
   //-----------------------------------------------------------------
 } //namespace
 
@@ -799,18 +787,20 @@ bool wallet2::wallet_generate_key_image_helper_export(const cryptonote::account_
 //----------------------------------------------------------------------------------------------------
 void wallet2::scan_output(const cryptonote::account_keys &keys, const cryptonote::transaction &tx, const crypto::public_key &tx_pub_key, size_t i, tx_scan_info_t &tx_scan_info, int &num_vouts_received, std::unordered_map<cryptonote::subaddress_index, uint64_t> &tx_money_got_in_outs, std::vector<size_t> &outs)
 {
-  bool r;
+  THROW_WALLET_EXCEPTION_IF(i >= tx.vout.size(), error::wallet_internal_error, "Invalid vout index");
   if (m_multisig)
   {
-    r = wallet_generate_key_image_helper_old(keys, tx_pub_key, i, tx_scan_info.in_ephemeral, tx_scan_info.ki);
+    tx_scan_info.in_ephemeral.pub = boost::get<cryptonote::txout_to_key>(tx.vout[i].target).key;
+    tx_scan_info.in_ephemeral.sec = crypto::null_skey;
+    tx_scan_info.ki = rct::rct2ki(rct::zero());
   }
   else
   {
-    r = cryptonote::generate_key_image_helper_precomp(keys, boost::get<cryptonote::txout_to_key>(tx.vout[i].target).key, tx_scan_info.received->derivation, i, tx_scan_info.received->index, tx_scan_info.in_ephemeral, tx_scan_info.ki);
+    bool r = cryptonote::generate_key_image_helper_precomp(keys, boost::get<cryptonote::txout_to_key>(tx.vout[i].target).key, tx_scan_info.received->derivation, i, tx_scan_info.received->index, tx_scan_info.in_ephemeral, tx_scan_info.ki);
+    THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to generate key image");
+    THROW_WALLET_EXCEPTION_IF(tx_scan_info.in_ephemeral.pub != boost::get<cryptonote::txout_to_key>(tx.vout[i].target).key,
+        error::wallet_internal_error, "key_image generated ephemeral public key not matched with output_key");
   }
-  THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to generate key image");
-  THROW_WALLET_EXCEPTION_IF(tx_scan_info.in_ephemeral.pub != boost::get<cryptonote::txout_to_key>(tx.vout[i].target).key,
-      error::wallet_internal_error, "key_image generated ephemeral public key not matched with output_key");
 
   outs.push_back(i);
   if (tx_scan_info.money_transfered == 0)
