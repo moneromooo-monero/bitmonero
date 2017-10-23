@@ -2789,6 +2789,15 @@ void wallet2::load(const std::string& wallet_, const std::string& password)
     add_subaddress_account(tr("Primary account"));
 
   m_local_bc_height = m_blockchain.size();
+
+#if 1
+  for (auto &td: m_transfers) td.m_subaddr_index = {};
+  for (auto &td: m_unconfirmed_txs) td.second.m_subaddr_account = 0;
+  for (auto &td: m_confirmed_txs) td.second.m_subaddr_account = 0;
+  for (auto &td: m_unconfirmed_payments) td.second.m_subaddr_index = {};
+  for (auto &td: m_payments) td.second.m_subaddr_index = {};
+  for (auto &td: m_address_book) td.m_is_subaddress = false;
+#endif
 }
 //----------------------------------------------------------------------------------------------------
 void wallet2::trim_hashchain()
