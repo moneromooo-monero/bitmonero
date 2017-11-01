@@ -784,9 +784,12 @@ void wallet2::check_acc_out_precomp(const tx_out &o, const crypto::key_derivatio
      LOG_ERROR("wrong type id in transaction out");
      return;
   }
+//MGINFO("trying " << m_subaddresses.size() << " subaddresses:");
+//for (const auto &s: m_subaddresses) MGINFO("  " << s.second.major << "/" << s.second.minor);
   tx_scan_info.received = is_out_to_acc_precomp(m_subaddresses, boost::get<txout_to_key>(o.target).key, derivation, additional_derivations, i);
   if(tx_scan_info.received)
   {
+MGINFO("RECEIVED!");
     tx_scan_info.money_transfered = o.amount; // may be 0 for ringct outputs
   }
   else
@@ -858,6 +861,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
   // In this function, tx (probably) only contains the base information
   // (that is, the prunable stuff may or may not be included)
 
+MGINFO("processing tx " << txid << " at height " << height);
   if (!miner_tx && !pool)
     process_unconfirmed(txid, tx, height);
   std::vector<size_t> outs;
@@ -3182,6 +3186,15 @@ void wallet2::load(const std::string& wallet_, const std::string& password)
     add_subaddress_account(tr("Primary account"));
 
   m_local_bc_height = m_blockchain.size();
+
+#if 0
+  for (auto &td: m_transfers) td.m_subaddr_index = {};
+  for (auto &td: m_unconfirmed_txs) td.second.m_subaddr_account = 0;
+  for (auto &td: m_confirmed_txs) td.second.m_subaddr_account = 0;
+  for (auto &td: m_unconfirmed_payments) td.second.m_subaddr_index = {};
+  for (auto &td: m_payments) td.second.m_subaddr_index = {};
+  for (auto &td: m_address_book) td.m_is_subaddress = false;
+#endif
 }
 //----------------------------------------------------------------------------------------------------
 void wallet2::trim_hashchain()
@@ -3888,7 +3901,7 @@ void wallet2::commit_tx(pending_tx& ptx)
     // Normal submit
     COMMAND_RPC_SEND_RAW_TX::request req;
     req.tx_as_hex = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx.tx));
-    req.do_not_relay = false;
+    req.do_not_relay = true; //false;
     COMMAND_RPC_SEND_RAW_TX::response daemon_send_resp;
     m_daemon_rpc_mutex.lock();
     bool r = epee::net_utils::invoke_http_json("/sendrawtransaction", req, daemon_send_resp, m_http_client, rpc_timeout);
@@ -4097,8 +4110,6 @@ bool wallet2::sign_tx(unsigned_tx_set &exported_txs, const std::string &signed_f
     crypto::secret_key tx_key;
     std::vector<crypto::secret_key> additional_tx_keys;
     rct::multisig_out msout;
-    if (m_multisig)
-      msout.seed = crypto::rand<uint64_t>();
     bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sd.sources, sd.splitted_dsts, sd.change_dts.addr, sd.extra, ptx.tx, sd.unlock_time, tx_key, additional_tx_keys, sd.use_rct, m_multisig ? &msout : NULL);
     THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sd.sources, sd.splitted_dsts, sd.unlock_time, m_testnet);
     // we don't test tx size, because we don't know the current limit, due to not having a blockchain,
@@ -5201,8 +5212,6 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   crypto::secret_key tx_key;
   std::vector<crypto::secret_key> additional_tx_keys;
   rct::multisig_out msout;
-  if (m_multisig)
-    msout.seed = crypto::rand<uint64_t>();
   LOG_PRINT_L2("constructing tx");
   bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, false, m_multisig ? &msout : NULL);
   LOG_PRINT_L2("constructed tx, r="<<r);
@@ -5374,9 +5383,8 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   crypto::secret_key tx_key;
   std::vector<crypto::secret_key> additional_tx_keys;
   rct::multisig_out msout;
-  if (m_multisig)
-    msout.seed = crypto::rand<uint64_t>();
   LOG_PRINT_L2("constructing tx");
+  auto sources_copy = sources;
   bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, true, m_multisig ? &msout : NULL);
   LOG_PRINT_L2("constructed tx, r="<<r);
   THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, dsts, unlock_time, m_testnet);
@@ -5401,14 +5409,14 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
         for(size_t idx: selected_transfers)
         {
           cryptonote::tx_source_entry& src = sources[src_idx];
-          const transfer_details& td = m_transfers[idx];
           src.multisig_kLRki = get_multisig_composite_kLRki(idx, m_multisig_signers[signer_index], used_L, new_used_L);
           ++src_idx;
         }
 
         LOG_PRINT_L2("Creating supplementary multisig transaction");
         cryptonote::transaction ms_tx;
-        bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, ms_tx, unlock_time,tx_key, additional_tx_keys, true, &msout);
+        auto sources_copy_copy = sources_copy;
+        bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources_copy_copy, splitted_dsts, change_dts.addr, extra, ms_tx, unlock_time,tx_key, additional_tx_keys, true, &msout);
         LOG_PRINT_L2("constructed tx, r="<<r);
         THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_testnet);
         THROW_WALLET_EXCEPTION_IF(upper_transaction_size_limit <= get_object_blobsize(tx), error::tx_too_big, tx, upper_transaction_size_limit);

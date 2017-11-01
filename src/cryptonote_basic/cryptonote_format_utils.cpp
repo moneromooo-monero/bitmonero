@@ -189,8 +189,12 @@ namespace cryptonote
       }
 
       in_ephemeral.sec = scalar_step2;
+      //crypto::derive_public_key(recv_derivation, real_output_index, ack.m_account_address.m_spend_public_key, in_ephemeral.pub);
       crypto::secret_key_to_public_key(in_ephemeral.sec, in_ephemeral.pub);
-      CHECK_AND_ASSERT_MES(in_ephemeral.pub == out_key, false, "key image helper precomp: given output pubkey doesn't match the derived one");
+
+      // won't work with multisig keys
+      CHECK_AND_ASSERT_MES(in_ephemeral.pub == out_key || !ack.m_multisig_keys.empty(),
+          false, "key image helper precomp: given output pubkey doesn't match the derived one");
     }
 
     crypto::generate_key_image(in_ephemeral.pub, in_ephemeral.sec, ki);

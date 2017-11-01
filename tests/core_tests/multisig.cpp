@@ -252,7 +252,6 @@ bool gen_multisig_tx_validation_base::generate_with(std::vector<test_event_entry
   rct::multisig_out *msoutp = NULL;
 #else
   rct::multisig_out msout;
-  msout.seed = 0;
   rct::multisig_out *msoutp = &msout;
 #endif
   std::unordered_map<crypto::public_key, cryptonote::subaddress_index> subaddresses;

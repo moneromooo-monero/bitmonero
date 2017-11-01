@@ -29,7 +29,6 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include <unordered_set>
-#include <random>
 #include "include_base_utils.h"
 using namespace epee;
 
@@ -276,24 +275,15 @@ namespace cryptonote
       in_contexts.push_back(input_generation_context_data());
       keypair& in_ephemeral = in_contexts.back().in_ephemeral;
       crypto::key_image img;
-      bool r;
-      if (msout)
-      {
-        r = generate_key_image_helper_old(sender_account_keys, src_entr.real_out_tx_key, src_entr.real_output_in_tx_index, in_ephemeral, img);
-      }
-      else
-      {
-        const auto& out_key = reinterpret_cast<const crypto::public_key&>(src_entr.outputs[src_entr.real_output].second.dest);
-        r = generate_key_image_helper(sender_account_keys, subaddresses, out_key, src_entr.real_out_tx_key, src_entr.real_out_additional_tx_keys, src_entr.real_output_in_tx_index, in_ephemeral, img);
-      }
-      if (!r)
+      const auto& out_key = reinterpret_cast<const crypto::public_key&>(src_entr.outputs[src_entr.real_output].second.dest);
+      if(!generate_key_image_helper(sender_account_keys, subaddresses, out_key, src_entr.real_out_tx_key, src_entr.real_out_additional_tx_keys, src_entr.real_output_in_tx_index, in_ephemeral, img))
       {
         LOG_ERROR("Key image generation failed!");
         return false;
       }
 
-      //check that derivated key is equal with real output key
-      if( !(in_ephemeral.pub == src_entr.outputs[src_entr.real_output].second.dest) )
+      //check that derivated key is equal with real output key (if non multisig)
+      if(!msout && !(in_ephemeral.pub == src_entr.outputs[src_entr.real_output].second.dest) )
       {
         LOG_ERROR("derived public key mismatch with output public key at index " << idx << ", real out " << src_entr.real_output << "! "<< ENDL << "derived_key:"
           << string_tools::pod_to_hex(in_ephemeral.pub) << ENDL << "real output_public_key:"
@@ -329,17 +319,31 @@ namespace cryptonote
       const txin_to_key &tk1 = boost::get<txin_to_key>(tx.vin[i1]);
       return memcmp(&tk0.k_image, &tk1.k_image, sizeof(tk0.k_image)) < 0;
     });
+
+MGINFO("permutation:"); for (auto i: ins_order) MGINFO ("  " << i);
+MGINFO("before permutation:");
+for (size_t n=0;n<sources.size();++n){
+ MGINFO("vin["<<n<<"]: " << boost::get<txin_to_key>(tx.vin[n]).key_offsets[0] << " - " << boost::get<txin_to_key>(tx.vin[n]).k_image);
+ MGINFO("con["<<n<<"]: " << in_contexts[n].in_ephemeral.sec);
+ MGINFO("sou["<<n<<"]: " << sources[n].mask);
+}
     tools::apply_permutation(ins_order, [&] (size_t i0, size_t i1) {
       std::swap(tx.vin[i0], tx.vin[i1]);
       std::swap(in_contexts[i0], in_contexts[i1]);
       std::swap(sources[i0], sources[i1]);
     });
+MGINFO("after permutation:");
+for (size_t n=0;n<sources.size();++n){
+ MGINFO("vin["<<n<<"]: " << boost::get<txin_to_key>(tx.vin[n]).key_offsets[0] << " - " << boost::get<txin_to_key>(tx.vin[n]).k_image);
+ MGINFO("con["<<n<<"]: " << in_contexts[n].in_ephemeral.sec);
+ MGINFO("sou["<<n<<"]: " << sources[n].mask);
+}
 
     // figure out if we need to make additional tx pubkeys
     size_t num_stdaddresses = 0;
     size_t num_subaddresses = 0;
     account_public_address single_dest_subaddress;
-    classify_addresses(destinations, change_addr, num_stdaddresses, num_stdaddresses, single_dest_subaddress);
+    classify_addresses(destinations, change_addr, num_stdaddresses, num_subaddresses, single_dest_subaddress);
 
     // if this is a single-destination transfer to a subaddress, we set the tx pubkey to R=s*D
     if (num_stdaddresses == 0 && num_subaddresses == 1)
@@ -388,6 +392,7 @@ namespace cryptonote
       else
       {
         // sending to the recipient; derivation = r*A (or s*C in the subaddress scheme)
+MGINFO("sending to maybe subaddr, is_subaddress  " << dst_entr.is_subaddress << ", need_additional_txkeys " << need_additional_txkeys << ", ak " << additional_txkey.sec << ", tx_key " << tx_key );
         r = crypto::generate_key_derivation(dst_entr.addr.m_view_public_key, dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key, derivation);
         CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" << dst_entr.addr.m_view_public_key << ", " << (dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key) << ")");
       }
@@ -608,7 +613,7 @@ namespace cryptonote
     size_t num_stdaddresses = 0;
     size_t num_subaddresses = 0;
     account_public_address single_dest_subaddress;
-    classify_addresses(destinations, change_addr, num_stdaddresses, num_stdaddresses, single_dest_subaddress);
+    classify_addresses(destinations, change_addr, num_stdaddresses, num_subaddresses, single_dest_subaddress);
     bool need_additional_txkeys = num_subaddresses > 0 && (num_stdaddresses > 0 || num_subaddresses > 1);
     if (need_additional_txkeys)
     {
