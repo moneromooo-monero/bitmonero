@@ -114,11 +114,9 @@ namespace rct {
 
     struct multisig_out {
         std::vector<key> c; // for all inputs
-        uint64_t seed;
 
         BEGIN_SERIALIZE_OBJECT()
           FIELD(c)
-          FIELD(seed)
         END_SERIALIZE()
     };
 
