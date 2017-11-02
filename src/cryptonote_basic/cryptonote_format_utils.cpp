@@ -177,6 +177,7 @@ namespace cryptonote
       crypto::derive_secret_key(recv_derivation, real_output_index, ack.m_spend_secret_key, scalar_step1); // computes Hs(a*R || idx) + b
 
       // step 2: add Hs(a || index_major || index_minor)
+      crypto::secret_key subaddr_sk;
       crypto::secret_key scalar_step2;
       if (received_index.is_zero())
       {
@@ -184,16 +185,32 @@ namespace cryptonote
       }
       else
       {
-        crypto::secret_key m = get_subaddress_secret_key(ack.m_view_secret_key, received_index);
-        sc_add((unsigned char*)&scalar_step2, (unsigned char*)&scalar_step1, (unsigned char*)&m);
+        subaddr_sk = get_subaddress_secret_key(ack.m_view_secret_key, received_index);
+        sc_add((unsigned char*)&scalar_step2, (unsigned char*)&scalar_step1, (unsigned char*)&subaddr_sk);
       }
 
-      in_ephemeral.sec = scalar_step2;
-      crypto::secret_key_to_public_key(in_ephemeral.sec, in_ephemeral.pub);
+      if (ack.m_multisig_keys.empty())
+      {
+        // when not in multisig, we know the full spend secret key, so the output pubkey can be obtained by scalarmultBase
+        crypto::secret_key_to_public_key(in_ephemeral.sec, in_ephemeral.pub);
+      }
+      else
+      {
+        // when in multisig, we only know the partial spend secret key. but we do know the full spend public key, so the output pubkey can be obtained by using the standard CN key derivation
+        crypto::derive_public_key(recv_derivation, real_output_index, ack.m_account_address.m_spend_public_key, in_ephemeral.pub);
+        // and don't forget to add the contribution from the subaddress part
+        if (!received_index.is_zero())
+        {
+          crypto::public_key subaddr_pk;
+          crypto::secret_key_to_public_key(subaddr_sk, subaddr_pk);
+          rct::key sum_pk = rct::pk2rct(in_ephemeral.pub);
+          rct::addKeys(sum_pk, sum_pk, rct::pk2rct(subaddr_pk));
+          in_ephemeral.pub = rct::rct2pk(sum_pk);
+        }
+      }
 
-      // won't work with multisig keys
-      CHECK_AND_ASSERT_MES(in_ephemeral.pub == out_key || !ack.m_multisig_keys.empty(),
-          false, "key image helper precomp: given output pubkey doesn't match the derived one");
+      CHECK_AND_ASSERT_MES(in_ephemeral.pub == out_key,
+           false, "key image helper precomp: given output pubkey doesn't match the derived one");
     }
 
     crypto::generate_key_image(in_ephemeral.pub, in_ephemeral.sec, ki);

@@ -820,10 +820,10 @@ static uint64_t decodeRct(const rct::rctSig & rv, const crypto::key_derivation &
   }
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::wallet_generate_key_image_helper_export(const cryptonote::account_keys& ack, const crypto::public_key& tx_public_key, size_t real_output_index, cryptonote::keypair& in_ephemeral, crypto::key_image& ki, size_t multisig_key_index) const
+bool wallet2::wallet_generate_key_image_helper_export(const cryptonote::account_keys& ack, size_t multisig_key_index, const crypto::public_key& out_key, crypto::key_image& ki) const
 {
   THROW_WALLET_EXCEPTION_IF(multisig_key_index >= ack.m_multisig_keys.size(), error::wallet_internal_error, "Bad multisig_key_index");
-  return cryptonote::generate_multisig_key_image(ack, tx_public_key, real_output_index, in_ephemeral, ki, multisig_key_index);
+  return cryptonote::generate_multisig_key_image(ack, multisig_key_index, out_key, ki);
 }
 //----------------------------------------------------------------------------------------------------
 void wallet2::scan_output(const cryptonote::account_keys &keys, const cryptonote::transaction &tx, const crypto::public_key &tx_pub_key, size_t i, tx_scan_info_t &tx_scan_info, int &num_vouts_received, std::unordered_map<cryptonote::subaddress_index, uint64_t> &tx_money_got_in_outs, std::vector<size_t> &outs)
@@ -7643,13 +7643,14 @@ crypto::key_image wallet2::get_multisig_composite_key_image(size_t n) const
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad output index");
 
   const transfer_details &td = m_transfers[n];
-  crypto::public_key tx_key = get_tx_pub_key_from_received_outs(td);
+  const crypto::public_key tx_key = get_tx_pub_key_from_received_outs(td);
+  const std::vector<crypto::public_key> additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(td.m_tx);
   crypto::key_image ki;
   std::vector<crypto::key_image> pkis;
   for (const auto &info: td.m_multisig_info)
     for (const auto &pki: info.m_partial_key_images)
       pkis.push_back(pki);
-  bool r = cryptonote::generate_multisig_composite_key_image(get_account().get_keys(), tx_key, td.m_internal_output_index, pkis, ki);
+  bool r = cryptonote::generate_multisig_composite_key_image(get_account().get_keys(), m_subaddresses, td.get_public_key(), tx_key, additional_tx_keys, td.m_internal_output_index, pkis, ki);
   THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to generate key image");
   return ki;
 }
@@ -7664,8 +7665,7 @@ std::vector<tools::wallet2::multisig_info> wallet2::export_multisig()
   for (size_t n = 0; n < m_transfers.size(); ++n)
   {
     transfer_details &td = m_transfers[n];
-    crypto::public_key tx_key = get_tx_pub_key_from_received_outs(td);
-    cryptonote::keypair in_ephemeral;
+    const std::vector<crypto::public_key> additional_tx_pub_keys = get_additional_tx_pub_keys_from_extra(td.m_tx);
     crypto::key_image ki;
     td.m_multisig_k.clear();
     info[n].m_LR.clear();
@@ -7675,7 +7675,7 @@ std::vector<tools::wallet2::multisig_info> wallet2::export_multisig()
     {
       // we want to export the partial key image, not the full one, so we can't use td.m_key_image
       crypto::key_image ki;
-      bool r = wallet_generate_key_image_helper_export(get_account().get_keys(), tx_key, td.m_internal_output_index, in_ephemeral, ki, m);
+      bool r = wallet_generate_key_image_helper_export(get_account().get_keys(), m, td.get_public_key(), ki);
       CHECK_AND_ASSERT_THROW_MES(r, "Failed to generate key image");
       info[n].m_partial_key_images.push_back(ki);
     }
