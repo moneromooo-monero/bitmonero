@@ -2709,8 +2709,6 @@ std::string wallet2::make_multisig(const std::string &password,
     // We need an extra step, so we package all the composite public keys
     // we know about, and make a signed string out of them
     std::string data;
-    const crypto::public_key &pkey = get_account().get_keys().m_account_address.m_spend_public_key;
-    data += std::string((const char *)&pkey, sizeof(crypto::public_key));
     const crypto::public_key signer = get_multisig_signer_public_key(rct::rct2sk(spend_skey));
     data += std::string((const char *)&signer, sizeof(crypto::public_key));
 
@@ -2723,7 +2721,7 @@ std::string wallet2::make_multisig(const std::string &password,
     data.resize(data.size() + sizeof(crypto::signature));
     crypto::cn_fast_hash(data.data(), data.size() - sizeof(signature), hash);
     crypto::signature &signature = *(crypto::signature*)&data[data.size() - sizeof(crypto::signature)];
-    crypto::generate_signature(hash, pkey, get_account().get_keys().m_spend_secret_key, signature);
+    crypto::generate_signature(hash, signer, get_multisig_blinded_secret_key(rct::rct2sk(spend_skey)), signature);
 
     extra_multisig_info = std::string("MultisigxV1") + tools::base58::encode(data);
   }
@@ -2809,19 +2807,18 @@ bool wallet2::finalize_multisig(const std::string &password, const std::unordere
 std::string wallet2::get_multisig_info() const
 {
   // It's a signed package of private view key and public spend key
-  const crypto::secret_key &skey = get_account().get_keys().m_view_secret_key;
-  const crypto::public_key &pkey = get_account().get_keys().m_account_address.m_spend_public_key;
+  const crypto::secret_key skey = cryptonote::get_multisig_blinded_secret_key(get_account().get_keys().m_view_secret_key);
+  const crypto::public_key pkey = get_multisig_signer_public_key(get_account().get_keys().m_spend_secret_key);
   crypto::hash hash;
 
   std::string data;
-  crypto::cn_fast_hash(&skey, sizeof(crypto::secret_key), hash);
-  data += std::string((const char *)&hash, sizeof(crypto::hash));
+  data += std::string((const char *)&skey, sizeof(crypto::secret_key));
   data += std::string((const char *)&pkey, sizeof(crypto::public_key));
 
   data.resize(data.size() + sizeof(crypto::signature));
   crypto::cn_fast_hash(data.data(), data.size() - sizeof(signature), hash);
   crypto::signature &signature = *(crypto::signature*)&data[data.size() - sizeof(crypto::signature)];
-  crypto::generate_signature(hash, pkey, get_account().get_keys().m_spend_secret_key, signature);
+  crypto::generate_signature(hash, pkey, get_multisig_blinded_secret_key(get_account().get_keys().m_spend_secret_key), signature);
 
   return std::string("MultisigV1") + tools::base58::encode(data);
 }
@@ -2878,28 +2875,26 @@ bool wallet2::verify_extra_multisig_info(const std::string &data, std::unordered
     MERROR("Multisig info decoding error");
     return false;
   }
-  if (decoded.size() < sizeof(crypto::public_key) + sizeof(crypto::public_key) + sizeof(crypto::signature))
+  if (decoded.size() < sizeof(crypto::public_key) + sizeof(crypto::signature))
   {
     MERROR("Multisig info is corrupt");
     return false;
   }
-  if ((decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::public_key) + sizeof(crypto::signature))) % sizeof(crypto::public_key))
+  if ((decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::signature))) % sizeof(crypto::public_key))
   {
     MERROR("Multisig info is corrupt");
     return false;
   }
 
-  const size_t n_keys = (decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::public_key) + sizeof(crypto::signature))) / sizeof(crypto::public_key);
+  const size_t n_keys = (decoded.size() - (sizeof(crypto::public_key) + sizeof(crypto::signature))) / sizeof(crypto::public_key);
   size_t offset = 0;
-  const crypto::public_key &pkey = *(const crypto::public_key*)(decoded.data() + offset);
-  offset += sizeof(pkey);
   signer = *(const crypto::public_key*)(decoded.data() + offset);
   offset += sizeof(signer);
   const crypto::signature &signature = *(const crypto::signature*)(decoded.data() + offset + n_keys * sizeof(crypto::public_key));
 
   crypto::hash hash;
   crypto::cn_fast_hash(decoded.data(), decoded.size() - sizeof(signature), hash);
-  if (!crypto::check_signature(hash, pkey, signature))
+  if (!crypto::check_signature(hash, signer, signature))
   {
     MERROR("Multisig info signature is invalid");
     return false;
@@ -7564,7 +7559,7 @@ size_t wallet2::import_outputs(const std::vector<tools::wallet2::transfer_detail
 crypto::public_key wallet2::get_multisig_signer_public_key(const crypto::secret_key &spend_skey) const
 {
   crypto::public_key pkey;
-  crypto::secret_key_to_public_key(spend_skey, pkey);
+  crypto::secret_key_to_public_key(get_multisig_blinded_secret_key(spend_skey), pkey);
   return pkey;
 }
 //----------------------------------------------------------------------------------------------------
