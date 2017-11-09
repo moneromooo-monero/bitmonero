@@ -118,6 +118,7 @@ namespace
   const command_line::arg_descriptor<std::string> arg_mnemonic_language = {"mnemonic-language", sw::tr("Language for mnemonic"), ""};
   const command_line::arg_descriptor<std::string> arg_electrum_seed = {"electrum-seed", sw::tr("Specify Electrum seed for wallet recovery/creation"), ""};
   const command_line::arg_descriptor<bool> arg_restore_deterministic_wallet = {"restore-deterministic-wallet", sw::tr("Recover wallet using Electrum-style mnemonic seed"), false};
+  const command_line::arg_descriptor<bool> arg_restore_multisig_wallet = {"restore-multisig-wallet", sw::tr("Recover multisig wallet using Electrum-style mnemonic seed"), false};
   const command_line::arg_descriptor<bool> arg_non_deterministic = {"non-deterministic", sw::tr("Create non-deterministic view and spend keys"), false};
   const command_line::arg_descriptor<bool> arg_trusted_daemon = {"trusted-daemon", sw::tr("Enable commands which rely on a trusted daemon"), false};
   const command_line::arg_descriptor<bool> arg_allow_mismatched_daemon_version = {"allow-mismatched-daemon-version", sw::tr("Allow communicating with a daemon that uses a different RPC version"), false};
@@ -320,39 +321,51 @@ bool simple_wallet::print_seed(bool encrypted)
 {
   bool success =  false;
   std::string electrum_words;
+  bool ready, multisig;
 
-  if (m_wallet->multisig())
-  {
-    fail_msg_writer() << tr("wallet is multisig and has no seed");
-    return true;
-  }
   if (m_wallet->watch_only())
   {
     fail_msg_writer() << tr("wallet is watch-only and has no seed");
     return true;
   }
   if (m_wallet->ask_password() && !get_and_verify_password()) { return true; }
-  if (m_wallet->is_deterministic())
+
+  multisig = m_wallet->multisig(&ready);
+  if (multisig)
   {
-    if (m_wallet->get_seed_language().empty())
+    if (!ready)
     {
-      std::string mnemonic_language = get_mnemonic_language();
-      if (mnemonic_language.empty())
-        return true;
-      m_wallet->set_seed_language(mnemonic_language);
+      fail_msg_writer() << tr("wallet is multisig but not yet finalized");
+      return true;
     }
-
-    std::string seed_pass;
-    if (encrypted)
-    {
-      auto pwd_container = tools::password_container::prompt(true, tr("Enter optional seed encryption passphrase, empty to see raw seed"));
-      if (std::cin.eof() || !pwd_container)
-        return true;
-      seed_pass = pwd_container->password();
-    }
-
-    success = m_wallet->get_seed(electrum_words, seed_pass);
   }
+  else if (!m_wallet->is_deterministic())
+  {
+    fail_msg_writer() << tr("wallet is non-deterministic and has no seed");
+    return true;
+  }
+
+  if (m_wallet->get_seed_language().empty())
+  {
+    std::string mnemonic_language = get_mnemonic_language();
+    if (mnemonic_language.empty())
+      return true;
+    m_wallet->set_seed_language(mnemonic_language);
+  }
+
+  std::string seed_pass;
+  if (encrypted)
+  {
+    auto pwd_container = tools::password_container::prompt(true, tr("Enter optional seed encryption passphrase, empty to see raw seed"));
+    if (std::cin.eof() || !pwd_container)
+      return true;
+    seed_pass = pwd_container->password();
+  }
+
+  if (multisig)
+    success = m_wallet->get_multisig_seed(electrum_words, seed_pass);
+  else if (m_wallet->is_deterministic())
+    success = m_wallet->get_seed(electrum_words, seed_pass);
 
   if (success) 
   {
@@ -360,7 +373,7 @@ bool simple_wallet::print_seed(bool encrypted)
   }
   else
   {
-    fail_msg_writer() << tr("wallet is non-deterministic and has no seed");
+    fail_msg_writer() << tr("Failed to retrieve seed");
   }
   return true;
 }
@@ -1726,11 +1739,20 @@ bool simple_wallet::ask_wallet_create_if_needed()
  */
 void simple_wallet::print_seed(std::string seed)
 {
-  success_msg_writer(true) << "\n" << tr("PLEASE NOTE: the following 25 words can be used to recover access to your wallet. "
+  success_msg_writer(true) << "\n" << tr("PLEASE NOTE: the following seed words can be used to recover access to your wallet. "
     "Please write them down and store them somewhere safe and secure. Please do not store them in "
     "your email or on file storage services outside of your immediate control.\n");
-  boost::replace_nth(seed, " ", 15, "\n");
-  boost::replace_nth(seed, " ", 7, "\n");
+  size_t n_spaces = 0;
+  for (const char c: seed)
+    if (c == ' ')
+      ++n_spaces;
+  if (n_spaces <= 24)
+  {
+    // we don't print newlines for large seeds, so as to not cause a partial seed
+    // to be read when pasted later
+    boost::replace_nth(seed, " ", 15, "\n");
+    boost::replace_nth(seed, " ", 7, "\n");
+  }
   // don't log
   std::cout << seed << std::endl;
 }
@@ -1746,6 +1768,8 @@ static bool might_be_partial_seed(std::string words)
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::init(const boost::program_options::variables_map& vm)
 {
+  std::string multisig_keys;
+
   if (!handle_command_line(vm))
     return false;
 
@@ -1763,16 +1787,19 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
   {
     std::string old_language;
     // check for recover flag.  if present, require electrum word list (only recovery option for now).
-    if (m_restore_deterministic_wallet)
+    if (m_restore_deterministic_wallet || m_restore_multisig_wallet)
     {
       if (m_non_deterministic)
       {
-        fail_msg_writer() << tr("can't specify both --restore-deterministic-wallet and --non-deterministic");
+        fail_msg_writer() << tr("can't specify both --restore-deterministic-wallet or --restore-multisig-wallet and --non-deterministic");
         return false;
       }
       if (!m_wallet_file.empty())
       {
-        fail_msg_writer() << tr("--restore-deterministic-wallet uses --generate-new-wallet, not --wallet-file");
+        if (m_restore_multisig_wallet)
+          fail_msg_writer() << tr("--restore-multisig-wallet uses --generate-new-wallet, not --wallet-file");
+        else
+          fail_msg_writer() << tr("--restore-deterministic-wallet uses --generate-new-wallet, not --wallet-file");
         return false;
       }
 
@@ -1794,7 +1821,12 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
         } while (might_be_partial_seed(m_electrum_seed));
       }
 
-      if (!crypto::ElectrumWords::words_to_bytes(m_electrum_seed, m_recovery_key, old_language))
+      bool r;
+      if (m_restore_multisig_wallet)
+        r = crypto::ElectrumWords::words_to_bytes(m_electrum_seed, multisig_keys, 0, false, old_language);
+      else
+        r = crypto::ElectrumWords::words_to_bytes(m_electrum_seed, m_recovery_key, old_language);
+      if (!r)
       {
         fail_msg_writer() << tr("Electrum-style word list failed verification");
         return false;
@@ -1805,7 +1837,12 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
         return false;
       std::string seed_pass = pwd_container->password();
       if (!seed_pass.empty())
-        m_recovery_key = cryptonote::decrypt_key(m_recovery_key, seed_pass);
+      {
+        if (m_restore_multisig_wallet)
+          multisig_keys = cryptonote::decrypt_data_deterministic(multisig_keys, seed_pass);
+        else
+          m_recovery_key = cryptonote::decrypt_key(m_recovery_key, seed_pass);
+      }
     }
     if (!m_generate_from_view_key.empty())
     {
@@ -2089,7 +2126,11 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
         return false;
       }
       m_wallet_file = m_generate_new;
-      bool r = new_wallet(vm, m_recovery_key, m_restore_deterministic_wallet, m_non_deterministic, old_language);
+      bool r;
+      if (m_restore_multisig_wallet)
+        r = new_wallet(vm, multisig_keys, old_language);
+      else
+        r = new_wallet(vm, m_recovery_key, m_restore_deterministic_wallet, m_non_deterministic, old_language);
       CHECK_AND_ASSERT_MES(r, false, tr("account creation failed"));
     }
     if (!m_restore_height && m_restoring)
@@ -2209,6 +2250,7 @@ bool simple_wallet::handle_command_line(const boost::program_options::variables_
   m_mnemonic_language             = command_line::get_arg(vm, arg_mnemonic_language);
   m_electrum_seed                 = command_line::get_arg(vm, arg_electrum_seed);
   m_restore_deterministic_wallet  = command_line::get_arg(vm, arg_restore_deterministic_wallet);
+  m_restore_multisig_wallet       = command_line::get_arg(vm, arg_restore_multisig_wallet);
   m_non_deterministic             = command_line::get_arg(vm, arg_non_deterministic);
   m_trusted_daemon                = command_line::get_arg(vm, arg_trusted_daemon);
   m_allow_mismatched_daemon_version = command_line::get_arg(vm, arg_allow_mismatched_daemon_version);
@@ -2218,7 +2260,8 @@ bool simple_wallet::handle_command_line(const boost::program_options::variables_
                                     !m_generate_from_keys.empty() ||
                                     !m_generate_from_multisig_keys.empty() ||
                                     !m_generate_from_json.empty() ||
-                                    m_restore_deterministic_wallet;
+                                    m_restore_deterministic_wallet ||
+                                    m_restore_multisig_wallet;
 
   return true;
 }
@@ -2413,6 +2456,49 @@ bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
     return false;
   }
 
+
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::new_wallet(const boost::program_options::variables_map& vm,
+    const std::string &multisig_keys, const std::string &old_language)
+{
+  auto rc = tools::wallet2::make_new(vm);
+  m_wallet = std::move(rc.first);
+  if (!m_wallet)
+  {
+    return false;
+  }
+
+  std::string mnemonic_language = old_language;
+
+  std::vector<std::string> language_list;
+  crypto::ElectrumWords::get_language_list(language_list);
+  if (mnemonic_language.empty() && std::find(language_list.begin(), language_list.end(), m_mnemonic_language) != language_list.end())
+  {
+    mnemonic_language = m_mnemonic_language;
+  }
+
+  m_wallet->set_seed_language(mnemonic_language);
+
+  try
+  {
+    m_wallet->generate(m_wallet_file, std::move(rc.second).password(), multisig_keys);
+    bool ready;
+    uint32_t threshold, total;
+    if (!m_wallet->multisig(&ready, &threshold, &total) || !ready)
+    {
+      fail_msg_writer() << tr("failed to generate new mutlisig wallet");
+      return false;
+    }
+    message_writer(console_color_white, true) << boost::format(tr("Generated new %u/%u multisig wallet: ")) % threshold % total
+      << m_wallet->get_account().get_public_address_str(m_wallet->testnet());
+  }
+  catch (const std::exception& e)
+  {
+    fail_msg_writer() << tr("failed to generate new wallet: ") << e.what();
+    return false;
+  }
 
   return true;
 }
@@ -6250,6 +6336,7 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_params, arg_command);
 
   command_line::add_arg(desc_params, arg_restore_deterministic_wallet );
+  command_line::add_arg(desc_params, arg_restore_multisig_wallet );
   command_line::add_arg(desc_params, arg_non_deterministic );
   command_line::add_arg(desc_params, arg_electrum_seed );
   command_line::add_arg(desc_params, arg_trusted_daemon);
