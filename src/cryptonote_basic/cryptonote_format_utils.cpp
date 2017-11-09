@@ -1053,5 +1053,24 @@ namespace cryptonote
     sc_sub((unsigned char*)key.data, (const unsigned char*)key.data, (const unsigned char*)hash.data);
     return key;
   }
-
+  //---------------------------------------------------------------
+  std::string encrypt_data_deterministic(const std::string &plaintext, const std::string &passphrase)
+  {
+    crypto::chacha8_iv iv;
+    memset(&iv, 0, sizeof(iv));
+    std::string ciphertext;
+    ciphertext.resize(plaintext.size());
+    static_assert(HASH_SIZE == sizeof(crypto::hash), "Bad hash size");
+    static_assert(HASH_SIZE == CHACHA8_KEY_SIZE, "chacha8 key size does not match hash size");
+    unsigned char key[HASH_SIZE];
+    crypto::cn_slow_hash(passphrase.data(), passphrase.size(), (char*)key);
+    sc_reduce32(key);
+    crypto::chacha8(&plaintext[0], plaintext.size(), key, iv.data, &ciphertext[0]);
+    return ciphertext;
+  }
+  //---------------------------------------------------------------
+  std::string decrypt_data_deterministic(const std::string &ciphertext, const std::string &passphrase)
+  {
+    return encrypt_data_deterministic(ciphertext, passphrase);
+  }
 }
