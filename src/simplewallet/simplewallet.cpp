@@ -60,6 +60,7 @@
 #include "rapidjson/document.h"
 #include "common/json_util.h"
 #include "ringct/rctSigs.h"
+#include "multisig/multisig.h"
 #include "wallet/wallet_args.h"
 #include <stdexcept>
 
@@ -616,11 +617,11 @@ bool simple_wallet::make_multisig(const std::vector<std::string> &args)
   }
 
   // people may include their own, weed it out
-  crypto::hash hash;
-  crypto::cn_fast_hash(&m_wallet->get_account().get_keys().m_view_secret_key, sizeof(crypto::secret_key), hash);
+  const crypto::secret_key local_skey = cryptonote::get_multisig_blinded_secret_key(m_wallet->get_account().get_keys().m_view_secret_key);
+  const crypto::public_key local_pkey = m_wallet->get_multisig_signer_public_key(m_wallet->get_account().get_keys().m_spend_secret_key);
   for (size_t i = 0; i < secret_keys.size(); ++i)
   {
-    if (rct::sk2rct(secret_keys[i]) == rct::hash2rct(hash))
+    if (secret_keys[i] == local_skey)
     {
       message_writer() << tr("Local key is present, ignoring");
       secret_keys[i] = secret_keys.back();
@@ -629,7 +630,7 @@ bool simple_wallet::make_multisig(const std::vector<std::string> &args)
       public_keys.pop_back();
       --i;
     }
-    else if (public_keys[i] == m_wallet->get_account().get_keys().m_account_address.m_spend_public_key)
+    else if (public_keys[i] == local_pkey)
     {
       fail_msg_writer() << tr("Found local spend public key, but not local view secret key - something very weird");
       return true;

@@ -2772,9 +2772,21 @@ std::string wallet2::make_multisig(const std::string &password,
   return extra_multisig_info;
 }
 
-bool wallet2::finalize_multisig(const std::string &password, const std::unordered_set<crypto::public_key> &pkeys, const std::vector<crypto::public_key> &signers)
+bool wallet2::finalize_multisig(const std::string &password, std::unordered_set<crypto::public_key> pkeys, std::vector<crypto::public_key> signers)
 {
   CHECK_AND_ASSERT_THROW_MES(!pkeys.empty(), "empty pkeys");
+
+  // add ours if not included
+  const crypto::public_key local_signer = get_multisig_signer_public_key();
+  if (std::find(signers.begin(), signers.end(), local_signer) == signers.end())
+  {
+    signers.push_back(local_signer);
+    for (const auto &msk: get_account().get_multisig_keys())
+    {
+      pkeys.insert(rct::rct2pk(rct::scalarmultBase(rct::sk2rct(msk))));
+    }
+  }
+
   CHECK_AND_ASSERT_THROW_MES(signers.size() == m_multisig_signers.size(), "Bad signers size");
 
   crypto::public_key spend_public_key = cryptonote::generate_multisig_N1_N_spend_public_key(std::vector<crypto::public_key>(pkeys.begin(), pkeys.end()));
