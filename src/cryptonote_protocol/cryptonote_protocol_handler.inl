@@ -338,7 +338,10 @@ namespace cryptonote
   {
     MLOG_P2P_MESSAGE("Received NOTIFY_NEW_BLOCK (hop " << arg.hop << ", " << arg.b.txs.size() << " txes)");
     if(context.m_state != cryptonote_connection_context::state_normal)
+    {
+      MDEBUG("Not in normal state, leaving");
       return 1;
+    }
     if(!is_synchronized()) // can happen if a peer connection goes to normal but another thread still hasn't finished adding queued blocks
     {
       LOG_DEBUG_CC(context, "Received new block while syncing, ignored");
@@ -347,10 +350,13 @@ namespace cryptonote
     m_core.pause_mine();
     std::list<block_complete_entry> blocks;
     blocks.push_back(arg.b);
+    MGINFO("calling prepare_handle_incoming_blocks");
     m_core.prepare_handle_incoming_blocks(blocks);
+    MGINFO("calling handle_incoming_tx loop");
     for(auto tx_blob_it = arg.b.txs.begin(); tx_blob_it!=arg.b.txs.end();tx_blob_it++)
     {
       cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
+      MGINFO("calling handle_incoming_tx");
       m_core.handle_incoming_tx(*tx_blob_it, tvc, true, true, false);
       if(tvc.m_verifivation_failed)
       {
@@ -363,6 +369,7 @@ namespace cryptonote
     }
 
     block_verification_context bvc = boost::value_initialized<block_verification_context>();
+      MGINFO("calling handle_incoming_block");
     m_core.handle_incoming_block(arg.b.block, bvc); // got block from handle_notify_new_block
     if (!m_core.cleanup_handle_incoming_blocks(true))
     {

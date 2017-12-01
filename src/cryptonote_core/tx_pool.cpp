@@ -110,6 +110,7 @@ namespace cryptonote
     // this should already be called with that lock, but let's make it explicit for clarity
     CRITICAL_REGION_LOCAL(m_transactions_lock);
 
+      MGINFO("tx_memory_pool::add_tx called for " << id << ", kept_by_block " << kept_by_block);
     PERF_TIMER(add_tx);
     if (tx.version == 0)
     {

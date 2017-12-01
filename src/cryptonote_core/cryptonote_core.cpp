@@ -592,6 +592,7 @@ namespace cryptonote
     struct result { bool res; cryptonote::transaction tx; crypto::hash hash; crypto::hash prefix_hash; bool in_txpool; bool in_blockchain; };
     std::vector<result> results(tx_blobs.size());
 
+    MGINFO("handle_incoming_txs called with " << tx_blobs.size() << " txes");
     tvc.resize(tx_blobs.size());
     tools::task_region(m_threadpool, [&] (tools::task_region_handle& region) {
       std::list<blobdata>::const_iterator it = tx_blobs.begin();
@@ -599,7 +600,9 @@ namespace cryptonote
         region.run([&, i, it] {
           try
           {
+            MGINFO("processing tx #" << i);
             results[i].res = handle_incoming_tx_pre(*it, tvc[i], results[i].tx, results[i].hash, results[i].prefix_hash, keeped_by_block, relayed, do_not_relay);
+            MGINFO("processed tx #" << i << ": " << results[i].res << ", " << results[i].hash);
           }
           catch (const std::exception &e)
           {
@@ -609,6 +612,7 @@ namespace cryptonote
         });
       }
     });
+    MGINFO("handle_incoming_txs pre step done");
     tools::task_region(m_threadpool, [&] (tools::task_region_handle& region) {
       std::list<blobdata>::const_iterator it = tx_blobs.begin();
       for (size_t i = 0; i < tx_blobs.size(); i++, ++it) {
@@ -616,11 +620,11 @@ namespace cryptonote
           continue;
         if(m_mempool.have_tx(results[i].hash))
         {
-          LOG_PRINT_L2("tx " << results[i].hash << "already have transaction in tx_pool");
+          LOG_PRINT_L1("tx " << results[i].hash << "already have transaction in tx_pool");
         }
         else if(m_blockchain_storage.have_tx(results[i].hash))
         {
-          LOG_PRINT_L2("tx " << results[i].hash << " already have transaction in blockchain");
+          LOG_PRINT_L1("tx " << results[i].hash << " already have transaction in blockchain");
         }
         else
         {
@@ -638,12 +642,14 @@ namespace cryptonote
         }
       }
     });
+    MGINFO("handle_incoming_txs post step done");
 
     bool ok = true;
     std::list<blobdata>::const_iterator it = tx_blobs.begin();
     for (size_t i = 0; i < tx_blobs.size(); i++, ++it) {
       if (!results[i].res)
       {
+        MGINFO("Not adding tx #" << i);
         ok = false;
         continue;
       }
