@@ -27,6 +27,10 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
+include(CheckLibraryExists)
+
 if (IOS)
     INCLUDE(CmakeLists_IOS.txt)
 endif()
@@ -47,6 +51,30 @@ function (die msg)
 
   message(FATAL_ERROR "${BoldRed}${msg}${ColourReset}")
 endfunction ()
+
+function (add_c_flag_if_supported flag var)
+  string(REPLACE "-" "_" supported ${flag}_c)
+  check_c_compiler_flag(${flag} ${supported})
+  if(${supported})
+    set(${var} "${${var}} ${flag}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function (add_cxx_flag_if_supported flag var)
+  string(REPLACE "-" "_" supported ${flag}_cxx)
+  check_cxx_compiler_flag(${flag} ${supported})
+  if(${supported})
+    set(${var} "${${var}} ${flag}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function (add_linker_flag_if_supported flag var)
+  string(REPLACE "-" "_" supported ${flag}_ld)
+  check_cxx_compiler_flag(${flag} ${supported}) # cheat
+  if(${supported})
+    set(${var} "${${var}} ${flag}" PARENT_SCOPE)
+  endif()
+endfunction()
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -470,6 +498,32 @@ else()
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-strict-aliasing")
 
+  # if those don't work for your compiler, single it out where appropriate
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(C_SECURITY_FLAGS "${C_SECURITY_FLAGS} -D_FORTIFY_SOURCE=1")
+    set(CXX_SECURITY_FLAGS "${CXX_SECURITY_FLAGS} -D_FORTIFY_SOURCE=1")
+  endif()
+
+  # warnings
+  add_c_flag_if_supported(-Wformat C_SECURITY_FLAGS)
+  add_cxx_flag_if_supported(-Wformat CXX_SECURITY_FLAGS)
+  add_c_flag_if_supported(-Wformat-security C_SECURITY_FLAGS)
+  add_cxx_flag_if_supported(-Wformat-security CXX_SECURITY_FLAGS)
+
+  # -fstack-protector
+  add_c_flag_if_supported(-fstack-protector C_SECURITY_FLAGS)
+  add_cxx_flag_if_supported(-fstack-protector CXX_SECURITY_FLAGS)
+  add_c_flag_if_supported(-fstack-protector-strong C_SECURITY_FLAGS)
+  add_cxx_flag_if_supported(-fstack-protector-strong CXX_SECURITY_FLAGS)
+
+  # linker
+  add_linker_flag_if_supported(-Wl,-z,relro LD_SECURITY_FLAGS)
+  add_linker_flag_if_supported(-Wl,-z,now LD_SECURITY_FLAGS)
+
+  message(STATUS "Using C security hardening flags: ${C_SECURITY_FLAGS}")
+  message(STATUS "Using C++ security hardening flags: ${CXX_SECURITY_FLAGS}")
+  message(STATUS "Using linker security hardening flags: ${LD_SECURITY_FLAGS}")
+
   option(NO_AES "Explicitly disable AES support" ${NO_AES})
 
   if(NO_AES)
@@ -498,8 +552,9 @@ else()
     message(STATUS "AES support disabled")
   endif()
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_FLAG} ${WARNINGS} ${C_WARNINGS} ${ARCH_FLAG} ${COVERAGE_FLAGS} ${PIC_FLAG}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_CPP_FLAG} ${WARNINGS} ${CXX_WARNINGS} ${ARCH_FLAG} ${COVERAGE_FLAGS} ${PIC_FLAG}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_FLAG} ${WARNINGS} ${C_WARNINGS} ${ARCH_FLAG} ${COVERAGE_FLAGS} ${PIC_FLAG} ${C_SECURITY_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -D_GNU_SOURCE ${MINGW_FLAG} ${STATIC_ASSERT_CPP_FLAG} ${WARNINGS} ${CXX_WARNINGS} ${ARCH_FLAG} ${COVERAGE_FLAGS} ${PIC_FLAG} ${CXX_SECURITY_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LD_SECURITY_FLAGS}")
 
   # With GCC 6.1.1 the compiled binary malfunctions due to aliasing. Until that
   # is fixed in the code (Issue #847), force compiler to be conservative.
@@ -778,11 +833,7 @@ option(BUILD_GUI_DEPS "Build GUI dependencies." OFF)
 option(INSTALL_VENDORED_LIBUNBOUND "Install libunbound binary built from source vendored with this repo." OFF)
 
 
-include(CheckCCompilerFlag)
-
 CHECK_C_COMPILER_FLAG(-std=c11 HAVE_C11)
-
-include(CheckLibraryExists)
 
 check_library_exists(c memset_s "string.h" HAVE_MEMSET_S)
 check_library_exists(c explicit_bzero "strings.h" HAVE_EXPLICIT_BZERO)
