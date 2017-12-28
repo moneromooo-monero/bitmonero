@@ -519,6 +519,11 @@ else()
   # linker
   add_linker_flag_if_supported(-Wl,-z,relro LD_SECURITY_FLAGS)
   add_linker_flag_if_supported(-Wl,-z,now LD_SECURITY_FLAGS)
+  add_linker_flag_if_supported(-Wl,-z,noexecstack noexecstack_SUPPORTED)
+  if (NOT noexecstack_SUPPORTED STREQUAL "")
+    set(LD_SECURITY_FLAGS "${LD_SECURITY_FLAGS} -Wl,-z,noexecstack")
+    set(LD_RAW_FLAGS ${LD_RAW_FLAGS} -z noexecstack)
+  endif()
 
   message(STATUS "Using C security hardening flags: ${C_SECURITY_FLAGS}")
   message(STATUS "Using C++ security hardening flags: ${CXX_SECURITY_FLAGS}")
