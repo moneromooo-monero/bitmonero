@@ -527,6 +527,12 @@ else()
     set(LD_RAW_FLAGS ${LD_RAW_FLAGS} -z noexecstack)
   endif()
 
+  # some windows linker bits
+  if (WIN32)
+    add_linker_flag_if_supported(-Wl,dynamicbase LD_SECURITY_FLAGS)
+    add_linker_flag_if_supported(-Wl,nxcompat LD_SECURITY_FLAGS)
+  endif()
+
   message(STATUS "Using C security hardening flags: ${C_SECURITY_FLAGS}")
   message(STATUS "Using C++ security hardening flags: ${CXX_SECURITY_FLAGS}")
   message(STATUS "Using linker security hardening flags: ${LD_SECURITY_FLAGS}")
