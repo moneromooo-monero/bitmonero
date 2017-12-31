@@ -521,7 +521,10 @@ else()
   add_cxx_flag_if_supported(-fstack-protector-strong CXX_SECURITY_FLAGS)
 
   # linker
-  add_linker_flag_if_supported(-pie LD_SECURITY_FLAGS)
+  if (NOT WIN32)
+    # Windows binaries die on startup with PIE
+    add_linker_flag_if_supported(-pie LD_SECURITY_FLAGS)
+  endif()
   add_linker_flag_if_supported(-Wl,-z,relro LD_SECURITY_FLAGS)
   add_linker_flag_if_supported(-Wl,-z,now LD_SECURITY_FLAGS)
   add_linker_flag_if_supported(-Wl,-z,noexecstack noexecstack_SUPPORTED)
