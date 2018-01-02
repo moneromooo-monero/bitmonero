@@ -32,6 +32,8 @@
 
 #include "ringct/rctOps.h"
 #include "ringct/bulletproofs.h"
+#include "string_tools.h"
+#include "common/int-util.h"
 
 TEST(bulletproofs, valid_zero)
 {
@@ -50,6 +52,48 @@ TEST(bulletproofs, valid_random)
   for (int n = 0; n < 8; ++n)
   {
     rct::Bulletproof proof = bulletproof_PROVE(crypto::rand<uint64_t>(), rct::skGen());
+    ASSERT_TRUE(rct::bulletproof_VERIFY(proof));
+  }
+}
+
+TEST(bulletproofs, valid_from_java)
+{
+    std::vector<uint64_t> amounts;
+    rct::keyV gamma;
+
+    static const struct { uint64_t amount; const char *gamma; } data[] = {
+      {0xd553cbaa8fbe4a56, "ac7aaea20ddffbf5965db5b4e8fe33fed96803d0ada2a5917d16a4e8da29fa0d"},
+      {0xb016438ce1f9f135, "c760a2dedb5f211bbb73c7ae52f8776fcc1696f2f7672fc23f3b5edbff5fbe01"},
+      {0xeb479973bda06747, "86fe729c891af730a54033c485d5b750f5db222011736856ad4d24fed2f13d07"},
+      {0x1877d8c5badaeb3f, "b19556c80765790efad28e4beabe4819da77776ae2e05cb719acacf12feb7601"},
+    };
+    for (const auto &x: data)
+    {
+      amounts.push_back(swap64(x.amount));
+      rct::key g;
+      ASSERT_TRUE(epee::string_tools::hex_to_pod(x.gamma, g));
+      gamma.push_back(g);
+    }
+
+    rct::Bulletproof proof = bulletproof_PROVE(amounts, gamma);
+    ASSERT_TRUE(rct::bulletproof_VERIFY(proof));
+}
+
+TEST(bulletproofs, valid_multi_random)
+{
+  for (int n = 0; n < 8; ++n)
+  {
+    size_t outputs = 1 << (crypto::rand<size_t>() % 4);
+outputs = 2;
+std::cout << "using " << outputs << " outputs" << std::endl;
+    std::vector<uint64_t> amounts;
+    rct::keyV gamma;
+    for (size_t i = 0; i < outputs; ++i)
+    {
+      amounts.push_back(crypto::rand<uint64_t>());
+      gamma.push_back(rct::skGen());
+    }
+    rct::Bulletproof proof = bulletproof_PROVE(amounts, gamma);
     ASSERT_TRUE(rct::bulletproof_VERIFY(proof));
   }
 }
