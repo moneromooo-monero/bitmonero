@@ -32,6 +32,12 @@
 
 #include "ringct/rctOps.h"
 #include "ringct/bulletproofs.h"
+#include "misc_log_ex.h"
+
+namespace rct {
+Bulletproof bulletproof_PROVE2(const rct::keyV &v, const rct::keyV &gamma);
+Bulletproof bulletproof_PROVE2(const std::vector<uint64_t> &v, const rct::keyV &gamma);
+}
 
 TEST(bulletproofs, valid_zero)
 {
@@ -53,6 +59,24 @@ TEST(bulletproofs, valid_random)
     ASSERT_TRUE(rct::bulletproof_VERIFY(proof));
   }
 }
+
+TEST(bulletproofs, valid_multi_random)
+{
+  for (int n = 0; n < 8; ++n)
+  {
+    size_t outputs = 2 + n;
+    std::vector<uint64_t> amounts;
+    rct::keyV gamma;
+    for (size_t i = 0; i < outputs; ++i)
+    {
+      amounts.push_back(crypto::rand<uint64_t>());
+      gamma.push_back(rct::skGen());
+    }
+    rct::Bulletproof proof = bulletproof_PROVE(amounts, gamma);
+    ASSERT_TRUE(rct::bulletproof_VERIFY(proof));
+  }
+}
+
 
 TEST(bulletproofs, invalid_8)
 {
