@@ -50,6 +50,7 @@
 #include "subaddress_expand.h"
 #include "sc_reduce32.h"
 #include "cn_fast_hash.h"
+#include "range_proof.h"
 
 namespace po = boost::program_options;
 
@@ -157,6 +158,9 @@ int main(int argc, char** argv)
   TEST_PERFORMANCE0(filter, test_cn_slow_hash);
   TEST_PERFORMANCE1(filter, test_cn_fast_hash, 32);
   TEST_PERFORMANCE1(filter, test_cn_fast_hash, 16384);
+
+  TEST_PERFORMANCE1(filter, test_range_proof, true);
+  TEST_PERFORMANCE1(filter, test_range_proof, false);
 
   std::cout << "Tests finished. Elapsed time: " << timer.elapsed_ms() / 1000 << " sec" << std::endl;
 
