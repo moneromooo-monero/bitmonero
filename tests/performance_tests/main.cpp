@@ -55,7 +55,6 @@ int main(int argc, char** argv)
   set_thread_high_priority();
 
   mlog_configure(mlog_get_default_log_path("performance_tests.log"), true);
-  mlog_set_log_level(0);
 
   performance_timer timer;
   timer.start();
