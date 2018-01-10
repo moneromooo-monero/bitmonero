@@ -320,6 +320,7 @@ else()
   if(LIBUNWIND_FOUND)
     set(DEFAULT_STACK_TRACE ON)
     set(STACK_TRACE_LIB "libunwind") # for diag output only
+    add_definitions("-DUSE_UNWIND=1")
   else()
     set(DEFAULT_STACK_TRACE OFF)
     set(LIBUNWIND_LIBRARIES "")
