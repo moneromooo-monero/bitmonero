@@ -128,6 +128,7 @@ static const struct {
 
   { 6, 971400, 0, 1501709789 },
   { 7, 1057028, 0, 1512211236 },
+  { 8, 1057058, 0, 1515967497 },
 };
 static const uint64_t testnet_hard_fork_version_1_till = 624633;
 
@@ -2395,11 +2396,11 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
     }
   }
 
-  // from v7, allow bulletproofs
-  if (hf_version < 7 || !m_testnet) {
+  // from v8, allow bulletproofs
+  if (hf_version < 8) {
     if (!tx.rct_signatures.p.bulletproofs.empty())
     {
-      MERROR("Bulletproofs are not allowed before v7 or on mainnet");
+      MERROR("Bulletproofs are not allowed before v8");
       tvc.m_invalid_output = true;
       return false;
     }
