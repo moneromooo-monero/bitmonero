@@ -226,6 +226,7 @@ namespace rct {
       RCTTypeFullBulletproof = 3,
       RCTTypeSimpleBulletproof = 4,
     };
+    enum RangeProofType { RangeProofBorromean, RangeProofBulletproof, RangeProofMultiOutputBulletproof };
     struct rctSigBase {
         uint8_t type;
         key message;
