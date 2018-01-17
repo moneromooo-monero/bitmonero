@@ -405,7 +405,7 @@ namespace nodetool
       memcpy(&m_network_id, &::config::testnet::NETWORK_ID, 16);
       full_addrs = get_seed_nodes(true);
     }
-    else
+    else if (m_exclusive_peers.empty())
     {
       memcpy(&m_network_id, &::config::NETWORK_ID, 16);
       // for each hostname in the seed nodes list, attempt to DNS resolve and
