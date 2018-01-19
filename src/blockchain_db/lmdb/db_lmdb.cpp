@@ -1311,6 +1311,79 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
       return;
     }
 #endif
+
+#if 1
+    if ((result = mdb_stat(txn, m_txs_prunable_hash, &db_stats)) && result != MDB_NOTFOUND)
+      throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable_hash: ", result).c_str()));
+    txn.commit();
+    m_open = true;
+
+    if (result == MDB_NOTFOUND || db_stats.ms_entries == 0)
+    {
+      MGINFO("Adding prunable hash table");
+      mdb_txn_safe txn(false);
+      result = mdb_txn_begin(m_env, NULL, 0, txn);
+      if (result)
+        throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+      MDB_stat db_stats_txs_prunable;
+      MDB_stat db_stats_txs_prunable_hash;
+      if ((result = mdb_stat(txn, m_txs_prunable, &db_stats_txs_prunable)))
+        throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable: ", result).c_str()));
+      if ((result = mdb_stat(txn, m_txs_prunable_hash, &db_stats_txs_prunable_hash)))
+        throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable_hash: ", result).c_str()));
+
+      MDB_cursor *c_old, *c_cur0;
+      uint32_t i = 0;
+
+      while(1) {
+        if (!(i % 1000)) {
+          if (i) {
+            txn.commit();
+            result = mdb_txn_begin(m_env, NULL, 0, txn);
+            if (result)
+              throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+          }
+          result = mdb_cursor_open(txn, m_txs_prunable_hash, &c_cur0);
+          if (result)
+            throw0(DB_ERROR(lmdb_error("Failed to open a cursor for txs_prunable_hash: ", result).c_str()));
+          result = mdb_cursor_open(txn, m_txs_prunable, &c_old);
+          if (result)
+            throw0(DB_ERROR(lmdb_error("Failed to open a cursor for txs: ", result).c_str()));
+          if (!i) {
+            i = db_stats_txs_prunable_hash.ms_entries;
+          }
+        }
+        MDB_val_set(k, i);
+        result = mdb_cursor_get(c_old, &k, &v, MDB_SET);
+        if (result == MDB_NOTFOUND) {
+          txn.commit();
+          break;
+        }
+        else if (result)
+          throw0(DB_ERROR(lmdb_error("Failed to get a record from txs: ", result).c_str()));
+
+        crypto::hash prunable_hash;
+        cryptonote::blobdata bd;
+        bd.assign(reinterpret_cast<char*>(v.mv_data), v.mv_size);
+        cryptonote::get_blob_hash(bd, prunable_hash);
+
+        transaction tx;
+        if (!parse_and_validate_tx_base_from_blob(bd, tx))
+          throw0(DB_ERROR("Failed to parse tx base from blob retrieved from the db"));
+
+        if (tx.version > 1)
+        {
+          MDB_val_set(val_prunable_hash, prunable_hash);
+          result = mdb_cursor_put(c_cur0, (MDB_val *)&k, &val_prunable_hash, 0);
+          if (result)
+            throw0(DB_ERROR(lmdb_error("Failed to put a record into txs_prunable_hash: ", result).c_str()));
+        }
+
+        i++;
+      } while(0);
+    }
+    return;
+#endif
   }
   else
   {
