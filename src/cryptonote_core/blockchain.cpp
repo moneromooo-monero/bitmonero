@@ -2301,6 +2301,7 @@ void Blockchain::on_new_tx_from_block(const cryptonote::transaction &tx)
   {
     TIME_MEASURE_START(a);
     m_blocks_txs_check.push_back(get_transaction_hash(tx));
+MINFO("Adding new tx from block: " << get_transaction_hash(tx) << ", now " << m_blocks_txs_check.size() << " txids in vector");
     TIME_MEASURE_FINISH(a);
     if(m_show_time_stats)
     {
@@ -3331,6 +3332,7 @@ leave:
 // XXX old code adds miner tx here
 
   size_t tx_index = 0;
+MINFO("Going through " << bl.tx_hashes.size() << " txes");
   // Iterate over the block's transaction hashes, grabbing each
   // from the tx_pool and validating them.  Each is then added
   // to txs.  Keys spent in each are added to <keys> by the double spend check.
@@ -3412,6 +3414,7 @@ leave:
     {
       // ND: if fast_check is enabled for blocks, there is no need to check
       // the transaction inputs, but do some sanity checks anyway.
+      MINFO("checking m_blocks_txs_check, size " <<m_blocks_txs_check.size() << ", tx_index " << tx_index << ", tx_id " << tx_id << ", el " << (tx_index >= m_blocks_txs_check.size() ? "-" : epee::string_tools::pod_to_hex(m_blocks_txs_check[tx_index])));
       if (tx_index >= m_blocks_txs_check.size() || memcmp(&m_blocks_txs_check[tx_index++], &tx_id, sizeof(tx_id)) != 0)
       {
         MERROR_VER("Block with id: " << id << " has at least one transaction (id: " << tx_id << ") with wrong inputs.");
@@ -3430,6 +3433,7 @@ leave:
     cumulative_block_size += blob_size;
   }
 
+  MINFO("clearing m_blocks_txs_check");
   m_blocks_txs_check.clear();
 
   TIME_MEASURE_START(vmt);
@@ -3709,6 +3713,7 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
   TIME_MEASURE_FINISH(t1);
   m_blocks_longhash_table.clear();
   m_scan_table.clear();
+  MINFO("clearing m_blocks_txs_check");
   m_blocks_txs_check.clear();
   m_check_txin_table.clear();
 
