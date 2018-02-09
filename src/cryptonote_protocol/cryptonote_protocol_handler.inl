@@ -450,6 +450,10 @@ namespace cryptonote
       transaction tx;
       crypto::hash tx_hash;
 
+      std::list<block_complete_entry> blocks;
+      blocks.push_back(arg.b);
+      m_core.prepare_handle_incoming_blocks(blocks);
+
       for(auto& tx_blob: arg.b.txs)
       {
         if(parse_and_validate_tx_from_blob(tx_blob, tx))
@@ -465,6 +469,7 @@ namespace cryptonote
               );
               
               drop_connection(context, false, false);
+              m_core.cleanup_handle_incoming_blocks();
               m_core.resume_mine();
               return 1;
             }
@@ -479,6 +484,7 @@ namespace cryptonote
             );
                         
             drop_connection(context, false, false);
+            m_core.cleanup_handle_incoming_blocks();
             m_core.resume_mine();
             return 1;
           }
@@ -503,6 +509,7 @@ namespace cryptonote
               );
               
               drop_connection(context, false, false);
+              m_core.cleanup_handle_incoming_blocks();
               m_core.resume_mine();
               return 1;
             }
@@ -520,6 +527,7 @@ namespace cryptonote
             {
               LOG_PRINT_CCONTEXT_L1("Block verification failed: transaction verification failed, dropping connection");
               drop_connection(context, false, false);
+              m_core.cleanup_handle_incoming_blocks();
               m_core.resume_mine();
               return 1;
             }
@@ -542,6 +550,7 @@ namespace cryptonote
           );
             
           drop_connection(context, false, false);
+          m_core.cleanup_handle_incoming_blocks();
           m_core.resume_mine();
           return 1;
         }
@@ -562,6 +571,7 @@ namespace cryptonote
         );
         
         drop_connection(context, false, false);
+        m_core.cleanup_handle_incoming_blocks();
         m_core.resume_mine();
         return 1;
       }      
@@ -589,6 +599,7 @@ namespace cryptonote
             else
             {
               MERROR("1 tx requested, none not found, but " << txes.size() << " returned");
+              m_core.cleanup_handle_incoming_blocks();
               m_core.resume_mine();
               return 1;
             }
@@ -625,15 +636,12 @@ namespace cryptonote
         b.block = arg.b.block;
         b.txs = have_tx;
 
-        std::list<block_complete_entry> blocks;
-        blocks.push_back(b);
-        m_core.prepare_handle_incoming_blocks(blocks);
-          
         block_verification_context bvc = boost::value_initialized<block_verification_context>();
         m_core.handle_incoming_block(arg.b.block, bvc); // got block from handle_notify_new_block
         if (!m_core.cleanup_handle_incoming_blocks(true))
         {
           LOG_PRINT_CCONTEXT_L0("Failure in cleanup_handle_incoming_blocks");
+          m_core.cleanup_handle_incoming_blocks();
           m_core.resume_mine();
           return 1;
         }
@@ -643,6 +651,7 @@ namespace cryptonote
         {
           LOG_PRINT_CCONTEXT_L0("Block verification failed, dropping connection");
           drop_connection(context, true, false);
+          m_core.cleanup_handle_incoming_blocks();
           return 1;
         }
         if( bvc.m_added_to_main_chain )
@@ -662,6 +671,7 @@ namespace cryptonote
           post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
         }            
       }
+      m_core.cleanup_handle_incoming_blocks();
     } 
     else
     {
@@ -673,6 +683,7 @@ namespace cryptonote
       );
         
       m_core.resume_mine();
+      m_core.cleanup_handle_incoming_blocks();
       drop_connection(context, false, false);
         
       return 1;     
