@@ -3855,6 +3855,8 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
   bool stop_batch;
   uint64_t bytes = 0;
 
+MGINFO("prepare_handle_incoming_blocks called with " << blocks_entry.size() << " block entries");
+for (const auto &e: blocks_entry) MGINFO("   entry has " << e.txs.size());
   // Order of locking must be:
   //  m_incoming_tx_lock (optional)
   //  m_tx_pool lock
@@ -3874,6 +3876,9 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::list<block_complete_e
 
   if(blocks_entry.size() == 0)
     return false;
+
+  MINFO("possibly clearing m_blocks_txs_check");
+  //m_blocks_txs_check.clear();
 
   for (const auto &entry : blocks_entry)
   {

@@ -673,10 +673,21 @@ namespace cryptonote
     return true;
   }
   //-----------------------------------------------------------------------------------------------
+  static crypto::hash gtxid(const blobdata &b)
+  {
+    crypto::hash tx_hash = crypto::null_hash;
+    crypto::hash tx_prefixt_hash = crypto::null_hash;
+    transaction tx;
+    if (!parse_and_validate_tx_from_blob(b, tx, tx_hash, tx_prefixt_hash))
+      return crypto::null_hash;
+    return tx_hash;
+  }
   bool core::handle_incoming_txs(const std::list<blobdata>& tx_blobs, std::vector<tx_verification_context>& tvc, bool keeped_by_block, bool relayed, bool do_not_relay)
   {
     TRY_ENTRY();
 
+MGINFO("core::handle_incoming_txs called with " << tx_blobs.size() << " tx blobs, keeped_by_block " << keeped_by_block);
+for (const auto &b: tx_blobs) MGINFO("   txid " << gtxid(b));
     struct result { bool res; cryptonote::transaction tx; crypto::hash hash; crypto::hash prefix_hash; bool in_txpool; bool in_blockchain; };
     std::vector<result> results(tx_blobs.size());
 
