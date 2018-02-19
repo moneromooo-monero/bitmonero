@@ -2293,25 +2293,6 @@ bool Blockchain::get_tx_outputs_gindexs(const crypto::hash& tx_id, std::vector<u
   return true;
 }
 //------------------------------------------------------------------
-void Blockchain::on_new_tx_from_block(const cryptonote::transaction &tx)
-{
-#if defined(PER_BLOCK_CHECKPOINT)
-  // check if we're doing per-block checkpointing
-  if (m_db->height() < m_blocks_hash_check.size())
-  {
-    TIME_MEASURE_START(a);
-    m_blocks_txs_check.push_back(get_transaction_hash(tx));
-MINFO("Adding new tx from block: " << get_transaction_hash(tx) << ", now " << m_blocks_txs_check.size() << " txids in vector");
-    TIME_MEASURE_FINISH(a);
-    if(m_show_time_stats)
-    {
-      size_t ring_size = !tx.vin.empty() && tx.vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(tx.vin[0]).key_offsets.size() : 0;
-      MINFO("HASH: " << "-" << " I/M/O: " << tx.vin.size() << "/" << ring_size << "/" << tx.vout.size() << " H: " << 0 << " chcktx: " << a);
-    }
-  }
-#endif
-}
-//------------------------------------------------------------------
 //FIXME: it seems this function is meant to be merely a wrapper around
 //       another function of the same name, this one adding one bit of
 //       functionality.  Should probably move anything more than that
@@ -3409,32 +3390,11 @@ MINFO("Going through " << bl.tx_hashes.size() << " txes");
         goto leave;
       }
     }
-#if defined(PER_BLOCK_CHECKPOINT)
-    else
-    {
-      // ND: if fast_check is enabled for blocks, there is no need to check
-      // the transaction inputs, but do some sanity checks anyway.
-      MINFO("checking m_blocks_txs_check, size " <<m_blocks_txs_check.size() << ", tx_index " << tx_index << ", tx_id " << tx_id << ", el " << (tx_index >= m_blocks_txs_check.size() ? "-" : epee::string_tools::pod_to_hex(m_blocks_txs_check[tx_index])));
-      if (tx_index >= m_blocks_txs_check.size() || memcmp(&m_blocks_txs_check[tx_index++], &tx_id, sizeof(tx_id)) != 0)
-      {
-        MERROR_VER("Block with id: " << id << " has at least one transaction (id: " << tx_id << ") with wrong inputs.");
-        //TODO: why is this done?  make sure that keeping invalid blocks makes sense.
-        add_block_as_invalid(bl, id);
-        MERROR_VER("Block with id " << id << " added as invalid because of wrong inputs in transactions");
-        bvc.m_verifivation_failed = true;
-        return_tx_to_pool(txs);
-        goto leave;
-      }
-    }
-#endif
     TIME_MEASURE_FINISH(cc);
     t_checktx += cc;
     fee_summary += fee;
     cumulative_block_size += blob_size;
   }
-
-  MINFO("clearing m_blocks_txs_check");
-  m_blocks_txs_check.clear();
 
   TIME_MEASURE_START(vmt);
   uint64_t base_reward = 0;
@@ -3713,8 +3673,6 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
   TIME_MEASURE_FINISH(t1);
   m_blocks_longhash_table.clear();
   m_scan_table.clear();
-  MINFO("clearing m_blocks_txs_check");
-  m_blocks_txs_check.clear();
   m_check_txin_table.clear();
 
   // when we're well clear of the precomputed hashes, free the memory
@@ -3876,9 +3834,6 @@ for (const auto &e: blocks_entry) MGINFO("   entry has " << e.txs.size());
 
   if(blocks_entry.size() == 0)
     return false;
-
-  MINFO("possibly clearing m_blocks_txs_check");
-  //m_blocks_txs_check.clear();
 
   for (const auto &entry : blocks_entry)
   {
