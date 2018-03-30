@@ -1034,10 +1034,9 @@ static uint64_t decodeRct(const rct::rctSig & rv, const crypto::key_derivation &
     switch (rv.type)
     {
     case rct::RCTTypeSimple:
-    case rct::RCTTypeSimpleBulletproof:
+    case rct::RCTTypeBulletproof:
       return rct::decodeRctSimple(rv, rct::sk2rct(scalar1), i, mask, hwdev);
     case rct::RCTTypeFull:
-    case rct::RCTTypeFullBulletproof:
       return rct::decodeRct(rv, rct::sk2rct(scalar1), i, mask, hwdev);
     default:
       LOG_ERROR("Unsupported rct type: " << rv.type);
@@ -5104,7 +5103,7 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto
     cryptonote::transaction tx;
     rct::multisig_out msout = ptx.multisig_sigs.front().msout;
     auto sources = sd.sources;
-    const bool bulletproof = sd.use_rct && (ptx.tx.rct_signatures.type == rct::RCTTypeFullBulletproof || ptx.tx.rct_signatures.type == rct::RCTTypeSimpleBulletproof);
+    const bool bulletproof = sd.use_rct && rct::is_rct_bulletproof(ptx.tx.rct_signatures.type);
     rct::RangeProofType range_proof_type = rct::RangeProofBorromean;
     if (bulletproof)
     {

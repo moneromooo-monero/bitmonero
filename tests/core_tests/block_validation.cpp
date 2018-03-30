@@ -577,7 +577,7 @@ bool gen_block_invalid_binary_format::generate(std::vector<test_event_entry>& ev
       return false;
     std::cout << "Block #" << events.size() << ", difficulty: " << diffic << std::endl;
   }
-  while (diffic < 1500);
+  while (diffic < 15);
 
   blk_last = boost::get<block>(events.back());
   MAKE_TX(events, tx_0, miner_account, miner_account, MK_COINS(30), boost::get<block>(events[1]));

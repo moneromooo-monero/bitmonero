@@ -1697,7 +1697,7 @@ namespace hw {
         this->exchange();
 
         //pseudoOuts
-        if ((type == rct::RCTTypeSimple) || (type == rct::RCTTypeSimpleBulletproof)) {
+        if ((type == rct::RCTTypeSimple) || (type == rct::RCTTypeBulletproof)) {
           for ( i = 0; i < inputs_size; i++) {
             reset_buffer();
             this->buffer_send[0] = 0x00;
