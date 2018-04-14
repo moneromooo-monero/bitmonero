@@ -781,11 +781,9 @@ endif()
 if (NOT Boost_VERSION VERSION_LESS 106500 AND USE_BOOST_STACKTRACE)
   set(DEFAULT_STACK_TRACE ON)
   if (MINGW)
-    message("We can use boost_stacktrace_backtrace")
     set(STACK_TRACE_LIBRARIES "-lbacktrace")
     set(STACK_TRACE_LIB "boost/backtrace") # for diag output only
   else()
-    message("We can use boost_stacktrace_basic")
     set(STACK_TRACE_LIBRARIES "")
     set(STACK_TRACE_LIB "boost/basic") # for diag output only
   endif()
