@@ -27,8 +27,10 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef USE_BOOST_STACKTRACE
+#warning USE_BOOST_STACKTRACE defined
 #if defined(__MINGW32__) || defined(__MINGW__)
 #define BOOST_STACKTRACE_USE_BACKTRACE
+#warning BOOST_STACKTRACE_USE_BACKTRACE defined
 #endif
 #include <boost/stacktrace.hpp>
 #elif defined USE_EASYLOGGING_STACKTRACE
@@ -55,6 +57,7 @@
 #define ST_LOG(x) CINFO(el::base::Writer,el::base::DispatchAction::FileOnlyLog,MONERO_DEFAULT_LOG_CATEGORY) << x
 
 #ifdef STACK_TRACE_ON_EXCEPTIONS
+#warning STACK_TRACE_ON_EXCEPTIONS defined
 
 // from http://stackoverflow.com/questions/11665829/how-can-i-print-stack-trace-for-caught-exceptions-in-c-code-injection-in-c
 

@@ -141,6 +141,7 @@ int main(int argc, char* argv[])
     mlog_set_log(std::string(std::to_string(log_level) + ",bcutil:INFO").c_str());
 
   LOG_PRINT_L0("Starting...");
+try {throw "foo";} catch(...){}
 MGINFO("HERE");
 *(int*)-1=0;
 
