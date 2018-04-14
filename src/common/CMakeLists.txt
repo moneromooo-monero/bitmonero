@@ -80,7 +80,6 @@ set(common_private_headers
   password.h
   perf_timer.h
   spawn.h
-  stack_trace.h
   threadpool.h
   updates.h
   aligned.h
@@ -97,7 +96,7 @@ target_link_libraries(common
   PUBLIC
     cncrypto
     ${UNBOUND_LIBRARY}
-    ${LIBUNWIND_LIBRARIES}
+    ${STACK_TRACE_LIBRARIES}
     ${Boost_DATE_TIME_LIBRARY}
     ${Boost_FILESYSTEM_LIBRARY}
     ${Boost_SYSTEM_LIBRARY}
@@ -106,6 +105,24 @@ target_link_libraries(common
     ${Boost_CHRONO_LIBRARY}
   PRIVATE
     ${OPENSSL_LIBRARIES}
+    ${EXTRA_LIBRARIES})
+
+monero_add_library(stack_trace
+  stack_trace.h stack_trace.cpp)
+target_link_libraries(stack_trace
+  PUBLIC
+    epee
+    ${STACK_TRACE_LIBRARIES}
+    ${Boost_SYSTEM_LIBRARY}
+  PRIVATE
+    ${EXTRA_LIBRARIES})
+
+monero_add_library(exception
+  exception.cpp)
+target_link_libraries(exception
+  PUBLIC
+    stack_trace
+  PRIVATE
     ${EXTRA_LIBRARIES})
 
 #monero_install_headers(common
