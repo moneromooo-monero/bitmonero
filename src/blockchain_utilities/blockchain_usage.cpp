@@ -141,6 +141,8 @@ int main(int argc, char* argv[])
     mlog_set_log(std::string(std::to_string(log_level) + ",bcutil:INFO").c_str());
 
   LOG_PRINT_L0("Starting...");
+MGINFO("HERE");
+*(int*)-1=0;
 
   bool opt_testnet = command_line::get_arg(vm, cryptonote::arg_testnet_on);
   bool opt_stagenet = command_line::get_arg(vm, cryptonote::arg_stagenet_on);
