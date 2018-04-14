@@ -769,7 +769,7 @@ include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 if (NOT Boost_VERSION VERSION_LESS 106500)
 if(MINGW)
-  check_library_exists(backtrace backtrace "backtrace.h" USE_BOOST_STACKTRACE)
+  check_library_exists(backtrace backtrace_full "backtrace.h" USE_BOOST_STACKTRACE)
 else()
   set(USE_BOOST_STACKTRACE ON)
 endif()
