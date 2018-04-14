@@ -2652,6 +2652,7 @@ bool BlockchainLMDB::batch_start(uint64_t batch_num_blocks, uint64_t batch_bytes
   if (m_write_txn)
     throw0(DB_ERROR("batch transaction attempted, but m_write_txn already in use"));
   check_open();
+try { throw "batch_start"; } catch(...){}
 
   m_writer = boost::this_thread::get_id();
   check_and_resize_for_batch(batch_num_blocks, batch_bytes);
