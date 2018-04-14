@@ -783,6 +783,7 @@ if (NOT Boost_VERSION VERSION_LESS 106500 AND USE_BOOST_STACKTRACE)
   if (MINGW)
     set(STACK_TRACE_LIBRARIES "-lbacktrace")
     set(STACK_TRACE_LIB "boost/backtrace") # for diag output only
+    add_definitions(-DBOOST_STACKTRACE_USE_BACKTRACE)
   else()
     set(STACK_TRACE_LIBRARIES "")
     set(STACK_TRACE_LIB "boost/basic") # for diag output only
