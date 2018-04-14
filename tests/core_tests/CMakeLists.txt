@@ -62,7 +62,7 @@ set(core_tests_headers
   rct.h
   bulletproofs.h)
 
-add_executable(core_tests
+monero_add_test_executable(core_tests
   ${core_tests_sources}
   ${core_tests_headers})
 target_link_libraries(core_tests
@@ -75,10 +75,6 @@ target_link_libraries(core_tests
     device
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
-enable_stack_trace(core_tests)
-set_property(TARGET core_tests
-  PROPERTY
-    FOLDER "tests")
 
 add_test(
   NAME    core_tests
