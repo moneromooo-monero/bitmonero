@@ -79,6 +79,15 @@ set(blockchain_usage_private_headers)
 monero_private_headers(blockchain_usage
 	  ${blockchain_usage_private_headers})
 
+set(blockchain_prune_sources
+  blockchain_prune.cpp
+  )
+
+set(blockchain_prune_private_headers)
+
+monero_private_headers(blockchain_prune
+	  ${blockchain_prune_private_headers})
+
 
 
 set(blockchain_ancestry_sources
@@ -265,3 +274,26 @@ set_property(TARGET blockchain_stats
 	PROPERTY
 	OUTPUT_NAME "monero-blockchain-stats")
 install(TARGETS blockchain_stats DESTINATION bin)
+
+monero_add_executable(blockchain_prune
+  ${blockchain_prune_sources}
+  ${blockchain_prune_private_headers})
+
+target_link_libraries(blockchain_prune
+  PRIVATE
+    cryptonote_core
+    blockchain_db
+    p2p
+    version
+    epee
+    ${Boost_FILESYSTEM_LIBRARY}
+    ${Boost_SYSTEM_LIBRARY}
+    ${Boost_THREAD_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${EXTRA_LIBRARIES})
+
+set_property(TARGET blockchain_prune
+	PROPERTY
+	OUTPUT_NAME "monero-blockchain-prune")
+install(TARGETS blockchain_prune DESTINATION bin)
+
