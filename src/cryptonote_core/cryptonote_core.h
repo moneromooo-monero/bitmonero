@@ -765,6 +765,13 @@ namespace cryptonote
       */
      bool offline() const { return m_offline; }
 
+     /**
+      * @brief get the blockchain pruning seed
+      *
+      * @return the blockchain pruning seed
+      */
+     uint8_t get_blockchain_pruning_seed() const;
+
    private:
 
      /**

@@ -1733,6 +1733,28 @@ cryptonote::blobdata BlockchainLMDB::get_txpool_tx_blob(const crypto::hash& txid
   return bd;
 }
 
+uint8_t BlockchainLMDB::get_blockchain_pruning_seed() const
+{
+  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  check_open();
+  MDB_val_copy<const char*> k("pruning_seed");
+  MDB_val v;
+  mdb_txn_safe txn;
+  auto result = mdb_txn_begin(m_env, NULL, 0, txn);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+  result = mdb_get(txn, m_properties, &k, &v);
+  if (result == MDB_NOTFOUND)
+    return 0;
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to retrieve pruning seed: ", result).c_str()));
+  const uint8_t pruning_seed = *(const uint8_t*)v.mv_data;
+  if (pruning_seed >= CRYPTONOTE_PRUNING_NUM_STRIPES)
+    throw0(DB_ERROR(lmdb_error("Pruning seed out of range ", result).c_str()));
+  txn.commit();
+  return pruning_seed;
+}
+
 bool BlockchainLMDB::for_all_txpool_txes(std::function<bool(const crypto::hash&, const txpool_tx_meta_t&, const cryptonote::blobdata*)> f, bool include_blob, bool include_unrelayed_txes) const
 {
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);

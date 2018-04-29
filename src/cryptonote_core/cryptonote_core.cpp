@@ -1587,6 +1587,11 @@ namespace cryptonote
     return si.available;
   }
   //-----------------------------------------------------------------------------------------------
+  uint8_t core::get_blockchain_pruning_seed() const
+  {
+    return get_blockchain_storage().get_blockchain_pruning_seed();
+  }
+  //-----------------------------------------------------------------------------------------------
   std::time_t core::get_start_time() const
   {
     return start_time;

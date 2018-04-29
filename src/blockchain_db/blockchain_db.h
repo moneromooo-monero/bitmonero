@@ -1393,6 +1393,12 @@ public:
   virtual cryptonote::blobdata get_txpool_tx_blob(const crypto::hash& txid) const = 0;
 
   /**
+   * @brief get the blockchain pruning seed
+   * @return the blockchain pruning seed
+   */
+  virtual uint8_t get_blockchain_pruning_seed() const = 0;
+
+  /**
    * @brief runs a function over all txpool transactions
    *
    * The subclass should run the passed function for each txpool tx it has

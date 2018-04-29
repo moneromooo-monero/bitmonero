@@ -172,7 +172,17 @@ bool block_queue::requested(const crypto::hash &hash) const
   return false;
 }
 
-std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_height, uint64_t last_block_height, uint64_t max_blocks, const boost::uuids::uuid &connection_id, const std::vector<crypto::hash> &block_hashes, boost::posix_time::ptime time)
+bool block_queue::has_unpruned_height(uint64_t block_height, uint64_t blockchain_height, uint8_t pruning_seed) const
+{
+  static_assert(CRYPTONOTE_PRUNING_NUM_STRIPES < 256, "CRYPTONOTE_PRUNING_NUM_STRIPES must be < 256");
+  if (pruning_seed == 0)
+    return true;
+  if (block_height + CRYPTONOTE_PRUNING_TIP_BLOCKS >= blockchain_height)
+    return true;
+  return (block_height / CRYPTONOTE_PRUNING_STRIPE_SIZE) % CRYPTONOTE_PRUNING_NUM_STRIPES == pruning_seed;
+}
+
+std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_height, uint64_t last_block_height, uint64_t max_blocks, const boost::uuids::uuid &connection_id, uint8_t pruning_seed, uint64_t blockchain_height, const std::vector<crypto::hash> &block_hashes, boost::posix_time::ptime time)
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
 
@@ -191,7 +201,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
   }
   uint64_t span_length = 0;
   std::vector<crypto::hash> hashes;
-  while (i != block_hashes.end() && span_length < max_blocks)
+  while (i != block_hashes.end() && span_length < max_blocks && has_unpruned_height(span_start_height + span_length, blockchain_height, pruning_seed))
   {
     hashes.push_back(*i);
     ++i;

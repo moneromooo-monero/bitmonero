@@ -247,6 +247,7 @@ namespace cryptonote
       cnx.connection_id = epee::string_tools::pod_to_hex(cntxt.m_connection_id);
 
       cnx.height = cntxt.m_remote_blockchain_height;
+      cnx.pruning_seed = cntxt.m_pruning_seed;
 
       connections.push_back(cnx);
 
@@ -280,6 +281,7 @@ namespace cryptonote
     }
 
     context.m_remote_blockchain_height = hshd.current_height;
+    context.m_pruning_seed = hshd.pruning_seed;
 
     uint64_t target = m_core.get_target_blockchain_height();
     if (target == 0)
@@ -326,6 +328,7 @@ namespace cryptonote
     hshd.top_version = m_core.get_ideal_hard_fork_version(hshd.current_height);
     hshd.cumulative_difficulty = m_core.get_block_cumulative_difficulty(hshd.current_height);
     hshd.current_height +=1;
+    hshd.pruning_seed = m_core.get_blockchain_pruning_seed();
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1485,7 +1488,7 @@ skip:
           context.m_needed_objects = std::vector<crypto::hash>(context.m_needed_objects.begin() + skip, context.m_needed_objects.end());
 
         const uint64_t first_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
-        span = m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit, context.m_connection_id, context.m_needed_objects);
+        span = m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit, context.m_connection_id, context.m_pruning_seed, context.m_remote_blockchain_height, context.m_needed_objects);
         MDEBUG(context << " span from " << first_block_height << ": " << span.first << "/" << span.second);
       }
       if (span.second == 0 && !force_next_span)
