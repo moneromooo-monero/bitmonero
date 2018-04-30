@@ -944,7 +944,8 @@ namespace cryptonote
     bool is_within_compiled_block_hash_area(uint64_t height) const;
     bool is_within_compiled_block_hash_area() const { return is_within_compiled_block_hash_area(m_db->height()); }
     uint64_t prevalidate_block_hashes(uint64_t height, const std::vector<crypto::hash> &hashes);
-    uint8_t get_blockchain_pruning_seed() const { return m_db->get_blockchain_pruning_seed(); }
+    uint32_t get_blockchain_pruning_seed() const { return m_db->get_blockchain_pruning_seed(); }
+    bool prune_blockchain(uint32_t pruning_seed) { return m_db->prune_blockchain(pruning_seed); }
 
     void lock();
     void unlock();

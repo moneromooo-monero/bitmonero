@@ -261,7 +261,8 @@ public:
   virtual bool get_txpool_tx_meta(const crypto::hash& txid, txpool_tx_meta_t &meta) const;
   virtual bool get_txpool_tx_blob(const crypto::hash& txid, cryptonote::blobdata &bd) const;
   virtual cryptonote::blobdata get_txpool_tx_blob(const crypto::hash& txid) const;
-  virtual uint8_t get_blockchain_pruning_seed() const;
+  virtual uint32_t get_blockchain_pruning_seed() const;
+  virtual bool prune_blockchain(uint32_t pruning_seed = 0);
 
   virtual bool for_all_txpool_txes(std::function<bool(const crypto::hash&, const txpool_tx_meta_t&, const cryptonote::blobdata*)> f, bool include_blob = false, bool include_unrelayed_txes = true) const;
 

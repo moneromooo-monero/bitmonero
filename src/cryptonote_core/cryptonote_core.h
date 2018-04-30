@@ -770,7 +770,16 @@ namespace cryptonote
       *
       * @return the blockchain pruning seed
       */
-     uint8_t get_blockchain_pruning_seed() const;
+     uint32_t get_blockchain_pruning_seed() const;
+
+     /**
+      * @brief rune the blockchain
+      *
+      * @param pruning_seed the seed to use to prune the chain (0 for default, highly recommended)
+      *
+      * @return true iff success
+      */
+     bool prune_blockchain(uint32_t pruning_seed = 0);
 
    private:
 

@@ -2250,4 +2250,27 @@ namespace cryptonote
     };
   };
 
+  struct COMMAND_RPC_PRUNE_BLOCKCHAIN
+  {
+    struct request
+    {
+      uint32_t pruning_seed;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(pruning_seed)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response
+    {
+      std::string status;
+      uint32_t pruning_seed;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(status)
+        KV_SERIALIZE(pruning_seed)
+      END_KV_SERIALIZE_MAP()
+    };
+  };
+
 }

@@ -1396,7 +1396,14 @@ public:
    * @brief get the blockchain pruning seed
    * @return the blockchain pruning seed
    */
-  virtual uint8_t get_blockchain_pruning_seed() const = 0;
+  virtual uint32_t get_blockchain_pruning_seed() const = 0;
+
+  /**
+   * @brief prunes the blockchain
+   * @param pruning_seed the seed to use, 0 for default (highly recommended)
+   * @return success iff true
+   */
+  virtual bool prune_blockchain(uint32_t pruning_seed = 0) = 0;
 
   /**
    * @brief runs a function over all txpool transactions

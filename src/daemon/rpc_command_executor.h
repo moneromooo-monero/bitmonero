@@ -152,6 +152,8 @@ public:
   bool relay_tx(const std::string &txid);
 
   bool sync_info();
+
+  bool prune_blockchain(uint32_t pruning_seed);
 };
 
 } // namespace daemonize

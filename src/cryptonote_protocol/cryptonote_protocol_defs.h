@@ -78,7 +78,7 @@ namespace cryptonote
 
     uint64_t height;
 
-    uint8_t pruning_seed;
+    uint32_t pruning_seed;
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(incoming)
@@ -201,14 +201,14 @@ namespace cryptonote
     uint64_t cumulative_difficulty;
     crypto::hash  top_id;
     uint8_t top_version;
-    uint8_t pruning_seed;
+    uint32_t pruning_seed;
 
     BEGIN_KV_SERIALIZE_MAP()
       KV_SERIALIZE(current_height)
       KV_SERIALIZE(cumulative_difficulty)
       KV_SERIALIZE_VAL_POD_AS_BLOB(top_id)
       KV_SERIALIZE_OPT(top_version, (uint8_t)0)
-      KV_SERIALIZE_OPT(pruning_seed, (uint8_t)0)
+      KV_SERIALIZE_OPT(pruning_seed, (uint32_t)0)
     END_KV_SERIALIZE_MAP()
   };
 

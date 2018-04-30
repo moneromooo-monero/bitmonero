@@ -280,6 +280,11 @@ t_command_server::t_command_server(
     , std::bind(&t_command_parser_executor::sync_info, &m_parser, p::_1)
     , "Print information about the blockchain sync state."
     );
+    m_command_lookup.set_handler(
+      "prune_blockchain"
+    , std::bind(&t_command_parser_executor::prune_blockchain, &m_parser, p::_1)
+    , "Prune the blockchain."
+    );
 }
 
 bool t_command_server::process_command_str(const std::string& cmd)

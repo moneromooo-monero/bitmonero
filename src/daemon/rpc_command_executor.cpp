@@ -1917,4 +1917,33 @@ bool t_rpc_command_executor::sync_info()
     return true;
 }
 
+bool t_rpc_command_executor::prune_blockchain(uint32_t pruning_seed)
+{
+    cryptonote::COMMAND_RPC_PRUNE_BLOCKCHAIN::request req;
+    cryptonote::COMMAND_RPC_PRUNE_BLOCKCHAIN::response res;
+    std::string fail_message = "Unsuccessful";
+    epee::json_rpc::error error_resp;
+
+    req.pruning_seed = pruning_seed;
+
+    if (m_is_rpc)
+    {
+        if (!m_rpc_client->json_rpc_request(req, res, "prune_blockchain", fail_message.c_str()))
+        {
+            return true;
+        }
+    }
+    else
+    {
+        if (!m_rpc_server->on_prune_blockchain(req, res, error_resp) || res.status != CORE_RPC_STATUS_OK)
+        {
+            tools::fail_msg_writer() << make_error(fail_message, res.status);
+            return true;
+        }
+    }
+
+    tools::success_msg_writer() << "Blockchain pruned: seed " << res.pruning_seed;
+    return true;
+}
+
 }// namespace daemonize
