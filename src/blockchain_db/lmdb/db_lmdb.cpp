@@ -1763,6 +1763,9 @@ bool BlockchainLMDB::prune_blockchain(uint32_t pruning_seed)
     throw0(DB_ERROR("Pruning seed not in range"));
   check_open();
 
+  size_t n_total_records = 0, n_prunable_records = 0, n_pruned_records = 0;
+  uint64_t n_bytes = 0;
+
   mdb_txn_safe txn;
   auto result = mdb_txn_begin(m_env, NULL, 0, txn);
   if (result)
@@ -1788,7 +1791,7 @@ bool BlockchainLMDB::prune_blockchain(uint32_t pruning_seed)
       throw0(DB_ERROR("Failed to retrieve or create pruning seed: unexpected value size"));
     const uint32_t data = *(const uint32_t*)v.mv_data;
     if (pruning_seed == 0)
-      pruning_seed = data;
+      pruning_seed = data & 0xffffff;
     if ((data & 0xffffff) != pruning_seed)
       throw0(DB_ERROR("Blockchain already pruned with different seed"));
     if ((data >> 24) != CRYPTONOTE_PRUNING_LOG_STRIPES)
@@ -1819,19 +1822,23 @@ bool BlockchainLMDB::prune_blockchain(uint32_t pruning_seed)
     if (ret)
       throw0(DB_ERROR(lmdb_error("Failed to enumerate transactions: ", ret).c_str()));
 
+    ++n_total_records;
     const txindex *ti = (txindex *)v.mv_data;
     const uint64_t block_height = ti->data.block_id;
     if (!tools::has_unpruned_block(block_height, blockchain_height, pruning_seed))
     {
       MDB_val_set(kp, ti->data.tx_id);
+      ++n_prunable_records;
       result = mdb_cursor_get(c_prunable, &kp, &v, MDB_SET);
       if (result == MDB_NOTFOUND)
-        MDEBUG("Already pruned at height " << block_height);
+        MTRACE("Already pruned at height " << block_height);
       else if (result)
         throw0(DB_ERROR(lmdb_error("Failed to find transaction prunable data: ", result).c_str()));
       else
       {
-        MDEBUG("Pruning at height " << block_height);
+        MTRACE("Pruning at height " << block_height);
+        ++n_pruned_records;
+        n_bytes += kp.mv_size + v.mv_size;
         result = mdb_cursor_del(c_prunable, 0);
         if (result)
           throw0(DB_ERROR(lmdb_error("Failed to delete transaction prunable data: ", result).c_str()));
@@ -1840,6 +1847,9 @@ bool BlockchainLMDB::prune_blockchain(uint32_t pruning_seed)
   }
 
   txn.commit();
+
+  MINFO("Pruned blockchain: " << (n_bytes/1024.0f/1024.0f) << " MB pruned in " << n_pruned_records << " records, " <<
+      n_prunable_records << "/" << n_total_records << " prunable");
   return true;
 }
 
