@@ -281,6 +281,16 @@ namespace cryptonote
       }
     }
 
+    // reject weird pruning schemes
+    if (hshd.pruning_seed)
+    {
+      if ((hshd.pruning_seed >> 24) != CRYPTONOTE_PRUNING_LOG_STRIPES || (hshd.pruning_seed & 0xffffff) > (1u << (hshd.pruning_seed >> 24)))
+      {
+        MWARNING(context << " peer claim weird pruning seed " << hshd.pruning_seed << ", disconnecting");
+        return false;
+      }
+    }
+
     context.m_remote_blockchain_height = hshd.current_height;
     context.m_pruning_seed = hshd.pruning_seed;
 

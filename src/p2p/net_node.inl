@@ -741,7 +741,7 @@ namespace nodetool
         }
 
         pi = context.peer_id = rsp.node_data.peer_id;
-        m_peerlist.set_peer_just_seen(rsp.node_data.peer_id, context.m_remote_address);
+        m_peerlist.set_peer_just_seen(rsp.node_data.peer_id, context.m_remote_address, context.m_pruning_seed);
 
         if(rsp.node_data.peer_id == m_config.m_peer_id)
         {
@@ -800,7 +800,7 @@ namespace nodetool
         add_host_fail(context.m_remote_address);
       }
       if(!context.m_is_income)
-        m_peerlist.set_peer_just_seen(context.peer_id, context.m_remote_address);
+        m_peerlist.set_peer_just_seen(context.peer_id, context.m_remote_address, context.m_pruning_seed);
       m_payload_handler.process_payload_sync_data(rsp.payload_data, context, false);
     });
 
@@ -957,6 +957,7 @@ namespace nodetool
     time_t last_seen;
     time(&last_seen);
     pe_local.last_seen = static_cast<int64_t>(last_seen);
+    pe_local.pruning_seed = con.m_pruning_seed;
     m_peerlist.append_with_peer_white(pe_local);
     //update last seen and push it to peerlist manager
 
@@ -1121,7 +1122,7 @@ namespace nodetool
       if(is_addr_recently_failed(pe.adr))
         continue;
 
-      MDEBUG("Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str()
+      MDEBUG("Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str() << ", pruning seed " << pe.pruning_seed << " "
                     << "[peer_list=" << (use_white_list ? white : gray)
                     << "] last_seen: " << (pe.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - pe.last_seen) : "never"));
 
@@ -1708,6 +1709,7 @@ namespace nodetool
         time(&last_seen);
         pe.last_seen = static_cast<int64_t>(last_seen);
         pe.id = peer_id_l;
+        pe.pruning_seed = context.m_pruning_seed;
         this->m_peerlist.append_with_peer_white(pe);
         LOG_DEBUG_CC(context, "PING SUCCESS " << context.m_remote_address.host_str() << ":" << port_l);
       });
@@ -1978,7 +1980,7 @@ namespace nodetool
       return true;
     }
 
-    m_peerlist.set_peer_just_seen(pe.id, pe.adr);
+    m_peerlist.set_peer_just_seen(pe.id, pe.adr, pe.pruning_seed);
 
     LOG_PRINT_L2("PEER PROMOTED TO WHITE PEER LIST IP address: " << pe.adr.host_str() << " Peer ID: " << peerid_type(pe.id));
 

@@ -77,6 +77,7 @@ namespace boost
       a & pl.adr;
       a & pl.id;
       a & pl.last_seen;
+      a & pl.pruning_seed;
     }
 
     template <class Archive, class ver_type>

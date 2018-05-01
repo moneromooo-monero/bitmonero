@@ -1302,14 +1302,15 @@ namespace cryptonote
     uint32_t ip;
     uint16_t port;
     uint64_t last_seen;
+    uint32_t pruning_seed;
 
     peer() = default;
 
-    peer(uint64_t id, const std::string &host, uint64_t last_seen)
-      : id(id), host(host), ip(0), port(0), last_seen(last_seen)
+    peer(uint64_t id, const std::string &host, uint64_t last_seen, uint32_t pruning_seed)
+      : id(id), host(host), ip(0), port(0), last_seen(last_seen), pruning_seed(pruning_seed)
     {}
-    peer(uint64_t id, uint32_t ip, uint16_t port, uint64_t last_seen)
-      : id(id), host(std::to_string(ip)), ip(ip), port(port), last_seen(last_seen)
+    peer(uint64_t id, uint32_t ip, uint16_t port, uint64_t last_seen, uint32_t pruning_seed)
+      : id(id), host(std::to_string(ip)), ip(ip), port(port), last_seen(last_seen), pruning_seed(pruning_seed)
     {}
 
     BEGIN_KV_SERIALIZE_MAP()
@@ -1318,6 +1319,7 @@ namespace cryptonote
       KV_SERIALIZE(ip)
       KV_SERIALIZE(port)
       KV_SERIALIZE(last_seen)
+      KV_SERIALIZE_OPT(pruning_seed, (uint32_t)0)
     END_KV_SERIALIZE_MAP()
   };
 
