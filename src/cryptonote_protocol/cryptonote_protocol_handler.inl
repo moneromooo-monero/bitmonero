@@ -42,6 +42,7 @@
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "profile_tools.h"
 #include "net/network_throttle-detail.hpp"
+#include "common/pruning.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "net.cn"
@@ -1549,6 +1550,16 @@ skip:
 
         post_notify<NOTIFY_REQUEST_GET_OBJECTS>(req, context);
         return true;
+      }
+
+      // if we're still around, we might be at a point where the peer is pruned, so we could either
+      // drop it to make space for other peers, or ask for a span further down the line
+      const uint64_t next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
+      if (!tools::has_unpruned_block(next_block_height, context.m_remote_blockchain_height, context.m_pruning_seed))
+      {
+        MDEBUG("This peer is pruned at block height " << next_block_height << ", dropping for now");
+#warning TODO: decide whether to drop or not
+        return false;
       }
     }
 

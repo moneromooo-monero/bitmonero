@@ -83,3 +83,23 @@ TEST(pruning, stripe_size)
     ASSERT_EQ(best_run, CRYPTONOTE_PRUNING_STRIPE_SIZE);
   }
 }
+
+TEST(pruning, next)
+{
+  for (uint64_t h = 0; h < 100; ++h)
+    ASSERT_EQ(tools::get_next_unpruned_block_height(h, 1000, 0), h);
+
+  ASSERT_EQ(tools::get_next_unpruned_block_height(0, 1000, 1), 0);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(1, 1000, 1), 1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(7, 1000, 1), 7);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 1), 32);
+
+  ASSERT_EQ(tools::get_next_unpruned_block_height(0, 1000, 2), 8);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(1, 1000, 2), 8);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(7, 1000, 2), 8);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 2), 40);
+
+  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 3), 48);
+
+  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 4), 56);
+}
