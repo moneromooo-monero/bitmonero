@@ -1771,6 +1771,11 @@ bool BlockchainLMDB::prune_blockchain(uint32_t pruning_seed)
   if (result)
     throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
 
+  MDB_stat db_stats;
+  if ((result = mdb_stat(txn, m_txs_prunable, &db_stats)))
+    throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable: ", result).c_str()));
+  const size_t pages0 = db_stats.ms_branch_pages + db_stats.ms_leaf_pages + db_stats.ms_overflow_pages;
+
   MDB_val_copy<const char*> k("pruning_seed");
   MDB_val v;
   result = mdb_get(txn, m_properties, &k, &v);
@@ -1846,10 +1851,16 @@ bool BlockchainLMDB::prune_blockchain(uint32_t pruning_seed)
     }
   }
 
+  if ((result = mdb_stat(txn, m_txs_prunable, &db_stats)))
+    throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable: ", result).c_str()));
+  const size_t pages1 = db_stats.ms_branch_pages + db_stats.ms_leaf_pages + db_stats.ms_overflow_pages;
+  const size_t db_bytes = (pages0 - pages1) * db_stats.ms_psize;
+
   txn.commit();
 
-  MINFO("Pruned blockchain: " << (n_bytes/1024.0f/1024.0f) << " MB pruned in " << n_pruned_records << " records, " <<
-      n_prunable_records << "/" << n_total_records << " prunable");
+  MINFO("Pruned blockchain: " << (n_bytes/1024.0f/1024.0f) << " MB (" << db_bytes/1024.0f/1024.0f << " MB) pruned in " <<
+      n_pruned_records << " records (" << pages0 - pages1 << "/" << pages0 << " " << db_stats.ms_psize << " byte pages), " <<
+      n_prunable_records << "/" << n_total_records << " pruned records");
   return true;
 }
 
