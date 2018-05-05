@@ -31,6 +31,7 @@
 #include "string_tools.h"
 #include "common/password.h"
 #include "common/scoped_message_writer.h"
+#include "common/pruning.h"
 #include "daemon/rpc_command_executor.h"
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "cryptonote_core/cryptonote_core.h"
@@ -45,15 +46,6 @@
 namespace daemonize {
 
 namespace {
-  template<typename T> std::string to_string_hex(const T &t)
-  {
-    std::stringstream ss;
-    ss << std::hex << t;
-    std::string s;
-    ss >> s;
-    return s;
-  }
-
   void print_peer(std::string const & prefix, cryptonote::peer const & peer)
   {
     time_t now;
@@ -69,7 +61,7 @@ namespace {
     peer_id_str >> id_str;
     epee::string_tools::xtype_to_string(peer.port, port_str);
     std::string addr_str = ip_str + ":" + port_str;
-    std::string pruning_seed = to_string_hex(peer.pruning_seed);
+    std::string pruning_seed = epee::string_tools::to_string_hex(peer.pruning_seed);
     tools::msg_writer() << boost::format("%-10s %-25s %-4s %-25s %s") % prefix % id_str % addr_str % pruning_seed % elapsed;
   }
 
@@ -1892,6 +1884,8 @@ bool t_rpc_command_executor::sync_info()
     for (const auto &p: res.peers)
       current_download += p.info.current_download;
     tools::success_msg_writer() << "Downloading at " << current_download << " kB/s";
+    if (res.next_needed_pruning_seed)
+      tools::success_msg_writer() << "Next needed pruning seed: " << res.next_needed_pruning_seed;
 
     tools::success_msg_writer() << std::to_string(res.peers.size()) << " peers";
     for (const auto &p: res.peers)
@@ -1903,7 +1897,7 @@ bool t_rpc_command_executor::sync_info()
           nblocks += s.nblocks, size += s.size;
       tools::success_msg_writer() << address << "  " << epee::string_tools::pad_string(p.info.peer_id, 16, '0', true) << "  " <<
           epee::string_tools::pad_string(p.info.state, 16) << "  " <<
-          epee::string_tools::pad_string(to_string_hex(p.info.pruning_seed), 8) << "  " << p.info.height << "  "  <<
+          epee::string_tools::pad_string(epee::string_tools::to_string_hex(p.info.pruning_seed), 8) << "  " << p.info.height << "  "  <<
           p.info.current_download << " kB/s, " << nblocks << " blocks / " << size/1e6 << " MB queued";
     }
 
@@ -1914,13 +1908,14 @@ bool t_rpc_command_executor::sync_info()
     for (const auto &s: res.spans)
     {
       std::string address = epee::string_tools::pad_string(s.remote_address, 24);
+      std::string pruning_seed = epee::string_tools::to_string_hex(tools::get_pruning_seed(s.start_block_height, std::numeric_limits<uint64_t>::max()));
       if (s.size == 0)
       {
-        tools::success_msg_writer() << address << "  " << s.nblocks << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ")  -";
+        tools::success_msg_writer() << address << "  " << s.nblocks << "/" << pruning_seed << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ")  -";
       }
       else
       {
-        tools::success_msg_writer() << address << "  " << s.nblocks << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ", " << (uint64_t)(s.size/1e3) << " kB)  " << (unsigned)(s.rate/1e3) << " kB/s (" << s.speed/100.0f << ")";
+        tools::success_msg_writer() << address << "  " << s.nblocks << "/" << pruning_seed << " (" << s.start_block_height << " - " << (s.start_block_height + s.nblocks - 1) << ", " << (uint64_t)(s.size/1e3) << " kB)  " << (unsigned)(s.rate/1e3) << " kB/s (" << s.speed/100.0f << ")";
       }
     }
 
@@ -1952,7 +1947,7 @@ bool t_rpc_command_executor::prune_blockchain(uint32_t pruning_seed)
         }
     }
 
-    tools::success_msg_writer() << "Blockchain pruned: seed " << to_string_hex(res.pruning_seed);
+    tools::success_msg_writer() << "Blockchain pruned: seed " << epee::string_tools::to_string_hex(res.pruning_seed);
     return true;
 }
 

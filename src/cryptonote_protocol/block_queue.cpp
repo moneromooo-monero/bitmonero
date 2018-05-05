@@ -183,6 +183,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     return std::make_pair(0, 0);
   }
 
+  // skip everything we've already requested
   uint64_t span_start_height = last_block_height - block_hashes.size() + 1;
   std::vector<crypto::hash>::const_iterator i = block_hashes.begin();
   while (i != block_hashes.end() && requested(*i))
@@ -190,6 +191,16 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     ++i;
     ++span_start_height;
   }
+
+  // if the peer's pruned for the starting block and its unpruned stripe comes next, start downloading from there
+  const uint32_t next_unpruned_height = tools::get_next_unpruned_block_height(span_start_height, blockchain_height, pruning_seed);
+  if (next_unpruned_height > span_start_height && next_unpruned_height < span_start_height + (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+  {
+    MGINFO("We can download from next span: ideal height " << span_start_height << ", next unpruned height " << next_unpruned_height <<
+        "(+" << next_unpruned_height - span_start_height << "), current seed " << pruning_seed);
+    span_start_height = next_unpruned_height;
+  }
+
   uint64_t span_length = 0;
   std::vector<crypto::hash> hashes;
   while (i != block_hashes.end() && span_length < max_blocks && tools::has_unpruned_block(span_start_height + span_length, blockchain_height, pruning_seed))

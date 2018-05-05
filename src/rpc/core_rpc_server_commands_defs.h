@@ -2197,6 +2197,7 @@ namespace cryptonote
       std::string status;
       uint64_t height;
       uint64_t target_height;
+      uint32_t next_needed_pruning_seed;
       std::list<peer> peers;
       std::list<span> spans;
 
@@ -2204,6 +2205,7 @@ namespace cryptonote
         KV_SERIALIZE(status)
         KV_SERIALIZE(height)
         KV_SERIALIZE(target_height)
+        KV_SERIALIZE(next_needed_pruning_seed)
         KV_SERIALIZE(peers)
         KV_SERIALIZE(spans)
       END_KV_SERIALIZE_MAP()

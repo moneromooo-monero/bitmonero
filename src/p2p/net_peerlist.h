@@ -83,6 +83,28 @@ namespace nodetool
     bool remove_from_peer_gray(const peerlist_entry& pe);
     bool get_and_empty_anchor_peerlist(std::vector<anchor_peerlist_entry>& apl);
     bool remove_from_peer_anchor(const epee::net_utils::network_address& addr);
+#if 0
+void twiddle_white(size_t i) {
+    CRITICAL_REGION_LOCAL(m_peerlist_lock);
+    if(i >= m_peers_white.size())
+      return false;
+
+    peers_indexed::index<by_time>::type& by_time_index = m_peers_white.get<by_time>();
+by_time_index->pruning_seed = by_time_index->adr.as<epee::net_utils::ipv4_network_address>().ip() % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES);
+    return true;
+}
+void twiddle_gray(size_t i) {
+    CRITICAL_REGION_LOCAL(m_peerlist_lock);
+    if(i >= m_peers_gray.size())
+      return false;
+
+    peers_indexed::index<by_time>::type& by_time_index = m_peers_gray.get<by_time>();
+by_time_index->pruning_seed = by_time_index->adr.as<epee::net_utils::ipv4_network_address>().ip() % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES);
+    return true;
+}
+#endif
+    bool remove_from_peer_white(const peerlist_entry& pe);
+#warning DGFFDAF
     
   private:
     struct by_time{};
@@ -464,6 +486,25 @@ namespace nodetool
     return true;
 
     CATCH_ENTRY_L0("peerlist_manager::get_random_gray_peer()", false);
+  }
+  //--------------------------------------------------------------------------------------------------
+  inline
+  bool peerlist_manager::remove_from_peer_white(const peerlist_entry& pe)
+  {
+    TRY_ENTRY();
+
+    CRITICAL_REGION_LOCAL(m_peerlist_lock);
+
+    peers_indexed::index_iterator<by_addr>::type iterator = m_peers_white.get<by_addr>().find(pe.adr);
+
+    if (iterator != m_peers_white.get<by_addr>().end()) {
+      m_peers_white.erase(iterator);
+    }
+
+    return true;
+#warning REMOVE
+
+    CATCH_ENTRY_L0("peerlist_manager::remove_from_peer_gray()", false);
   }
   //--------------------------------------------------------------------------------------------------
   inline

@@ -141,9 +141,15 @@
 
 #define DEFAULT_TXPOOL_MAX_SIZE                 648000000ull // 3 days at 300000, in bytes
 
+#if 0
 #define CRYPTONOTE_PRUNING_STRIPE_SIZE          8
 #define CRYPTONOTE_PRUNING_LOG_STRIPES          2
 #define CRYPTONOTE_PRUNING_TIP_BLOCKS           20
+#else
+#define CRYPTONOTE_PRUNING_STRIPE_SIZE          4096
+#define CRYPTONOTE_PRUNING_LOG_STRIPES          3
+#define CRYPTONOTE_PRUNING_TIP_BLOCKS           5500
+#endif
 
 // New constants are intended to go here
 namespace config

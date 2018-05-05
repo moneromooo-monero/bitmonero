@@ -138,6 +138,24 @@ namespace nodetool
       make_default_config();
     }
 
+#warning TOOFOOFDA
+std::list<peerlist_entry> plw;
+//for (size_t n=0;n<m_peerlist.get_white_peers_count();++n) {
+while (m_peerlist.get_white_peers_count()){
+  plw.push_back(peerlist_entry());
+  m_peerlist.get_white_peer_by_index(plw.back(), 0);
+  m_peerlist.remove_from_peer_white(plw.back());
+}
+for (auto &e:plw) m_peerlist.append_with_peer_white(e);
+
+std::list<peerlist_entry> plg;
+while (m_peerlist.get_gray_peers_count()){
+  plg.push_back(peerlist_entry());
+  m_peerlist.get_gray_peer_by_index(plg.back(), 0);
+  m_peerlist.remove_from_peer_gray(plg.back());
+}
+for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
+
     // always recreate a new peer id
     make_default_peer_id();
 
@@ -772,6 +790,9 @@ namespace nodetool
       {
         flags_context.support_flags = support_flags;
       });
+#warning
+context_.m_pruning_seed = 1 + (context_.m_remote_address.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
+      LOG_INFO_CC(context_, "New connection handshaked, pruning seed " << context_.m_pruning_seed);
     }
 
     return hsh_result;
@@ -1036,7 +1057,7 @@ namespace nodetool
   bool node_server<t_payload_net_handler>::make_new_connection_from_anchor_peerlist(const std::vector<anchor_peerlist_entry>& anchor_peerlist)
   {
     for (const auto& pe: anchor_peerlist) {
-      _note("Considering connecting (out) to peer: " << peerid_type(pe.id) << " " << pe.adr.str());
+      _note("Considering connecting (out) to anchor peer: " << peerid_type(pe.id) << " " << pe.adr.str());
 
       if(is_peer_used(pe)) {
         _note("Peer is used");
@@ -1067,15 +1088,31 @@ namespace nodetool
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
+  std::vector<size_t> node_server<t_payload_net_handler>::filter_by_pruning_seed(uint32_t pruning_seed, const std::function<size_t(void)>&get_count, const std::function<bool(peerlist_entry&, size_t)> &get, size_t limit) const
+  {
+    std::vector<size_t> v;
+    const size_t count = get_count();
+    v.reserve(std::min(count, limit));
+    for (size_t i = 0; i < count; ++i)
+    {
+      if (v.size() >= limit)
+        break;
+      peerlist_entry pe = AUTO_VAL_INIT(pe);
+      bool r = get(pe, i);
+      CHECK_AND_ASSERT_MES(r, std::vector<size_t>(), "Failed to get peer " << i << " from peerlist (size " << count << ")");
+      if (pruning_seed == 0 || pe.pruning_seed == 0 || pruning_seed == pe.pruning_seed)
+        v.push_back(i);
+    }
+    return v;
+  }
+  //-----------------------------------------------------------------------------------
+  template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::make_new_connection_from_peerlist(bool use_white_list)
   {
-    size_t local_peers_count = use_white_list ? m_peerlist.get_white_peers_count():m_peerlist.get_gray_peers_count();
-    if(!local_peers_count)
-      return false;//no peers
-
-    size_t max_random_index = std::min<uint64_t>(local_peers_count -1, 20);
+    size_t max_random_index = 0;
 
     std::set<size_t> tried_peers;
+    const uint32_t next_needed_pruning_seed = m_payload_handler.get_next_needed_pruning_seed();
 
     size_t try_count = 0;
     size_t rand_count = 0;
@@ -1084,20 +1121,24 @@ namespace nodetool
       ++rand_count;
       size_t random_index;
 
-      if (use_white_list) {
-        local_peers_count = m_peerlist.get_white_peers_count();
-        if (!local_peers_count)
-          return false;
-        max_random_index = std::min<uint64_t>(local_peers_count -1, 20);
-        random_index = get_random_index_with_fixed_probability(max_random_index);
-      } else {
-        local_peers_count = m_peerlist.get_gray_peers_count();
-        if (!local_peers_count)
-          return false;
-        random_index = crypto::rand<size_t>() % local_peers_count;
+      std::vector<size_t> filtered = filter_by_pruning_seed(next_needed_pruning_seed,
+          [use_white_list, this]() { return use_white_list ? m_peerlist.get_white_peers_count() : m_peerlist.get_gray_peers_count(); },
+          [use_white_list, this](peerlist_entry &pe, size_t idx) { return use_white_list ? m_peerlist.get_white_peer_by_index(pe, idx) : m_peerlist.get_gray_peer_by_index(pe, idx); },
+          use_white_list ? 20 : std::numeric_limits<size_t>::max());
+      if (filtered.empty())
+      {
+        MDEBUG("No available peer in " << (use_white_list ? "white" : "gray") << " list filtered by " << next_needed_pruning_seed);
+        return false;
       }
+      if (use_white_list)
+        random_index = get_random_index_with_fixed_probability(std::min<uint64_t>(filtered.size() -1, 20));
+      else
+        random_index = crypto::rand<size_t>() % filtered.size();
 
-      CHECK_AND_ASSERT_MES(random_index < local_peers_count, false, "random_starter_index < peers_local.size() failed!!");
+      CHECK_AND_ASSERT_MES(random_index < filtered.size(), false, "random_index < filtered.size() failed!!");
+      random_index = filtered[random_index];
+      CHECK_AND_ASSERT_MES(random_index < (use_white_list ? m_peerlist.get_white_peers_count() : m_peerlist.get_gray_peers_count()),
+          false, "random_index < peers size failed!!");
 
       if(tried_peers.count(random_index))
         continue;
@@ -1109,7 +1150,9 @@ namespace nodetool
 
       ++try_count;
 
-      _note("Considering connecting (out) to peer: " << peerid_to_string(pe.id) << " " << pe.adr.str());
+      _note("Considering connecting (out) to " << (use_white_list ? "white" : "gray") << " list peer: " <<
+          peerid_to_string(pe.id) << " " << pe.adr.str() << ", pruning seed " << epee::string_tools::to_string_hex(pe.pruning_seed) <<
+          " (" << epee::string_tools::to_string_hex(next_needed_pruning_seed) << " needed)");
 
       if(is_peer_used(pe)) {
         _note("Peer is used");
@@ -1122,7 +1165,8 @@ namespace nodetool
       if(is_addr_recently_failed(pe.adr))
         continue;
 
-      MDEBUG("Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str() << ", pruning seed " << pe.pruning_seed << " "
+      MDEBUG("Selected peer: " << peerid_to_string(pe.id) << " " << pe.adr.str()
+                    << ", pruning seed " << epee::string_tools::to_string_hex(pe.pruning_seed) << " "
                     << "[peer_list=" << (use_white_list ? white : gray)
                     << "] last_seen: " << (pe.last_seen ? epee::misc_utils::get_time_interval_string(time(NULL) - pe.last_seen) : "never"));
 
@@ -1349,6 +1393,8 @@ namespace nodetool
         return false;
       }
       be.last_seen += delta;
+#warning slknf uwauiq hvhcuwev
+be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
     }
     return true;
   }
@@ -1835,21 +1881,16 @@ namespace nodetool
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::set_max_out_peers(const boost::program_options::variables_map& vm, int64_t max)
   {
-    if(max == -1) {
-      m_config.m_net_config.max_out_connection_count = P2P_DEFAULT_CONNECTIONS_COUNT;
-      return true;
-    }
+    if(max == -1)
+      max = P2P_DEFAULT_CONNECTIONS_COUNT;
     m_config.m_net_config.max_out_connection_count = max;
+    m_payload_handler.set_max_out_peers(max);
     return true;
   }
 
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::set_max_in_peers(const boost::program_options::variables_map& vm, int64_t max)
   {
-    if(max == -1) {
-      m_config.m_net_config.max_in_connection_count = -1;
-      return true;
-    }
     m_config.m_net_config.max_in_connection_count = max;
     return true;
   }
@@ -1936,7 +1977,7 @@ namespace nodetool
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::has_too_many_connections(const epee::net_utils::network_address &address)
   {
-    const size_t max_connections = 1;
+    const size_t max_connections = 10;
     size_t count = 0;
 
     m_net_server.get_config_object().foreach_connection([&](const p2p_connection_context& cntxt)

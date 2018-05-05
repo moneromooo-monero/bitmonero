@@ -2028,6 +2028,7 @@ namespace cryptonote
     m_core.get_blockchain_top(res.height, top_hash);
     ++res.height; // turn top block height into blockchain height
     res.target_height = m_core.get_target_blockchain_height();
+    res.next_needed_pruning_seed = m_p2p.get_payload_object().get_next_needed_pruning_seed();
 
     for (const auto &c: m_p2p.get_payload_object().get_connections())
       res.peers.push_back({c});

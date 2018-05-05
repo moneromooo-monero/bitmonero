@@ -207,6 +207,7 @@ namespace nodetool
     bool do_handshake_with_peer(peerid_type& pi, p2p_connection_context& context, bool just_take_peerlist = false);
     bool do_peer_timed_sync(const epee::net_utils::connection_context_base& context, peerid_type peer_id);
 
+    std::vector<size_t> filter_by_pruning_seed(uint32_t pruning_seed, const std::function<size_t(void)>&get_count, const std::function<bool(peerlist_entry&, size_t)> &get, size_t limit) const;
     bool make_new_connection_from_anchor_peerlist(const std::vector<anchor_peerlist_entry>& anchor_peerlist);
     bool make_new_connection_from_peerlist(bool use_white_list);
     bool try_to_connect_and_handshake_with_new_peer(const epee::net_utils::network_address& na, bool just_take_peerlist = false, uint64_t last_seen_stamp = 0, PeerType peer_type = white, uint64_t first_seen_stamp = 0);
@@ -233,7 +234,13 @@ namespace nodetool
     bool parse_peers_and_add_to_container(const boost::program_options::variables_map& vm, const command_line::arg_descriptor<std::vector<std::string> > & arg, Container& container);
 
     bool set_max_out_peers(const boost::program_options::variables_map& vm, int64_t max);
+    bool get_max_out_peers() const { return m_config.m_net_config.max_out_connection_count; }
+    bool get_current_out_peers() const { return m_current_number_of_out_peers; }
+
     bool set_max_in_peers(const boost::program_options::variables_map& vm, int64_t max);
+    bool get_max_in_peers() const { return m_config.m_net_config.max_in_connection_count; }
+    bool get_current_in_peers() const { return m_current_number_of_in_peers; }
+
     bool set_tos_flag(const boost::program_options::variables_map& vm, int limit);
 
     bool set_rate_up_limit(const boost::program_options::variables_map& vm, int64_t limit);
