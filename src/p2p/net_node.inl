@@ -791,7 +791,6 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
         flags_context.support_flags = support_flags;
       });
 #warning
-context_.m_pruning_seed = 1 + (context_.m_remote_address.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
       LOG_INFO_CC(context_, "New connection handshaked, pruning seed " << context_.m_pruning_seed);
     }
 
