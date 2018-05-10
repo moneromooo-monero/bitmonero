@@ -141,7 +141,7 @@
 
 #define DEFAULT_TXPOOL_MAX_SIZE                 648000000ull // 3 days at 300000, in bytes
 
-#if 0
+#if 1
 #define CRYPTONOTE_PRUNING_STRIPE_SIZE          8
 #define CRYPTONOTE_PRUNING_LOG_STRIPES          2
 #define CRYPTONOTE_PRUNING_TIP_BLOCKS           20

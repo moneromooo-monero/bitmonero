@@ -1393,7 +1393,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
       }
       be.last_seen += delta;
 #warning slknf uwauiq hvhcuwev
-be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
+//be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
     }
     return true;
   }

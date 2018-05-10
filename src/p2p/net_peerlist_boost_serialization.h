@@ -78,7 +78,7 @@ namespace boost
       a & pl.id;
       a & pl.last_seen;
       a & pl.pruning_seed;
-#if 1
+#if 0
       if (!typename Archive::is_saving())
       {
         pl.pruning_seed = 1+pl.adr.as<epee::net_utils::ipv4_network_address>().ip() % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES);

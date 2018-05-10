@@ -48,6 +48,8 @@
 #define MONERO_DEFAULT_LOG_CATEGORY "net.cn"
 
 #define MLOG_P2P_MESSAGE(x) MCINFO("net.p2p.msg", context << x)
+#define MLOG_PEER_STATE(x) \
+  MCINFO(MONERO_DEFAULT_LOG_CATEGORY, context << "[" << epee::string_tools::to_string_hex(context.m_pruning_seed) << "] state: " << x << " in state " << cryptonote::get_protocol_state_string(context.m_state))
 
 #define BLOCK_QUEUE_NBLOCKS_THRESHOLD 10 // chunks of N blocks
 #define BLOCK_QUEUE_SIZE_THRESHOLD (100*1024*1024) // MB
@@ -108,6 +110,7 @@ namespace cryptonote
       m_core.get_short_chain_history(r.block_ids);
       LOG_PRINT_CCONTEXT_L2("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() );
       post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
+      MLOG_PEER_STATE("requesting chain");
     }
     else if(context.m_state == cryptonote_connection_context::state_standby)
     {
@@ -293,7 +296,7 @@ namespace cryptonote
     }
 
     context.m_remote_blockchain_height = hshd.current_height;
-#if 0
+#if 1
     context.m_pruning_seed = hshd.pruning_seed;
 #else
 #warning OVERRIDING PRUNING SEED
@@ -335,6 +338,7 @@ namespace cryptonote
     LOG_PRINT_CCONTEXT_L2("requesting callback");
     ++context.m_callback_request_count;
     m_p2p->request_callback(context);
+    MLOG_PEER_STATE("requesting callback");
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -413,6 +417,7 @@ namespace cryptonote
       m_core.get_short_chain_history(r.block_ids);
       LOG_PRINT_CCONTEXT_L2("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() );
       post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
+      MLOG_PEER_STATE("requesting chain");
     }
 
     return 1;
@@ -680,6 +685,7 @@ namespace cryptonote
           m_core.get_short_chain_history(r.block_ids);
           LOG_PRINT_CCONTEXT_L2("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() );
           post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
+          MLOG_PEER_STATE("requesting chain");
         }            
       }
     } 
@@ -858,6 +864,7 @@ namespace cryptonote
   int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int command, NOTIFY_RESPONSE_GET_OBJECTS::request& arg, cryptonote_connection_context& context)
   {
     MLOG_P2P_MESSAGE("Received NOTIFY_RESPONSE_GET_OBJECTS (" << arg.blocks.size() << " blocks, " << arg.txs.size() << " txes)");
+    MLOG_PEER_STATE("received objects");
 
     // calculate size of request
     size_t size = 0;
@@ -1006,6 +1013,7 @@ skip:
         goto skip;
       }
       MDEBUG(context << " lock m_sync_lock, adding blocks to chain...");
+      MLOG_PEER_STATE("adding blocks");
 
       {
         m_core.pause_mine();
@@ -1190,6 +1198,8 @@ skip:
         }
       }
 
+      MLOG_PEER_STATE("stopping adding blocks");
+
       if (should_download_next_span(context))
       {
         context.m_needed_objects.clear();
@@ -1275,6 +1285,7 @@ skip:
           LOG_PRINT_CCONTEXT_L2("requesting callback");
           ++context.m_callback_request_count;
           m_p2p->request_callback(context);
+          MLOG_PEER_STATE("requesting callback");
         }
         return true;
       });
@@ -1413,6 +1424,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
           if (!first)
           {
             LOG_DEBUG_CC(context, "Block queue is " << nblocks << " and " << size << " and next block is available, resuming");
+            MLOG_PEER_STATE("resuming");
           }
           break;
         }
@@ -1423,6 +1435,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
         if (sync.owns_lock())
         {
           LOG_DEBUG_CC(context, "No other thread is adding blocks, resuming");
+          MLOG_PEER_STATE("resuming");
           break;
         }
 
@@ -1430,6 +1443,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
         {
           MDEBUG(context << " we should try for that next span too, we think we could get it faster, resuming");
           force_next_span = true;
+          MLOG_PEER_STATE("resuming");
           break;
         }
 
@@ -1441,6 +1455,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
             LOG_DEBUG_CC(context, "We do not have the next required block at height " << next_block_height << ", pausing");
           first = false;
           context.m_state = cryptonote_connection_context::state_standby;
+          MLOG_PEER_STATE("pausing");
         }
 
         // this needs doing after we went to standby, so the callback knows what to do
@@ -1450,6 +1465,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
           MDEBUG(context << " we have the next span, and it is scheduled, resuming");
           ++context.m_callback_request_count;
           m_p2p->request_callback(context);
+          MLOG_PEER_STATE("resuming and requesting callback");
           return 1;
         }
 
@@ -1597,6 +1613,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
         //epee::net_utils::network_throttle_manager::get_global_throttle_inreq().logger_handle_net("log/dr-monero/net/req-all.data", sec, get_avg_block_size());
 
         post_notify<NOTIFY_REQUEST_GET_OBJECTS>(req, context);
+        MLOG_PEER_STATE("requesting objects");
         return true;
       }
 
@@ -1643,6 +1660,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
 //sleep(5);//tmp
         ++context.m_callback_request_count;
         m_p2p->request_callback(context);
+        MLOG_PEER_STATE("requesting callback");
         return true;
       }
     }
@@ -1673,6 +1691,7 @@ skip:
       context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
       LOG_PRINT_CCONTEXT_L1("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()=" << r.block_ids.size() << ", start_from_current_chain " << start_from_current_chain);
       post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
+      MLOG_PEER_STATE("requesting chain");
     }else
     {
       CHECK_AND_ASSERT_MES(context.m_last_response_height == context.m_remote_blockchain_height-1
@@ -1735,6 +1754,7 @@ skip:
   {
     MLOG_P2P_MESSAGE("Received NOTIFY_RESPONSE_CHAIN_ENTRY: m_block_ids.size()=" << arg.m_block_ids.size()
       << ", m_start_height=" << arg.start_height << ", m_total_height=" << arg.total_height);
+    MLOG_PEER_STATE("received chain");
 
     if(!arg.m_block_ids.size())
     {
@@ -1903,6 +1923,7 @@ skip:
     }
 
     m_block_queue.flush_spans(context.m_connection_id, false);
+    MLOG_PEER_STATE("closed");
   }
 
   //------------------------------------------------------------------------------------------------------------------------
