@@ -55,8 +55,14 @@ uint64_t get_next_unpruned_block_height(uint64_t block_height, uint64_t blockcha
     return block_height;
   if (block_height + CRYPTONOTE_PRUNING_TIP_BLOCKS >= blockchain_height)
     return block_height;
-  const uint64_t mask = (1 << ((pruning_seed >> 24) ? (pruning_seed >> 24) : CRYPTONOTE_PRUNING_LOG_STRIPES)) - 1;
-  const uint64_t h = ((block_height / CRYPTONOTE_PRUNING_STRIPE_SIZE) * (mask + 1) + (pruning_seed & 0xffffff) - 1) * CRYPTONOTE_PRUNING_STRIPE_SIZE;
+  const uint64_t shift = (pruning_seed >> 24) ? (pruning_seed >> 24) : CRYPTONOTE_PRUNING_LOG_STRIPES;
+  const uint64_t mask = (1 << shift) - 1;
+  const uint32_t block_pruning_seed = ((block_height / CRYPTONOTE_PRUNING_STRIPE_SIZE) & mask) + 1;
+  if (block_pruning_seed == pruning_seed)
+    return block_height;
+  const uint64_t cycles = ((block_height / CRYPTONOTE_PRUNING_STRIPE_SIZE) >> shift);
+  const uint64_t cycle_start = cycles + ((pruning_seed > block_pruning_seed) ? 0 : 1);
+  const uint64_t h = cycle_start * (CRYPTONOTE_PRUNING_STRIPE_SIZE << shift) + ((pruning_seed & 0xffffff) - 1) * CRYPTONOTE_PRUNING_STRIPE_SIZE;
   if (h + CRYPTONOTE_PRUNING_TIP_BLOCKS > blockchain_height)
     return blockchain_height - CRYPTONOTE_PRUNING_TIP_BLOCKS;
   if (h < block_height)

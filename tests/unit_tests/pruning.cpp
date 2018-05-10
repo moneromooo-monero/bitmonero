@@ -34,7 +34,7 @@
 
 TEST(pruning, tip)
 {
-  static constexpr uint64_t H = 1000;
+  static constexpr uint64_t H = CRYPTONOTE_PRUNING_TIP_BLOCKS + 1000;
   static_assert(H >= CRYPTONOTE_PRUNING_TIP_BLOCKS, "H must be >= CRYPTONOTE_PRUNING_TIP_BLOCKS");
   for (uint64_t h = H - CRYPTONOTE_PRUNING_TIP_BLOCKS; h < H; ++h)
   {
@@ -45,9 +45,29 @@ TEST(pruning, tip)
   }
 }
 
+TEST(pruning, seed)
+{
+  const uint64_t SS = CRYPTONOTE_PRUNING_STRIPE_SIZE;
+  const uint64_t NS = 1 << CRYPTONOTE_PRUNING_LOG_STRIPES;
+  const uint64_t TB = NS * SS;
+
+  for (uint64_t cycle = 0; cycle < 10; ++cycle)
+  {
+    const uint64_t O = TB * cycle;
+    ASSERT_EQ(tools::get_pruning_seed(O + 0,       1000000), 1);
+    ASSERT_EQ(tools::get_pruning_seed(O + 1,       1000000), 1);
+    ASSERT_EQ(tools::get_pruning_seed(O + SS-1,    1000000), 1);
+    ASSERT_EQ(tools::get_pruning_seed(O + SS,      1000000), 2);
+    ASSERT_EQ(tools::get_pruning_seed(O + SS*2-1,  1000000), 2);
+    ASSERT_EQ(tools::get_pruning_seed(O + SS*2,    1000000), 3);
+    ASSERT_EQ(tools::get_pruning_seed(O + SS*NS-1, 1000000), NS);
+    ASSERT_EQ(tools::get_pruning_seed(O + SS*NS,   1000000), 1);
+  }
+}
+
 TEST(pruning, match)
 {
-  static constexpr uint64_t H = 1000;
+  static constexpr uint64_t H = CRYPTONOTE_PRUNING_TIP_BLOCKS + 1000;
   static_assert(H >= CRYPTONOTE_PRUNING_TIP_BLOCKS, "H must be >= CRYPTONOTE_PRUNING_TIP_BLOCKS");
   for (uint64_t h = 0; h < H - CRYPTONOTE_PRUNING_TIP_BLOCKS; ++h)
   {
@@ -62,7 +82,7 @@ TEST(pruning, match)
 
 TEST(pruning, stripe_size)
 {
-  static constexpr uint64_t H = 1000;
+  static constexpr uint64_t H = CRYPTONOTE_PRUNING_TIP_BLOCKS + CRYPTONOTE_PRUNING_STRIPE_SIZE * (1 << CRYPTONOTE_PRUNING_LOG_STRIPES) + 1000;
   static_assert(H >= CRYPTONOTE_PRUNING_TIP_BLOCKS + CRYPTONOTE_PRUNING_STRIPE_SIZE * (1 << CRYPTONOTE_PRUNING_LOG_STRIPES), "H must be >= that stuff in front");
   for (uint32_t pruning_seed = 1; pruning_seed <= (1 << CRYPTONOTE_PRUNING_LOG_STRIPES); ++pruning_seed)
   {
@@ -86,20 +106,42 @@ TEST(pruning, stripe_size)
 
 TEST(pruning, next)
 {
+  static_assert((1 << CRYPTONOTE_PRUNING_LOG_STRIPES) >= 4, "CRYPTONOTE_PRUNING_LOG_STRIPES too low");
+
+  const uint64_t SS = CRYPTONOTE_PRUNING_STRIPE_SIZE;
+  const uint64_t NS = 1 << CRYPTONOTE_PRUNING_LOG_STRIPES;
+  const uint64_t TB = NS * SS;
+
   for (uint64_t h = 0; h < 100; ++h)
     ASSERT_EQ(tools::get_next_unpruned_block_height(h, 1000, 0), h);
 
-  ASSERT_EQ(tools::get_next_unpruned_block_height(0, 1000, 1), 0);
-  ASSERT_EQ(tools::get_next_unpruned_block_height(1, 1000, 1), 1);
-  ASSERT_EQ(tools::get_next_unpruned_block_height(7, 1000, 1), 7);
-  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 1), 32);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(0,      1000000, 1), 0);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(1,      1000000, 1), 1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS-1,   1000000, 1), SS-1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS,     1000000, 1), TB);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(TB,     1000000, 1), TB);
 
-  ASSERT_EQ(tools::get_next_unpruned_block_height(0, 1000, 2), 8);
-  ASSERT_EQ(tools::get_next_unpruned_block_height(1, 1000, 2), 8);
-  ASSERT_EQ(tools::get_next_unpruned_block_height(7, 1000, 2), 8);
-  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 2), 40);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(0,      1000000, 2), SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(1,      1000000, 2), SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS-1,   1000000, 2), SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS,     1000000, 2), SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(2*SS-1, 1000000, 2), 2*SS-1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(2*SS,   1000000, 2), TB+SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(TB+2*SS,   1000000, 2), TB*2+SS);
 
-  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 3), 48);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(0,      1000000, 3), SS*2);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS,     1000000, 3), SS*2);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(2*SS,   1000000, 3), SS*2);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(3*SS-1, 1000000, 3), SS*3-1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(3*SS,   1000000, 3), TB+SS*2);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(TB+3*SS,1000000, 3), TB*2+SS*2);
 
-  ASSERT_EQ(tools::get_next_unpruned_block_height(8, 1000, 4), 56);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS,     1000000, 4), 3*SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(4*SS-1, 1000000, 4), 4*SS-1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(4*SS,   1000000, 4), TB+3*SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(TB+4*SS,1000000, 4), TB*2+3*SS);
+
+  ASSERT_EQ(tools::get_next_unpruned_block_height(SS,     1000000, NS), (NS-1)*SS);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(NS*SS-1,1000000, NS), NS*SS-1);
+  ASSERT_EQ(tools::get_next_unpruned_block_height(NS*SS,  1000000, NS), TB+(NS-1)*SS);
 }
