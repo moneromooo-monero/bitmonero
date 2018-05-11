@@ -139,6 +139,8 @@ namespace nodetool
     }
 
 #warning TOOFOOFDA
+#ifdef CRYPTONOTE_PRUNING_SPOOF_SEED
+#warning Overriding pruning seed
 std::list<peerlist_entry> plw;
 //for (size_t n=0;n<m_peerlist.get_white_peers_count();++n) {
 while (m_peerlist.get_white_peers_count()){
@@ -155,6 +157,7 @@ while (m_peerlist.get_gray_peers_count()){
   m_peerlist.remove_from_peer_gray(plg.back());
 }
 for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
+#endif
 
     // always recreate a new peer id
     make_default_peer_id();
@@ -726,7 +729,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     std::atomic<bool> hsh_result(false);
 
     bool r = epee::net_utils::async_invoke_remote_command2<typename COMMAND_HANDSHAKE::response>(context_.m_connection_id, COMMAND_HANDSHAKE::ID, arg, m_net_server.get_config_object(),
-      [this, &pi, &ev, &hsh_result, &just_take_peerlist](int code, const typename COMMAND_HANDSHAKE::response& rsp, p2p_connection_context& context)
+      [this, &pi, &ev, &hsh_result, &just_take_peerlist, &context_](int code, const typename COMMAND_HANDSHAKE::response& rsp, p2p_connection_context& context)
     {
       epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&](){ev.raise();});
 
@@ -767,11 +770,13 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
           hsh_result = false;
           return;
         }
+        LOG_INFO_CC(context, "New connection handshaked, pruning seed " << context.m_pruning_seed);
         LOG_DEBUG_CC(context, " COMMAND_HANDSHAKE INVOKED OK");
       }else
       {
         LOG_DEBUG_CC(context, " COMMAND_HANDSHAKE(AND CLOSE) INVOKED OK");
       }
+      context_ = context;
     }, P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT);
 
     if(r)
@@ -790,8 +795,6 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
       {
         flags_context.support_flags = support_flags;
       });
-#warning
-      LOG_INFO_CC(context_, "New connection handshaked, pruning seed " << context_.m_pruning_seed);
     }
 
     return hsh_result;
@@ -938,6 +941,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     const epee::net_utils::ipv4_network_address &ipv4 = na.as<const epee::net_utils::ipv4_network_address>();
 
     typename net_server::t_connection_context con = AUTO_VAL_INIT(con);
+    con.m_anchor = peer_type == anchor;
     bool res = m_net_server.connect(epee::string_tools::get_ip_string_from_int32(ipv4.ip()),
       epee::string_tools::num_to_string_fast(ipv4.port()),
       m_config.m_net_config.connection_timeout,
@@ -1004,6 +1008,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     const epee::net_utils::ipv4_network_address &ipv4 = na.as<epee::net_utils::ipv4_network_address>();
 
     typename net_server::t_connection_context con = AUTO_VAL_INIT(con);
+    con.m_anchor = false;
     bool res = m_net_server.connect(epee::string_tools::get_ip_string_from_int32(ipv4.ip()),
                                     epee::string_tools::num_to_string_fast(ipv4.port()),
                                     m_config.m_net_config.connection_timeout,
@@ -1228,6 +1233,10 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::connections_maker()
   {
+    struct A {
+      A() { MGINFO("connections_maker: start"); }
+      ~A() { MGINFO("connections_maker: end"); }
+    } a;
     if (m_offline) return true;
     if (!connect_to_peerlist(m_exclusive_peers)) return false;
 
@@ -1245,6 +1254,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     size_t expected_white_connections = (m_config.m_net_config.max_out_connection_count*P2P_DEFAULT_WHITELIST_CONNECTIONS_PERCENT)/100;
 
     size_t conn_count = get_outgoing_connections_count();
+MGINFO("connections_maker: " << conn_count << "/" << m_config.m_net_config.max_out_connection_count << ", want "<< expected_white_connections << " white, " << P2P_DEFAULT_ANCHOR_CONNECTIONS_COUNT << " anchor");
     if(conn_count < m_config.m_net_config.max_out_connection_count)
     {
       if(conn_count < expected_white_connections)
@@ -1298,6 +1308,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
       if(m_net_server.is_stop_signal_sent())
         return false;
 
+MGINFO("Trying to make a connection from " << (peer_type == anchor ? "anchor" : peer_type == white ? "white" : "gray" ) << " list");
       if (peer_type == anchor && !make_new_connection_from_anchor_peerlist(apl)) {
         break;
       }
@@ -1347,10 +1358,16 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::idle_worker()
   {
+MGINFO("idle_worker start");
+MGINFO("idle_worker -> handshake maker");
     m_peer_handshake_idle_maker_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::peer_sync_idle_maker, this));
+MGINFO("idle_worker -> connections maker");
     m_connections_maker_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::connections_maker, this));
+MGINFO("idle_worker -> gray list housekeeping");
     m_gray_peerlist_housekeeping_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::gray_peerlist_housekeeping, this));
+MGINFO("idle_worker -> peerlist storage");
     m_peerlist_store_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::store_config, this));
+MGINFO("idle_worker stop");
     return true;
   }
   //-----------------------------------------------------------------------------------
@@ -1393,7 +1410,10 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
       }
       be.last_seen += delta;
 #warning slknf uwauiq hvhcuwev
-//be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
+#ifdef CRYPTONOTE_PRUNING_SPOOF_SEED
+#warning Overriding pruning seed
+be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
+#endif
     }
     return true;
   }
