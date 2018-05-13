@@ -1233,10 +1233,6 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::connections_maker()
   {
-    struct A {
-      A() { MGINFO("connections_maker: start"); }
-      ~A() { MGINFO("connections_maker: end"); }
-    } a;
     if (m_offline) return true;
     if (!connect_to_peerlist(m_exclusive_peers)) return false;
 
@@ -1254,7 +1250,6 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     size_t expected_white_connections = (m_config.m_net_config.max_out_connection_count*P2P_DEFAULT_WHITELIST_CONNECTIONS_PERCENT)/100;
 
     size_t conn_count = get_outgoing_connections_count();
-MGINFO("connections_maker: " << conn_count << "/" << m_config.m_net_config.max_out_connection_count << ", want "<< expected_white_connections << " white, " << P2P_DEFAULT_ANCHOR_CONNECTIONS_COUNT << " anchor");
     if(conn_count < m_config.m_net_config.max_out_connection_count)
     {
       if(conn_count < expected_white_connections)
@@ -1308,7 +1303,6 @@ MGINFO("connections_maker: " << conn_count << "/" << m_config.m_net_config.max_o
       if(m_net_server.is_stop_signal_sent())
         return false;
 
-MGINFO("Trying to make a connection from " << (peer_type == anchor ? "anchor" : peer_type == white ? "white" : "gray" ) << " list (" << conn_count << "/" << expected_connections << ")");
       if (peer_type == anchor && !make_new_connection_from_anchor_peerlist(apl)) {
         return true;
       }
@@ -1357,16 +1351,10 @@ MGINFO("Trying to make a connection from " << (peer_type == anchor ? "anchor" : 
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::idle_worker()
   {
-MGINFO("idle_worker start");
-MGINFO("idle_worker -> handshake maker");
     m_peer_handshake_idle_maker_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::peer_sync_idle_maker, this));
-MGINFO("idle_worker -> connections maker");
     m_connections_maker_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::connections_maker, this));
-MGINFO("idle_worker -> gray list housekeeping");
     m_gray_peerlist_housekeeping_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::gray_peerlist_housekeeping, this));
-MGINFO("idle_worker -> peerlist storage");
     m_peerlist_store_interval.do_call(boost::bind(&node_server<t_payload_net_handler>::store_config, this));
-MGINFO("idle_worker stop");
     return true;
   }
   //-----------------------------------------------------------------------------------
