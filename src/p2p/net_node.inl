@@ -1116,7 +1116,6 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     size_t max_random_index = 0;
 
     std::set<size_t> tried_peers;
-    const uint32_t next_needed_pruning_seed = m_payload_handler.get_next_needed_pruning_seed();
 
     size_t try_count = 0;
     size_t rand_count = 0;
@@ -1124,6 +1123,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     {
       ++rand_count;
       size_t random_index;
+      const uint32_t next_needed_pruning_seed = m_payload_handler.get_next_needed_pruning_seed();
 
       std::vector<size_t> filtered = filter_by_pruning_seed(next_needed_pruning_seed,
           [use_white_list, this]() { return use_white_list ? m_peerlist.get_white_peers_count() : m_peerlist.get_gray_peers_count(); },
@@ -1308,19 +1308,18 @@ MGINFO("connections_maker: " << conn_count << "/" << m_config.m_net_config.max_o
       if(m_net_server.is_stop_signal_sent())
         return false;
 
-MGINFO("Trying to make a connection from " << (peer_type == anchor ? "anchor" : peer_type == white ? "white" : "gray" ) << " list");
+MGINFO("Trying to make a connection from " << (peer_type == anchor ? "anchor" : peer_type == white ? "white" : "gray" ) << " list (" << conn_count << "/" << expected_connections << ")");
       if (peer_type == anchor && !make_new_connection_from_anchor_peerlist(apl)) {
-        break;
+        return true;
       }
 
       if (peer_type == white && !make_new_connection_from_peerlist(true)) {
-        break;
+        return true;
       }
 
       if (peer_type == gray && !make_new_connection_from_peerlist(false)) {
-        break;
+        return true;
       }
-
       conn_count = get_outgoing_connections_count();
     }
     return true;

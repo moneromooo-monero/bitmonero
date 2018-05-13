@@ -140,6 +140,22 @@ uint64_t block_queue::get_max_block_height() const
   return height;
 }
 
+uint64_t block_queue::get_next_needed_height() const
+{
+  boost::unique_lock<boost::recursive_mutex> lock(mutex);
+  if (blocks.empty())
+    return 0;
+  block_map::const_iterator i = blocks.begin();
+  uint64_t last_needed_height = i->start_block_height + i->nblocks;
+  while (++i != blocks.end())
+  {
+    if (i->start_block_height != last_needed_height)
+      return last_needed_height;
+    last_needed_height = i->start_block_height + i->nblocks;
+  }
+  return last_needed_height;
+}
+
 void block_queue::print() const
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
@@ -177,6 +193,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
 
+MDEBUG("reserve_span: fbh "<<first_block_height << ", lbh " << last_block_height << ", max " << max_blocks << ", seed " << epee::string_tools::to_string_hex(pruning_seed) << ", H " << blockchain_height << ", block hashes size " << block_hashes.size());
   if (last_block_height < first_block_height || max_blocks == 0)
   {
     MDEBUG("reserve_span: early out: first_block_height " << first_block_height << ", last_block_height " << last_block_height << ", max_blocks " << max_blocks);
@@ -186,20 +203,41 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
   // skip everything we've already requested
   uint64_t span_start_height = last_block_height - block_hashes.size() + 1;
   std::vector<crypto::hash>::const_iterator i = block_hashes.begin();
+uint64_t skipped=0;
   while (i != block_hashes.end() && requested(*i))
   {
     ++i;
     ++span_start_height;
+++skipped;
   }
+if(skipped)MDEBUG("skipped: "<< skipped << " from " << block_hashes[0] << " at " << last_block_height - block_hashes.size() + 1);
 
   // if the peer's pruned for the starting block and its unpruned stripe comes next, start downloading from there
   const uint32_t next_unpruned_height = tools::get_next_unpruned_block_height(span_start_height, blockchain_height, pruning_seed);
-  if (next_unpruned_height > span_start_height && next_unpruned_height < span_start_height + (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+MDEBUG("next_unpruned_height " << next_unpruned_height << " from " << span_start_height << " and seed " << epee::string_tools::to_string_hex(pruning_seed) << ", limit " << span_start_height + CRYPTONOTE_PRUNING_STRIPE_SIZE);
+  if (next_unpruned_height > span_start_height && next_unpruned_height < span_start_height + CRYPTONOTE_PRUNING_STRIPE_SIZE)
   {
     MGINFO("We can download from next span: ideal height " << span_start_height << ", next unpruned height " << next_unpruned_height <<
         "(+" << next_unpruned_height - span_start_height << "), current seed " << pruning_seed);
     span_start_height = next_unpruned_height;
   }
+MDEBUG("span_start_height: " <<span_start_height);
+  const uint64_t block_hashes_start_height = last_block_height - block_hashes.size() + 1;
+  if (span_start_height >= block_hashes.size() + block_hashes_start_height)
+  {
+    MDEBUG("Out of hashes, cannot reserve");
+    return std::make_pair(0, 0);
+  }
+
+  i = block_hashes.begin() + span_start_height - block_hashes_start_height;
+skipped=0;
+  while (i != block_hashes.end() && requested(*i))
+  {
+    ++i;
+    ++span_start_height;
+++skipped;
+  }
+if(skipped)MDEBUG("skipped: "<< skipped << " from " << block_hashes[0] << " at " << last_block_height - block_hashes.size() + 1);
 
   uint64_t span_length = 0;
   std::vector<crypto::hash> hashes;
@@ -209,6 +247,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     ++i;
     ++span_length;
   }
+MDEBUG("span_length: " <<span_length);
   if (span_length == 0)
     return std::make_pair(0, 0);
   MDEBUG("Reserving span " << span_start_height << " - " << (span_start_height + span_length - 1) << " for " << connection_id);

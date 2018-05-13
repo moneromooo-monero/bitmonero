@@ -1060,6 +1060,15 @@ skip:
             bool parent_requested = m_block_queue.requested(new_block.prev_id);
             if (!parent_requested)
             {
+              // we might be able to ask for that block directly, as we now can request out of order,
+              // otherwise we continue out of order, unless this block is the one we need, in which
+              // case we request block hashes, though it might be safer to disconnect ?
+              if (start_height > previous_height)
+              {
+                MDEBUG("Got block with unknown parent which was not requested, but peer does not have that block - back to download");
+                goto skip;
+              }
+
               // this can happen if a connection was sicced onto a late span, if it did not have those blocks,
               // since we don't know that at the sic time
               LOG_ERROR_CCONTEXT("Got block with unknown parent which was not requested - querying block hashes");
@@ -1209,7 +1218,7 @@ skip:
         context.m_last_response_height = 0;
         force_next_span = true;
       }
-      if (m_next_needed_pruning_seed && m_next_needed_pruning_seed != context.m_pruning_seed)
+      if (m_next_needed_pruning_seed && m_next_needed_pruning_seed != (context.m_pruning_seed & 0xffffff))
       {
         if (context.m_anchor)
         {
@@ -1420,16 +1429,16 @@ skip:
     m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
       if (!context.m_is_income)
         ++n_out_peers;
-      if (context.m_state > cryptonote_connection_context::state_synchronizing && (context.m_pruning_seed & 0xffffff) == next_seed)
+      if (context.m_state >= cryptonote_connection_context::state_synchronizing && (context.m_pruning_seed & 0xffffff) == next_seed)
         ++n_peers_on_next_seed;
       return true;
     });
-    if (next_seed > 0 && n_peers_on_next_seed == 0)
+    if (next_seed > 0)
     {
       const uint32_t distance = (context.m_pruning_seed - next_seed + (1<<CRYPTONOTE_PRUNING_LOG_STRIPES)) % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES);
       if (n_out_peers >= m_max_out_peers || (distance > 1 && n_peers_on_next_seed <= 2))
       {
-        MDEBUG(context << "we have no peer with seed " << next_seed << ", and either " << n_out_peers << " is at max out peers ("
+        MDEBUG(context << "we want seed " << next_seed << ", and either " << n_out_peers << " is at max out peers ("
             << m_max_out_peers << ") or distance " << distance << " from " <<
             epee::string_tools::to_string_hex(next_seed) << " to " << epee::string_tools::to_string_hex(context.m_pruning_seed) <<
             " is too large and we have only " << n_peers_on_next_seed << " peers on next seed, dropping connection to make space");
@@ -1943,18 +1952,9 @@ skip:
   template<class t_core>
   uint32_t t_cryptonote_protocol_handler<t_core>::get_next_needed_pruning_seed() const
   {
-    uint64_t want_height;
     const uint64_t want_height_from_blockchain = m_core.get_current_blockchain_height();
-    const uint64_t want_height_from_block_queue = m_block_queue.get_max_block_height() + 1;
-    const std::pair<uint64_t, uint64_t> want_height_from_gap = m_block_queue.get_start_gap_span();
-    if (want_height_from_gap.first)
-    {
-      want_height = want_height_from_gap.first;
-    }
-    else
-    {
-      want_height = std::max(want_height_from_blockchain, want_height_from_block_queue);
-    }
+    const uint64_t want_height_from_block_queue = m_block_queue.get_next_needed_height();
+    const uint64_t want_height = std::max(want_height_from_blockchain, want_height_from_block_queue);
     uint64_t blockchain_height = m_core.get_target_blockchain_height();
     if (blockchain_height == 0)
       blockchain_height = std::numeric_limits<uint64_t>::max();
@@ -1974,7 +1974,7 @@ skip:
     });
     const bool use_next = (n_next > m_max_out_peers / 2 && n_subsequent <= 1) || (n_next > 2 && n_subsequent == 0);
     const uint32_t ret_seed = use_next ? subsequent_pruning_seed: next_pruning_seed;
-    MDEBUG("get_next_needed_pruning_seed: want height " << want_height << " (" << want_height_from_gap.first << " from gap, " <<
+    MDEBUG("get_next_needed_pruning_seed: want height " << want_height << " (" <<
         want_height_from_blockchain << " from blockchain, " << want_height_from_block_queue << " from block queue), seed " <<
         next_pruning_seed << " (" << n_next << "/" << m_max_out_peers << " on it and " << n_subsequent << " on " <<
         subsequent_pruning_seed << ") -> " << ret_seed << " (+" << ret_seed-next_pruning_seed << ")");
@@ -1984,8 +1984,9 @@ skip:
   template<class t_core>
   void t_cryptonote_protocol_handler<t_core>::drop_connection(cryptonote_connection_context &context, bool add_fail, bool flush_all_spans)
   {
-    LOG_DEBUG_CC(context, "dropping connection id " << context.m_connection_id <<
-        ", add_fail " << add_fail << ", flush_all_spans " << flush_all_spans);
+    LOG_DEBUG_CC(context, "dropping connection id " << context.m_connection_id << " (pruning seed " <<
+        epee::string_tools::to_string_hex(context.m_pruning_seed) <<
+        "), add_fail " << add_fail << ", flush_all_spans " << flush_all_spans);
 
     if (add_fail)
       m_p2p->add_host_fail(context.m_remote_address);
