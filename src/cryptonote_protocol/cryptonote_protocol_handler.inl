@@ -1421,7 +1421,7 @@ skip:
     if (context.m_anchor)
       return false;
 
-    const uint32_t next_seed = get_next_needed_pruning_seed();
+    const uint32_t next_seed = get_next_needed_pruning_seed().first;
     if (next_seed == (context.m_pruning_seed & 0xffffff))
       return false;
 
@@ -1479,7 +1479,8 @@ skip:
           return false;
         }
 
-MINFO("proceed " << proceed << " (queue " << queue_proceed << ", stripe " << stripe_proceed << ", " << epee::string_tools::to_string_hex(get_next_needed_pruning_seed()) << " needed)");
+const auto next_needed_pruning_seed = get_next_needed_pruning_seed();
+MINFO("proceed " << proceed << " (queue " << queue_proceed << ", stripe " << stripe_proceed << ", " << epee::string_tools::to_string_hex(next_needed_pruning_seed.first) << "-" << epee::string_tools::to_string_hex(next_needed_pruning_seed.second) << " needed)");
 MINFO("  - next_block_height " << next_block_height << ", seed " << epee::string_tools::to_string_hex(context.m_pruning_seed));
 MINFO("  - last_response_height " << context.m_last_response_height << ", m_needed_objects size " << context.m_needed_objects.size());
         if (proceed)
@@ -1694,7 +1695,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
       // if we're still around, we might be at a point where the peer is pruned, so we could either
       // drop it to make space for other peers, or ask for a span further down the line
 #if 1
-      const uint32_t next_seed = get_next_needed_pruning_seed();
+      const uint32_t next_seed = get_next_needed_pruning_seed().second;
       if (next_seed != context.m_pruning_seed)
 #else
       const uint64_t next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
@@ -1953,7 +1954,7 @@ skip:
   }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>
-  uint32_t t_cryptonote_protocol_handler<t_core>::get_next_needed_pruning_seed() const
+  std::pair<uint32_t, uint32_t> t_cryptonote_protocol_handler<t_core>::get_next_needed_pruning_seed() const
   {
     const uint64_t want_height_from_blockchain = m_core.get_current_blockchain_height();
     const uint64_t want_height_from_block_queue = m_block_queue.get_next_needed_height();
@@ -1981,7 +1982,7 @@ skip:
         want_height_from_blockchain << " from blockchain, " << want_height_from_block_queue << " from block queue), seed " <<
         next_pruning_seed << " (" << n_next << "/" << m_max_out_peers << " on it and " << n_subsequent << " on " <<
         subsequent_pruning_seed << ") -> " << ret_seed << " (+" << ret_seed-next_pruning_seed << ")");
-    return ret_seed;
+    return std::make_pair(next_pruning_seed, ret_seed);
   }
   //------------------------------------------------------------------------------------------------------------------------
   template<class t_core>

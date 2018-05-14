@@ -1123,7 +1123,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
     {
       ++rand_count;
       size_t random_index;
-      const uint32_t next_needed_pruning_seed = m_payload_handler.get_next_needed_pruning_seed();
+      const uint32_t next_needed_pruning_seed = m_payload_handler.get_next_needed_pruning_seed().second;
 
       std::vector<size_t> filtered = filter_by_pruning_seed(next_needed_pruning_seed,
           [use_white_list, this]() { return use_white_list ? m_peerlist.get_white_peers_count() : m_peerlist.get_gray_peers_count(); },

@@ -110,7 +110,7 @@ namespace cryptonote
     void stop();
     void on_connection_close(cryptonote_connection_context &context);
     void set_max_out_peers(unsigned int max) { m_max_out_peers = max; }
-    uint32_t get_next_needed_pruning_seed() const;
+    std::pair<uint32_t, uint32_t> get_next_needed_pruning_seed() const;
   private:
     //----------------- commands handlers ----------------------------------------------
     int handle_notify_new_block(int command, NOTIFY_NEW_BLOCK::request& arg, cryptonote_connection_context& context);
