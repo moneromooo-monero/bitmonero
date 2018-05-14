@@ -1420,6 +1420,8 @@ skip:
   {
     if (context.m_anchor)
       return false;
+    if (context.m_pruning_seed == 0)
+      return false;
 
     const uint32_t next_seed = get_next_needed_pruning_seed().first;
     if (next_seed == (context.m_pruning_seed & 0xffffff))
@@ -1436,7 +1438,7 @@ skip:
     if (next_seed > 0)
     {
       const uint32_t distance = (context.m_pruning_seed - next_seed + (1<<CRYPTONOTE_PRUNING_LOG_STRIPES)) % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES);
-      if (n_out_peers >= m_max_out_peers || (distance > 1 && n_peers_on_next_seed <= 2))
+      if ((n_out_peers >= m_max_out_peers && n_peers_on_next_seed == 0) || (distance > 1 && n_peers_on_next_seed <= 2) || distance > 2)
       {
         MDEBUG(context << "we want seed " << next_seed << ", and either " << n_out_peers << " is at max out peers ("
             << m_max_out_peers << ") or distance " << distance << " from " <<
