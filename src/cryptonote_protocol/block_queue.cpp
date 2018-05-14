@@ -217,7 +217,7 @@ if(skipped)MDEBUG("skipped: "<< skipped << " from " << block_hashes[0] << " at "
 MDEBUG("next_unpruned_height " << next_unpruned_height << " from " << span_start_height << " and seed " << epee::string_tools::to_string_hex(pruning_seed) << ", limit " << span_start_height + CRYPTONOTE_PRUNING_STRIPE_SIZE);
   if (next_unpruned_height > span_start_height && next_unpruned_height < span_start_height + CRYPTONOTE_PRUNING_STRIPE_SIZE)
   {
-    MGINFO("We can download from next span: ideal height " << span_start_height << ", next unpruned height " << next_unpruned_height <<
+    MDEBUG("We can download from next span: ideal height " << span_start_height << ", next unpruned height " << next_unpruned_height <<
         "(+" << next_unpruned_height - span_start_height << "), current seed " << pruning_seed);
     span_start_height = next_unpruned_height;
   }

@@ -1473,8 +1473,9 @@ skip:
         const uint64_t next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
         bool stripe_proceed = tools::has_unpruned_block(next_block_height, context.m_remote_blockchain_height, context.m_pruning_seed);
         bool proceed = queue_proceed/* && stripe_proceed*/;
-if (!stripe_proceed && should_drop_connection(context))
+        if (!stripe_proceed && should_drop_connection(context))
         {
+          m_p2p->add_used_stripe_peer(context);
           return false;
         }
 
@@ -1717,6 +1718,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
 #if 1
         if (should_drop_connection(context))
         {
+          m_p2p->add_used_stripe_peer(context);
           return false;
         }
 #if 0
@@ -1823,6 +1825,7 @@ skip:
       m_core.on_synchronized();
     }
     m_core.safesyncmode(true);
+    m_p2p->clear_used_stripe_peers();
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------

@@ -29,6 +29,7 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
+#include <array>
 #include <boost/thread.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -125,6 +126,11 @@ namespace nodetool
     virtual bool block_host(const epee::net_utils::network_address &adress, time_t seconds = P2P_IP_BLOCKTIME);
     virtual bool unblock_host(const epee::net_utils::network_address &address);
     virtual std::map<std::string, time_t> get_blocked_hosts() { CRITICAL_REGION_LOCAL(m_blocked_hosts_lock); return m_blocked_hosts; }
+
+    virtual void add_used_stripe_peer(const typename t_payload_net_handler::connection_context &context);
+    virtual void remove_used_stripe_peer(const typename t_payload_net_handler::connection_context &context);
+    virtual void clear_used_stripe_peers();
+
   private:
     const std::vector<std::string> m_seed_nodes_list =
     { "seeds.moneroseeds.se"
@@ -338,6 +344,9 @@ namespace nodetool
 
     epee::critical_section m_host_fails_score_lock;
     std::map<std::string, uint64_t> m_host_fails_score;
+
+    boost::mutex m_used_stripe_peers_mutex;
+    std::array<std::list<epee::net_utils::network_address>, 1 << CRYPTONOTE_PRUNING_LOG_STRIPES> m_used_stripe_peers;
 
     cryptonote::network_type m_nettype;
   };

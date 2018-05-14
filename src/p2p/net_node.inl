@@ -1135,7 +1135,27 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
         return false;
       }
       if (use_white_list)
-        random_index = get_random_index_with_fixed_probability(std::min<uint64_t>(filtered.size() -1, 20));
+      {
+        // if using the white list, we first pick in the set of peers we've already been using earlier
+        uint32_t index = next_needed_pruning_seed & 0xffffff;
+        random_index = get_random_index_with_fixed_probability(std::min<uint64_t>(filtered.size() - 1, 20));
+        CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
+        if (index < (1 << CRYPTONOTE_PRUNING_LOG_STRIPES) && !m_used_stripe_peers[index].empty())
+        {
+          const epee::net_utils::network_address na = m_used_stripe_peers[index].front();
+          m_used_stripe_peers[index].pop_front();
+          for (size_t i = 0; i < filtered.size(); ++i)
+          {
+            peerlist_entry pe;
+            if (m_peerlist.get_white_peer_by_index(pe, filtered[i]) && pe.adr == na)
+            {
+              MDEBUG("Reusing stripe " << epee::string_tools::to_string_hex(next_needed_pruning_seed) << " peer " << pe.adr.str());
+              random_index = i;
+              break;
+            }
+          }
+        }
+      }
       else
         random_index = crypto::rand<size_t>() % filtered.size();
 
@@ -2032,6 +2052,44 @@ be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) 
     LOG_PRINT_L2("PEER PROMOTED TO WHITE PEER LIST IP address: " << pe.adr.host_str() << " Peer ID: " << peerid_type(pe.id));
 
     return true;
+  }
+
+  template<class t_payload_net_handler>
+  void node_server<t_payload_net_handler>::add_used_stripe_peer(const typename t_payload_net_handler::connection_context &context)
+  {
+    if (context.m_pruning_seed == 0)
+      return;
+    const uint32_t index = context.m_pruning_seed & 0xffffff;
+    if (index >= (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+      return;
+    CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
+    MINFO("adding stripe " << epee::string_tools::to_string_hex(context.m_pruning_seed) << " peer: " << context.m_remote_address.str());
+    std::remove_if(m_used_stripe_peers[index].begin(), m_used_stripe_peers[index].end(),
+        [&context](const epee::net_utils::network_address &na){ return context.m_remote_address == na; });
+    m_used_stripe_peers[index].push_back(context.m_remote_address);
+  }
+
+  template<class t_payload_net_handler>
+  void node_server<t_payload_net_handler>::remove_used_stripe_peer(const typename t_payload_net_handler::connection_context &context)
+  {
+    if (context.m_pruning_seed == 0)
+      return;
+    const uint32_t index = context.m_pruning_seed & 0xffffff;
+    if (index >= (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+      return;
+    CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
+    MINFO("removing stripe " << epee::string_tools::to_string_hex(context.m_pruning_seed) << " peer: " << context.m_remote_address.str());
+    std::remove_if(m_used_stripe_peers[index].begin(), m_used_stripe_peers[index].end(),
+        [&context](const epee::net_utils::network_address &na){ return context.m_remote_address == na; });
+  }
+
+  template<class t_payload_net_handler>
+  void node_server<t_payload_net_handler>::clear_used_stripe_peers()
+  {
+    CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
+    MINFO("clearing used stripe peers");
+    for (size_t i = 0; i < 1 << CRYPTONOTE_PRUNING_LOG_STRIPES; ++i)
+      m_used_stripe_peers[i].clear();
   }
 
   template<class t_payload_net_handler>
