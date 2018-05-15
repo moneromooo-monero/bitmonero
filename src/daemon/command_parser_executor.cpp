@@ -680,4 +680,9 @@ bool t_command_parser_executor::prune_blockchain(const std::vector<std::string>&
   return m_executor.prune_blockchain(pruning_seed);
 }
 
+bool t_command_parser_executor::check_blockchain_pruning(const std::vector<std::string>& args)
+{
+  return m_executor.check_blockchain_pruning();
+}
+
 } // namespace daemonize

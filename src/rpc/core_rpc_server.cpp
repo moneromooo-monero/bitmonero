@@ -2104,10 +2104,10 @@ namespace cryptonote
   {
     try
     {
-      if (!m_core.prune_blockchain(req.pruning_seed))
+      if (!(req.check ? m_core.check_blockchain_pruning() : m_core.prune_blockchain(req.pruning_seed)))
       {
         error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
-        error_resp.message = "Failed to prune blockchain";
+        error_resp.message = req.check ? "Failed to check blockchain pruning" : "Failed to prune blockchain";
         return false;
       }
       res.pruning_seed = m_core.get_blockchain_pruning_seed();

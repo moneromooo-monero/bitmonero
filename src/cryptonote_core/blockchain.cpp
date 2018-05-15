@@ -3607,6 +3607,20 @@ leave:
   return true;
 }
 //------------------------------------------------------------------
+bool Blockchain::update_blockchain_pruning()
+{
+  CRITICAL_REGION_LOCAL(m_blockchain_lock);
+
+  return m_db->update_pruning();
+}
+//------------------------------------------------------------------
+bool Blockchain::check_blockchain_pruning()
+{
+  CRITICAL_REGION_LOCAL(m_blockchain_lock);
+
+  return m_db->check_pruning();
+}
+//------------------------------------------------------------------
 bool Blockchain::update_next_cumulative_size_limit()
 {
   uint64_t full_reward_zone = get_min_block_size(get_current_hard_fork_version());
@@ -3817,6 +3831,8 @@ bool Blockchain::cleanup_handle_incoming_blocks(bool force_sync)
 
   CRITICAL_REGION_END();
   m_tx_pool.unlock();
+
+  update_blockchain_pruning();
 
   return success;
 }

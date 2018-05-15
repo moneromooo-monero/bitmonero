@@ -1406,6 +1406,18 @@ public:
   virtual bool prune_blockchain(uint32_t pruning_seed = 0) = 0;
 
   /**
+   * @brief prunes recent blockchain changes as needed, iff pruning is enabled
+   * @return success iff true
+   */
+  virtual bool update_pruning() = 0;
+
+  /**
+   * @brief checks pruning was done correctly, iff enabled
+   * @return success iff true
+   */
+  virtual bool check_pruning() = 0;
+
+  /**
    * @brief runs a function over all txpool transactions
    *
    * The subclass should run the passed function for each txpool tx it has

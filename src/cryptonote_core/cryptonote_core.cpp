@@ -1358,6 +1358,7 @@ namespace cryptonote
     m_txpool_auto_relayer.do_call(boost::bind(&core::relay_txpool_transactions, this));
     m_check_updates_interval.do_call(boost::bind(&core::check_updates, this));
     m_check_disk_space_interval.do_call(boost::bind(&core::check_disk_space, this));
+    m_blockchain_pruning_interval.do_call(boost::bind(&core::update_blockchain_pruning, this));
     m_miner.on_idle();
     m_mempool.on_idle();
     return true;
@@ -1530,6 +1531,16 @@ namespace cryptonote
       MCLOG_RED(level, "global", "Free space is below 1 GB on " << m_config_folder);
     }
     return true;
+  }
+  //-----------------------------------------------------------------------------------------------
+  bool core::update_blockchain_pruning()
+  {
+    return m_blockchain_storage.update_blockchain_pruning();
+  }
+  //-----------------------------------------------------------------------------------------------
+  bool core::check_blockchain_pruning()
+  {
+    return m_blockchain_storage.check_blockchain_pruning();
   }
   //-----------------------------------------------------------------------------------------------
   void core::set_target_blockchain_height(uint64_t target_blockchain_height)

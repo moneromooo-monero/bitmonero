@@ -2258,9 +2258,11 @@ namespace cryptonote
   {
     struct request
     {
+      bool check;
       uint32_t pruning_seed;
 
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(check, false)
         KV_SERIALIZE(pruning_seed)
       END_KV_SERIALIZE_MAP()
     };

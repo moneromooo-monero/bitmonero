@@ -140,6 +140,8 @@ public:
   bool sync_info(const std::vector<std::string>& args);
 
   bool prune_blockchain(const std::vector<std::string>& args);
+
+  bool check_blockchain_pruning(const std::vector<std::string>& args);
 };
 
 } // namespace daemonize

@@ -946,6 +946,8 @@ namespace cryptonote
     uint64_t prevalidate_block_hashes(uint64_t height, const std::vector<crypto::hash> &hashes);
     uint32_t get_blockchain_pruning_seed() const { return m_db->get_blockchain_pruning_seed(); }
     bool prune_blockchain(uint32_t pruning_seed) { return m_db->prune_blockchain(pruning_seed); }
+    bool update_blockchain_pruning();
+    bool check_blockchain_pruning();
 
     void lock();
     void unlock();
