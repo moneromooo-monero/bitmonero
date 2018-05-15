@@ -1959,7 +1959,7 @@ skip:
   std::pair<uint32_t, uint32_t> t_cryptonote_protocol_handler<t_core>::get_next_needed_pruning_seed() const
   {
     const uint64_t want_height_from_blockchain = m_core.get_current_blockchain_height();
-    const uint64_t want_height_from_block_queue = m_block_queue.get_next_needed_height();
+    const uint64_t want_height_from_block_queue = m_block_queue.get_next_needed_height(want_height_from_blockchain);
     const uint64_t want_height = std::max(want_height_from_blockchain, want_height_from_block_queue);
     uint64_t blockchain_height = m_core.get_target_blockchain_height();
     if (blockchain_height == 0)

@@ -140,18 +140,17 @@ uint64_t block_queue::get_max_block_height() const
   return height;
 }
 
-uint64_t block_queue::get_next_needed_height() const
+uint64_t block_queue::get_next_needed_height(uint64_t blockchain_height) const
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
   if (blocks.empty())
     return 0;
-  block_map::const_iterator i = blocks.begin();
-  uint64_t last_needed_height = i->start_block_height + i->nblocks;
-  while (++i != blocks.end())
+  uint64_t last_needed_height = blockchain_height;
+  for (const auto &span: blocks)
   {
-    if (i->start_block_height != last_needed_height)
+    if (span.start_block_height != last_needed_height)
       return last_needed_height;
-    last_needed_height = i->start_block_height + i->nblocks;
+    last_needed_height = span.start_block_height + span.nblocks;
   }
   return last_needed_height;
 }
