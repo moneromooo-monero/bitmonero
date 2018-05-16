@@ -722,6 +722,7 @@ bool t_rpc_command_executor::print_transaction(crypto::hash transaction_hash,
 
   req.txs_hashes.push_back(epee::string_tools::pod_to_hex(transaction_hash));
   req.decode_as_json = false;
+  req.split = true;
   if (m_is_rpc)
   {
     if (!m_rpc_client->rpc_request(req, res, "/gettransactions", fail_message.c_str()))
@@ -746,13 +747,26 @@ bool t_rpc_command_executor::print_transaction(crypto::hash transaction_hash,
       if (res.txs.front().in_pool)
         tools::success_msg_writer() << "Found in pool";
       else
-        tools::success_msg_writer() << "Found in blockchain at height " << res.txs.front().block_height;
+        tools::success_msg_writer() << "Found in blockchain at height " << res.txs.front().block_height << (res.txs.front().prunable_as_hex.empty() ? " (pruned)" : "");
     }
 
     const std::string &as_hex = (1 == res.txs.size()) ? res.txs.front().as_hex : res.txs_as_hex.front();
+    const std::string &pruned_as_hex = (1 == res.txs.size()) ? res.txs.front().pruned_as_hex : "";
+    const std::string &prunable_as_hex = (1 == res.txs.size()) ? res.txs.front().prunable_as_hex : "";
     // Print raw hex if requested
     if (include_hex)
-      tools::success_msg_writer() << as_hex << std::endl;
+    {
+      if (!as_hex.empty())
+      {
+        tools::success_msg_writer() << as_hex << std::endl;
+      }
+      else
+      {
+        tools::success_msg_writer() << pruned_as_hex << std::endl;
+        if (!prunable_as_hex.empty())
+          tools::success_msg_writer() << prunable_as_hex << std::endl;
+      }
+    }
 
     // Print json if requested
     if (include_json)
@@ -760,17 +774,27 @@ bool t_rpc_command_executor::print_transaction(crypto::hash transaction_hash,
       crypto::hash tx_hash, tx_prefix_hash;
       cryptonote::transaction tx;
       cryptonote::blobdata blob;
-      if (!string_tools::parse_hexstr_to_binbuff(as_hex, blob))
+      std::string source = as_hex.empty() ? pruned_as_hex + prunable_as_hex : as_hex;
+      bool pruned = !pruned_as_hex.empty() && prunable_as_hex.empty();
+      if (!string_tools::parse_hexstr_to_binbuff(source, blob))
       {
         tools::fail_msg_writer() << "Failed to parse tx to get json format";
       }
-      else if (!cryptonote::parse_and_validate_tx_from_blob(blob, tx, tx_hash, tx_prefix_hash))
-      {
-        tools::fail_msg_writer() << "Failed to parse tx blob to get json format";
-      }
       else
       {
-        tools::success_msg_writer() << cryptonote::obj_to_json_str(tx) << std::endl;
+        bool ret;
+        if (pruned)
+          ret = cryptonote::parse_and_validate_tx_base_from_blob(blob, tx);
+        else
+          ret = cryptonote::parse_and_validate_tx_from_blob(blob, tx);
+        if (!ret)
+        {
+          tools::fail_msg_writer() << "Failed to parse tx blob to get json format";
+        }
+        else
+        {
+          tools::success_msg_writer() << cryptonote::obj_to_json_str(tx) << std::endl;
+        }
       }
     }
   }

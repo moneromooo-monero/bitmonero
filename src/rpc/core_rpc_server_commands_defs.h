@@ -566,11 +566,13 @@ namespace cryptonote
       std::vector<std::string> txs_hashes;
       bool decode_as_json;
       bool prune;
+      bool split;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(txs_hashes)
         KV_SERIALIZE(decode_as_json)
         KV_SERIALIZE_OPT(prune, false)
+        KV_SERIALIZE_OPT(split, false)
       END_KV_SERIALIZE_MAP()
     };
 
@@ -578,6 +580,9 @@ namespace cryptonote
     {
       std::string tx_hash;
       std::string as_hex;
+      std::string pruned_as_hex;
+      std::string prunable_as_hex;
+      std::string prunable_hash;
       std::string as_json;
       bool in_pool;
       bool double_spend_seen;
@@ -588,6 +593,9 @@ namespace cryptonote
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(tx_hash)
         KV_SERIALIZE(as_hex)
+        KV_SERIALIZE(pruned_as_hex)
+        KV_SERIALIZE(prunable_as_hex)
+        KV_SERIALIZE(prunable_hash)
         KV_SERIALIZE(as_json)
         KV_SERIALIZE(in_pool)
         KV_SERIALIZE(double_spend_seen)

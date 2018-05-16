@@ -1136,6 +1136,21 @@ public:
   virtual bool get_pruned_tx_blob(const crypto::hash& h, cryptonote::blobdata &tx) const = 0;
 
   /**
+   * @brief fetches the prunable transaction blob with the given hash
+   *
+   * The subclass should return the prunable transaction stored which has the given
+   * hash.
+   *
+   * If the transaction does not exist, or if we do not have that prunable data,
+   * the subclass should return false.
+   *
+   * @param h the hash to look for
+   *
+   * @return true iff the transaction was found and we have its prunable data
+   */
+  virtual bool get_prunable_tx_blob(const crypto::hash& h, cryptonote::blobdata &tx) const = 0;
+
+  /**
    * @brief fetches the prunable transaction hash
    *
    * The subclass should return the hash of the prunable transaction data.

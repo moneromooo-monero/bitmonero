@@ -2104,6 +2104,40 @@ bool Blockchain::get_transactions_blobs(const t_ids_container& txs_ids, t_tx_con
 }
 //------------------------------------------------------------------
 template<class t_ids_container, class t_tx_container, class t_missed_container>
+bool Blockchain::get_split_transactions_blobs(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs) const
+{
+  LOG_PRINT_L3("Blockchain::" << __func__);
+  CRITICAL_REGION_LOCAL(m_blockchain_lock);
+
+  reserve_container(txs, txs_ids.size());
+  for (const auto& tx_hash : txs_ids)
+  {
+    try
+    {
+      cryptonote::blobdata tx;
+      if (m_db->get_pruned_tx_blob(tx_hash, tx))
+      {
+        txs.push_back(std::make_tuple(tx_hash, std::move(tx), crypto::null_hash, cryptonote::blobdata()));
+        if (m_db->get_prunable_tx_hash(tx_hash, std::get<2>(txs.back())))
+        {
+          MERROR("Prunable data hash not found for " << tx_hash);
+          return false;
+        }
+        if (!m_db->get_prunable_tx_blob(tx_hash, std::get<3>(txs.back())))
+          std::get<3>(txs.back()).clear();
+      }
+      else
+        missed_txs.push_back(tx_hash);
+    }
+    catch (const std::exception& e)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+//------------------------------------------------------------------
+template<class t_ids_container, class t_tx_container, class t_missed_container>
 bool Blockchain::get_transactions(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs) const
 {
   LOG_PRINT_L3("Blockchain::" << __func__);
@@ -4553,4 +4587,5 @@ bool Blockchain::for_all_outputs(uint64_t amount, std::function<bool(uint64_t he
 namespace cryptonote {
 template bool Blockchain::get_transactions(const std::vector<crypto::hash>&, std::vector<transaction>&, std::vector<crypto::hash>&) const;
 template bool Blockchain::get_transactions_blobs(const std::vector<crypto::hash>&, std::vector<cryptonote::blobdata>&, std::vector<crypto::hash>&, bool) const;
+template bool Blockchain::get_split_transactions_blobs(const std::vector<crypto::hash>&, std::vector<std::tuple<crypto::hash, cryptonote::blobdata, crypto::hash, cryptonote::blobdata>>&, std::vector<crypto::hash>&) const;
 }

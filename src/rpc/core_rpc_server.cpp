@@ -209,15 +209,6 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
-  static cryptonote::blobdata get_pruned_tx_blob(cryptonote::transaction &tx)
-  {
-    std::stringstream ss;
-    binary_archive<true> ba(ss);
-    bool r = tx.serialize_base(ba);
-    CHECK_AND_ASSERT_MES(r, cryptonote::blobdata(), "Failed to serialize rct signatures base");
-    return ss.str();
-  }
-  //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request& req, COMMAND_RPC_GET_BLOCKS_FAST::response& res)
   {
     PERF_TIMER(on_get_blocks);
@@ -544,8 +535,8 @@ namespace cryptonote
       vh.push_back(*reinterpret_cast<const crypto::hash*>(b.data()));
     }
     std::vector<crypto::hash> missed_txs;
-    std::vector<transaction> txs;
-    bool r = m_core.get_transactions(vh, txs, missed_txs);
+    std::vector<std::tuple<crypto::hash, cryptonote::blobdata, crypto::hash, cryptonote::blobdata>> txs;
+    bool r = m_core.get_split_transactions_blobs(vh, txs, missed_txs);
     if(!r)
     {
       res.status = "Failed";
@@ -565,7 +556,7 @@ namespace cryptonote
       if(r)
       {
         // sort to match original request
-        std::vector<transaction> sorted_txs;
+        std::vector<std::tuple<crypto::hash, cryptonote::blobdata, crypto::hash, cryptonote::blobdata>> sorted_txs;
         std::vector<tx_info>::const_iterator i;
         for (const crypto::hash &h: vh)
         {
@@ -577,7 +568,7 @@ namespace cryptonote
               return true;
             }
             // core returns the ones it finds in the right order
-            if (get_transaction_hash(txs.front()) != h)
+            if (std::get<0>(txs.front()) != h)
             {
               res.status = "Failed: tx hash mismatch";
               return true;
@@ -593,7 +584,16 @@ namespace cryptonote
               res.status = "Failed to parse and validate tx from blob";
               return true;
             }
-            sorted_txs.push_back(tx);
+            std::stringstream ss;
+            binary_archive<true> ba(ss);
+            bool r = const_cast<cryptonote::transaction&>(tx).serialize_base(ba);
+            if (!r)
+            {
+              res.status = "Failed to serialize transaction base";
+              return true;
+            }
+            const cryptonote::blobdata pruned = ss.str();
+            sorted_txs.push_back(std::make_tuple(h, pruned, get_transaction_prunable_hash(tx), std::string(i->tx_blob, pruned.size())));
             missed_txs.erase(std::find(missed_txs.begin(), missed_txs.end(), h));
             pool_tx_hashes.insert(h);
             const std::string hash_string = epee::string_tools::pod_to_hex(h);
@@ -622,10 +622,24 @@ namespace cryptonote
 
       crypto::hash tx_hash = *vhi++;
       e.tx_hash = *txhi++;
-      blobdata blob = req.prune ? get_pruned_tx_blob(tx) : t_serializable_object_to_blob(tx);
-      e.as_hex = string_tools::buff_to_hex_nodelimer(blob);
-      if (req.decode_as_json)
-        e.as_json = obj_to_json_str(tx);
+      e.prunable_hash = epee::string_tools::pod_to_hex(std::get<2>(tx));
+      if (req.split)
+      {
+        e.pruned_as_hex = string_tools::buff_to_hex_nodelimer(std::get<1>(tx));
+        if (!req.prune)
+          e.prunable_as_hex = string_tools::buff_to_hex_nodelimer(std::get<3>(tx));
+      }
+      else
+      {
+        cryptonote::blobdata tx_data;
+        if (req.prune)
+          tx_data = std::get<1>(tx);
+        else
+          tx_data = std::get<1>(tx) + std::get<3>(tx);
+        e.as_hex = string_tools::buff_to_hex_nodelimer(tx_data);
+        if (req.decode_as_json && !tx_data.empty())
+          e.as_json = obj_to_json_str(tx_data);
+      }
       e.in_pool = pool_tx_hashes.find(tx_hash) != pool_tx_hashes.end();
       if (e.in_pool)
       {

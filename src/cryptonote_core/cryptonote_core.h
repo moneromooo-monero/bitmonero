@@ -358,6 +358,13 @@ namespace cryptonote
       *
       * @note see Blockchain::get_transactions
       */
+     bool get_split_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<std::tuple<crypto::hash, cryptonote::blobdata, crypto::hash, cryptonote::blobdata>>& txs, std::vector<crypto::hash>& missed_txs) const;
+
+     /**
+      * @copydoc Blockchain::get_transactions
+      *
+      * @note see Blockchain::get_transactions
+      */
      bool get_transactions(const std::vector<crypto::hash>& txs_ids, std::vector<transaction>& txs, std::vector<crypto::hash>& missed_txs) const;
 
      /**

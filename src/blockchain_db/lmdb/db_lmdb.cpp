@@ -2534,6 +2534,36 @@ bool BlockchainLMDB::get_pruned_tx_blob(const crypto::hash& h, cryptonote::blobd
   return true;
 }
 
+bool BlockchainLMDB::get_prunable_tx_blob(const crypto::hash& h, cryptonote::blobdata &bd) const
+{
+  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  check_open();
+
+  TXN_PREFIX_RDONLY();
+  RCURSOR(tx_indices);
+  RCURSOR(txs_prunable);
+
+  MDB_val_set(v, h);
+  MDB_val result;
+  auto get_result = mdb_cursor_get(m_cur_tx_indices, (MDB_val *)&zerokval, &v, MDB_GET_BOTH);
+  if (get_result == 0)
+  {
+    const txindex *tip = (const txindex *)v.mv_data;
+    MDB_val_set(val_tx_id, tip->data.tx_id);
+    get_result = mdb_cursor_get(m_cur_txs_prunable, &val_tx_id, &result, MDB_SET);
+  }
+  if (get_result == MDB_NOTFOUND)
+    return false;
+  else if (get_result)
+    throw0(DB_ERROR(lmdb_error("DB error attempting to fetch tx from hash", get_result).c_str()));
+
+  bd.assign(reinterpret_cast<char*>(result.mv_data), result.mv_size);
+
+  TXN_POSTFIX_RDONLY();
+
+  return true;
+}
+
 bool BlockchainLMDB::get_prunable_tx_hash(const crypto::hash& tx_hash, crypto::hash &prunable_hash) const
 {
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);
