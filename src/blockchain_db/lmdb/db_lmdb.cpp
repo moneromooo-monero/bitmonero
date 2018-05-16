@@ -1768,7 +1768,7 @@ uint32_t BlockchainLMDB::get_blockchain_pruning_seed() const
   MDB_val_copy<const char*> k("pruning_seed");
   MDB_val v;
   mdb_txn_safe txn;
-  auto result = mdb_txn_begin(m_env, NULL, 0, txn);
+  auto result = mdb_txn_begin(m_env, NULL, MDB_RDONLY, txn);
   if (result)
     throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
   result = mdb_get(txn, m_properties, &k, &v);
