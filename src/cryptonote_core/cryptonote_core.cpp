@@ -157,6 +157,11 @@ namespace cryptonote
   , "Set maximum txpool size in bytes."
   , DEFAULT_TXPOOL_MAX_SIZE
   };
+  static const command_line::arg_descriptor<bool> arg_prune_blockchain  = {
+    "prune-blockchain"
+  , "Prune blockchain"
+  , false
+  };
 
   //-----------------------------------------------------------------------------------------------
   core::core(i_cryptonote_protocol* pprotocol):
@@ -263,6 +268,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_offline);
     command_line::add_arg(desc, arg_disable_dns_checkpoints);
     command_line::add_arg(desc, arg_max_txpool_size);
+    command_line::add_arg(desc, arg_prune_blockchain);
 
     miner::init_options(desc);
     BlockchainDB::init_options(desc);
@@ -390,6 +396,7 @@ namespace cryptonote
     uint64_t blocks_threads = command_line::get_arg(vm, arg_prep_blocks_threads);
     std::string check_updates_string = command_line::get_arg(vm, arg_check_updates);
     size_t max_txpool_size = command_line::get_arg(vm, arg_max_txpool_size);
+    bool prune_blockchain = command_line::get_arg(vm, arg_prune_blockchain);
 
     boost::filesystem::path folder(m_config_folder);
     if (m_nettype == FAKECHAIN)
@@ -543,6 +550,8 @@ namespace cryptonote
 
     r = m_miner.init(vm, m_nettype);
     CHECK_AND_ASSERT_MES(r, false, "Failed to initialize miner instance");
+
+    CHECK_AND_ASSERT_MES(!prune_blockchain || m_blockchain_storage.prune_blockchain(), false, "Failed to prune blockchain");
 
     return load_state_data();
   }
