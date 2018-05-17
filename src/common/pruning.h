@@ -26,12 +26,22 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#pragma once 
+#pragma once
 
 #include <stdint.h>
 
 namespace tools
 {
+  static constexpr uint32_t PRUNING_SEED_LOG_STRIPES_SHIFT = 24;
+  static constexpr uint32_t PRUNING_SEED_LOG_STRIPES_MASK = 0xff;
+  static constexpr uint32_t PRUNING_SEED_STRIPE_SHIFT = 0;
+  static constexpr uint32_t PRUNING_SEED_STRIPE_MASK = 0xffffff;
+
+  static inline uint32_t get_pruning_log_stripes(uint32_t pruning_seed) { return (pruning_seed >> PRUNING_SEED_LOG_STRIPES_SHIFT) & PRUNING_SEED_LOG_STRIPES_MASK; }
+  static inline uint32_t get_pruning_stripe(uint32_t pruning_seed) { return (pruning_seed >> PRUNING_SEED_STRIPE_SHIFT) & PRUNING_SEED_STRIPE_MASK; }
+
+  uint32_t make_pruning_seed(uint32_t stripe, uint32_t log_stripes);
+
   bool has_unpruned_block(uint64_t block_height, uint64_t blockchain_height, uint32_t pruning_seed);
   uint32_t get_pruning_seed(uint64_t block_height, uint64_t blockchain_height);
   uint64_t get_next_unpruned_block_height(uint64_t block_height, uint64_t blockchain_height, uint32_t pruning_seed);

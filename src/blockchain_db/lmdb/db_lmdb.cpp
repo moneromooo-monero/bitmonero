@@ -1788,11 +1788,12 @@ enum { prune_mode_prune, prune_mode_update, prune_mode_check };
 bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
 {
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);
-  if (pruning_seed > (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+  const uint32_t log_stripes = tools::get_pruning_log_stripes(pruning_seed);
+  if (log_stripes && log_stripes != CRYPTONOTE_PRUNING_LOG_STRIPES)
     throw0(DB_ERROR("Pruning seed not in range"));
-  if ((pruning_seed >> 24) && (pruning_seed >> 24) != CRYPTONOTE_PRUNING_LOG_STRIPES)
+  pruning_seed = tools::get_pruning_stripe(pruning_seed);;
+  if (pruning_seed > (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES))
     throw0(DB_ERROR("Pruning seed not in range"));
-  pruning_seed &= 0xffffff;
   check_open();
 
   TIME_MEASURE_START(t);
@@ -1825,8 +1826,8 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
       return true;
     }
     if (pruning_seed == 0)
-      pruning_seed = 1 + crypto::rand<uint8_t>() % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
-    pruning_seed |= CRYPTONOTE_PRUNING_LOG_STRIPES << 24;
+      pruning_seed = 1 + crypto::rand<uint8_t>() % (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES);
+    pruning_seed = tools::make_pruning_seed(pruning_seed, CRYPTONOTE_PRUNING_LOG_STRIPES);
     v.mv_data = &pruning_seed;
     v.mv_size = sizeof(pruning_seed);
     result = mdb_put(txn, m_properties, &k, &v, 0);
@@ -1841,12 +1842,12 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
       throw0(DB_ERROR("Failed to retrieve or create pruning seed: unexpected value size"));
     const uint32_t data = *(const uint32_t*)v.mv_data;
     if (pruning_seed == 0)
-      pruning_seed = data & 0xffffff;
-    if ((data & 0xffffff) != pruning_seed)
+      pruning_seed = tools::get_pruning_stripe(data);
+    if (tools::get_pruning_stripe(data) != pruning_seed)
       throw0(DB_ERROR("Blockchain already pruned with different seed"));
-    if ((data >> 24) != CRYPTONOTE_PRUNING_LOG_STRIPES)
+    if (tools::get_pruning_log_stripes(data) != CRYPTONOTE_PRUNING_LOG_STRIPES)
       throw0(DB_ERROR("Blockchain already pruned with different base"));
-    pruning_seed |= CRYPTONOTE_PRUNING_LOG_STRIPES << 24;
+    pruning_seed = tools::make_pruning_seed(pruning_seed, CRYPTONOTE_PRUNING_LOG_STRIPES);
     prune_tip_table = (mode == prune_mode_update);
   }
   else

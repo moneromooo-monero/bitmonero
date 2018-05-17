@@ -288,7 +288,8 @@ namespace cryptonote
     // reject weird pruning schemes
     if (hshd.pruning_seed)
     {
-      if ((hshd.pruning_seed >> 24) != CRYPTONOTE_PRUNING_LOG_STRIPES || (hshd.pruning_seed & 0xffffff) > (1u << (hshd.pruning_seed >> 24)))
+      const uint32_t log_stripes = tools::get_pruning_log_stripes(hshd.pruning_seed);
+      if (log_stripes != CRYPTONOTE_PRUNING_LOG_STRIPES || tools::get_pruning_stripe(hshd.pruning_seed) > (1u << log_stripes))
       {
         MWARNING(context << " peer claim unexpected pruning seed " << epee::string_tools::to_string_hex(hshd.pruning_seed) << ", disconnecting");
         return false;
@@ -1218,7 +1219,7 @@ skip:
         context.m_last_response_height = 0;
         force_next_span = true;
       }
-      if (m_next_needed_pruning_seed && m_next_needed_pruning_seed != (context.m_pruning_seed & 0xffffff))
+      if (m_next_needed_pruning_seed && m_next_needed_pruning_seed != tools::get_pruning_stripe(context.m_pruning_seed))
       {
         if (context.m_anchor)
         {
@@ -1424,14 +1425,14 @@ skip:
       return false;
 
     const uint32_t next_seed = get_next_needed_pruning_seed().first;
-    if (next_seed == (context.m_pruning_seed & 0xffffff))
+    if (next_seed == tools::get_pruning_stripe(context.m_pruning_seed))
       return false;
 
     unsigned int n_out_peers = 0, n_peers_on_next_seed = 0;
     m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
       if (!context.m_is_income)
         ++n_out_peers;
-      if (context.m_state >= cryptonote_connection_context::state_synchronizing && (context.m_pruning_seed & 0xffffff) == next_seed)
+      if (context.m_state >= cryptonote_connection_context::state_synchronizing && tools::get_pruning_stripe(context.m_pruning_seed) == next_seed)
         ++n_peers_on_next_seed;
       return true;
     });
@@ -1624,7 +1625,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
         if (span.second > 0)
         {
           const uint32_t seed = tools::get_pruning_seed(span.first, context.m_remote_blockchain_height);
-          if (seed != (context.m_pruning_seed & 0xffffff))
+          if (seed != tools::get_pruning_stripe(context.m_pruning_seed))
           {
             MDEBUG(context << " starting early on next seed (" << span.first << "  with seed " << seed <<
                 ", we have " << epee::string_tools::to_string_hex(context.m_pruning_seed) << ")");
@@ -1708,7 +1709,7 @@ MINFO("  - last_response_height " << context.m_last_response_height << ", m_need
         // current point, or become dormant
 #warning TODO: decide whether to drop or not
 #if 1
-        //const uint32_t next_seed = tools::get_pruning_seed(next_block_height, m_core.get_target_blockchain_height()) & 0xffffff;
+        //const uint32_t next_seed = tools::get_pruning_stripe(tools::get_pruning_seed(next_block_height, m_core.get_target_blockchain_height()));
 #if 1
         MDEBUG(context << "this peer is pruned at seed " << epee::string_tools::to_string_hex(context.m_pruning_seed) <<
             ", next seed needed is " << next_seed);

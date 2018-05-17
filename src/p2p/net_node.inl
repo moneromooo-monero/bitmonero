@@ -40,6 +40,7 @@
 #include "string_tools.h"
 #include "common/util.h"
 #include "common/dns_utils.h"
+#include "common/pruning.h"
 #include "net/net_helper.h"
 #include "math_helper.h"
 #include "p2p_protocol_defs.h"
@@ -1137,10 +1138,10 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
       if (use_white_list)
       {
         // if using the white list, we first pick in the set of peers we've already been using earlier
-        uint32_t index = next_needed_pruning_seed & 0xffffff;
+        uint32_t index = tools::get_pruning_stripe(next_needed_pruning_seed);
         random_index = get_random_index_with_fixed_probability(std::min<uint64_t>(filtered.size() - 1, 20));
         CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
-        if (index < (1 << CRYPTONOTE_PRUNING_LOG_STRIPES) && !m_used_stripe_peers[index].empty())
+        if (index < (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES) && !m_used_stripe_peers[index].empty())
         {
           const epee::net_utils::network_address na = m_used_stripe_peers[index].front();
           m_used_stripe_peers[index].pop_front();
@@ -1419,7 +1420,7 @@ for (auto &e:plg) m_peerlist.append_with_peer_gray(e);
 #warning slknf uwauiq hvhcuwev
 #ifdef CRYPTONOTE_PRUNING_SPOOF_SEED
 #warning Overriding pruning seed
-be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES);
+be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES);
 #endif
     }
     return true;
@@ -2059,8 +2060,8 @@ be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) 
   {
     if (context.m_pruning_seed == 0)
       return;
-    const uint32_t index = context.m_pruning_seed & 0xffffff;
-    if (index >= (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+    const uint32_t index = tools::get_pruning_stripe(context.m_pruning_seed);
+    if (index >= (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES))
       return;
     CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
     MINFO("adding stripe " << epee::string_tools::to_string_hex(context.m_pruning_seed) << " peer: " << context.m_remote_address.str());
@@ -2074,8 +2075,8 @@ be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) 
   {
     if (context.m_pruning_seed == 0)
       return;
-    const uint32_t index = context.m_pruning_seed & 0xffffff;
-    if (index >= (1 << CRYPTONOTE_PRUNING_LOG_STRIPES))
+    const uint32_t index = tools::get_pruning_stripe(context.m_pruning_seed);
+    if (index >= (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES))
       return;
     CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
     MINFO("removing stripe " << epee::string_tools::to_string_hex(context.m_pruning_seed) << " peer: " << context.m_remote_address.str());
@@ -2088,7 +2089,7 @@ be.pruning_seed = 1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) 
   {
     CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
     MINFO("clearing used stripe peers");
-    for (size_t i = 0; i < 1 << CRYPTONOTE_PRUNING_LOG_STRIPES; ++i)
+    for (size_t i = 0; i < 1ul << CRYPTONOTE_PRUNING_LOG_STRIPES; ++i)
       m_used_stripe_peers[i].clear();
   }
 
