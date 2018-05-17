@@ -31,6 +31,7 @@
 #pragma once
 
 #include <boost/uuid/uuid.hpp>
+#include <boost/serialization/version.hpp>
 #include "serialization/keyvalue_serialization.h"
 #include "net/net_utils_base.h"
 #include "misc_language.h"
@@ -465,5 +466,6 @@ namespace nodetool
 
 }
 
+BOOST_CLASS_VERSION(nodetool::peerlist_entry, 1)
 
 

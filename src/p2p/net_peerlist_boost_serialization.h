@@ -77,6 +77,12 @@ namespace boost
       a & pl.adr;
       a & pl.id;
       a & pl.last_seen;
+      if (ver < 1)
+      {
+        if (!typename Archive::is_saving())
+          pl.pruning_seed = 0;
+        return;
+      }
       a & pl.pruning_seed;
 #ifdef CRYPTONOTE_PRUNING_SPOOF_SEED
 #warning Overriding pruning seed
