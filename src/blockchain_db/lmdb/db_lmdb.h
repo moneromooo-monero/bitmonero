@@ -40,6 +40,11 @@
 namespace cryptonote
 {
 
+typedef struct txindex {
+    crypto::hash key;
+    tx_data_t data;
+} txindex;
+
 typedef struct mdb_txn_cursors
 {
   MDB_cursor *m_txc_blocks;

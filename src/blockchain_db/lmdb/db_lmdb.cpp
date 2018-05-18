@@ -268,11 +268,6 @@ typedef struct blk_height {
     uint64_t bh_height;
 } blk_height;
 
-typedef struct txindex {
-    crypto::hash key;
-    tx_data_t data;
-} txindex;
-
 typedef struct pre_rct_outkey {
     uint64_t amount_index;
     uint64_t output_id;
@@ -1265,6 +1260,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
 
   // open necessary databases, and set properties as needed
   // uses macros to avoid having to change things too many places
+  // also change blockchain_prune.cpp to match
   lmdb_db_open(txn, LMDB_BLOCKS, MDB_INTEGERKEY | MDB_CREATE, m_blocks, "Failed to open db handle for m_blocks");
 
   lmdb_db_open(txn, LMDB_BLOCK_INFO, MDB_INTEGERKEY | MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED, m_block_info, "Failed to open db handle for m_block_info");
@@ -1274,7 +1270,8 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   lmdb_db_open(txn, LMDB_TXS_PRUNED, MDB_INTEGERKEY | MDB_CREATE, m_txs_pruned, "Failed to open db handle for m_txs_pruned");
   lmdb_db_open(txn, LMDB_TXS_PRUNABLE, MDB_INTEGERKEY | MDB_CREATE, m_txs_prunable, "Failed to open db handle for m_txs_prunable");
   lmdb_db_open(txn, LMDB_TXS_PRUNABLE_HASH, MDB_INTEGERKEY | MDB_CREATE, m_txs_prunable_hash, "Failed to open db handle for m_txs_prunable_hash");
-  lmdb_db_open(txn, LMDB_TXS_PRUNABLE_TIP, MDB_INTEGERKEY | MDB_CREATE, m_txs_prunable_tip, "Failed to open db handle for m_txs_prunable_tip");
+  if (!(mdb_flags & MDB_RDONLY))
+    lmdb_db_open(txn, LMDB_TXS_PRUNABLE_TIP, MDB_INTEGERKEY | MDB_CREATE, m_txs_prunable_tip, "Failed to open db handle for m_txs_prunable_tip");
   lmdb_db_open(txn, LMDB_TX_INDICES, MDB_INTEGERKEY | MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED, m_tx_indices, "Failed to open db handle for m_tx_indices");
   lmdb_db_open(txn, LMDB_TX_OUTPUTS, MDB_INTEGERKEY | MDB_CREATE, m_tx_outputs, "Failed to open db handle for m_tx_outputs");
 
@@ -1302,7 +1299,8 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   mdb_set_dupsort(txn, m_output_amounts, compare_uint64);
   mdb_set_dupsort(txn, m_output_txs, compare_uint64);
   mdb_set_dupsort(txn, m_block_info, compare_uint64);
-  mdb_set_dupsort(txn, m_txs_prunable_tip, compare_uint64);
+  if (!(mdb_flags & MDB_RDONLY))
+    mdb_set_dupsort(txn, m_txs_prunable_tip, compare_uint64);
 
   mdb_set_compare(txn, m_txpool_meta, compare_hash32);
   mdb_set_compare(txn, m_txpool_blob, compare_hash32);
@@ -1412,6 +1410,9 @@ void BlockchainLMDB::sync()
 {
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   check_open();
+
+  if (is_read_only())
+    return;
 
   // Does nothing unless LMDB environment was opened with MDB_NOSYNC or in part
   // MDB_NOMETASYNC. Force flush to be synchronous.
@@ -1860,18 +1861,17 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
   else
     MINFO("Pruning blockchain...");
 
-  MDB_cursor *c_prunable;
+  MDB_cursor *c_prunable, *c_txs_prunable_tip;
   result = mdb_cursor_open(txn, m_txs_prunable, &c_prunable);
   if (result)
     throw0(DB_ERROR(lmdb_error("Failed to open a cursor for txs_prunable: ", result).c_str()));
+  result = mdb_cursor_open(txn, m_txs_prunable_tip, &c_txs_prunable_tip);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to open a cursor for txs_prunable_tip: ", result).c_str()));
   const uint64_t blockchain_height = height();
 
   if (prune_tip_table)
   {
-    MDB_cursor *c_txs_prunable_tip;
-    result = mdb_cursor_open(txn, m_txs_prunable_tip, &c_txs_prunable_tip);
-    if (result)
-      throw0(DB_ERROR(lmdb_error("Failed to open a cursor for txs_prunable_tip: ", result).c_str()));
     MDB_cursor_op op = MDB_FIRST;
     while (1)
     {
@@ -1929,6 +1929,14 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
       ++n_total_records;
       const txindex *ti = (const txindex *)v.mv_data;
       const uint64_t block_height = ti->data.block_id;
+      if (block_height + CRYPTONOTE_PRUNING_TIP_BLOCKS >= blockchain_height)
+      {
+        MDB_val_set(kp, ti->data.tx_id);
+        MDB_val_set(vp, block_height);
+        result = mdb_cursor_put(c_txs_prunable_tip, &kp, &vp, MDB_SET);
+        if (result && result != MDB_NOTFOUND)
+          throw0(DB_ERROR(lmdb_error("Error looking for transaction prunable data: ", result).c_str()));
+      }
       if (!tools::has_unpruned_block(block_height, blockchain_height, pruning_seed))
       {
         MDB_val_set(kp, ti->data.tx_id);
