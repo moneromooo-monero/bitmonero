@@ -45,6 +45,8 @@ namespace po = boost::program_options;
 using namespace epee;
 using namespace cryptonote;
 
+static std::string db_path;
+
 static std::error_code replace_file(const boost::filesystem::path& replacement_name, const boost::filesystem::path& replaced_name)
 {
   return tools::replace_file(replacement_name.string(), replaced_name.string());
@@ -96,6 +98,70 @@ static int compare_string(const MDB_val *a, const MDB_val *b)
   return strcmp(va, vb);
 }
 
+static void add_size(MDB_env *env, size_t bytes)
+{
+  try
+  {
+    boost::filesystem::path path(db_path);
+    boost::filesystem::space_info si = boost::filesystem::space(path);
+    if(si.available < bytes)
+    {
+      MERROR("!! WARNING: Insufficient free space to extend database !!: " <<
+          (si.available >> 20L) << " MB available, " << (bytes >> 20L) << " MB needed");
+      return;
+    }
+  }
+  catch(...)
+  {
+    // print something but proceed.
+    MWARNING("Unable to query free disk space.");
+  }
+
+  MDB_envinfo mei;
+  mdb_env_info(env, &mei);
+  MDB_stat mst;
+  mdb_env_stat(env, &mst);
+
+  uint64_t new_mapsize = mei.me_mapsize + bytes;
+  new_mapsize += (new_mapsize % mst.ms_psize);
+
+  int result = mdb_env_set_mapsize(env, new_mapsize);
+  if (result)
+    throw std::runtime_error("Failed to set new mapsize to " + std::to_string(new_mapsize) + ": " + std::string(mdb_strerror(result)));
+
+  MGINFO("LMDB Mapsize increased." << "  Old: " << mei.me_mapsize / (1024 * 1024) << "MiB" << ", New: " << new_mapsize / (1024 * 1024) << "MiB");
+}
+
+static void check_resize(MDB_env *env, size_t bytes)
+{
+  MDB_envinfo mei;
+  MDB_stat mst;
+
+  mdb_env_info(env, &mei);
+  mdb_env_stat(env, &mst);
+
+  // size_used doesn't include data yet to be committed, which can be
+  // significant size during batch transactions. For that, we estimate the size
+  // needed at the beginning of the batch transaction and pass in the
+  // additional size needed.
+  uint64_t size_used = mst.ms_psize * mei.me_last_pgno;
+  if (size_used + bytes >= mei.me_mapsize)
+    add_size(env, 512 * 1024 * 1024);
+}
+
+static bool resize_point(size_t nrecords, MDB_env *env, MDB_txn **txn, size_t &bytes)
+{
+  if (nrecords & 0x7f)
+    return false;
+  int dbr = mdb_txn_commit(*txn);
+  if (dbr) throw std::runtime_error("Failed to commit txn: " + std::string(mdb_strerror(dbr)));
+  check_resize(env, bytes);
+  dbr = mdb_txn_begin(env, NULL, 0, txn);
+  if (dbr) throw std::runtime_error("Failed to create LMDB transaction: " + std::string(mdb_strerror(dbr)));
+  bytes = 0;
+  return true;
+}
+
 static void copy_table(MDB_env *env0, MDB_env *env1, const char *table, unsigned int flags, unsigned int putflags, int (*cmp)(const MDB_val*, const MDB_val*)=0)
 {
   MDB_dbi dbi0, dbi1;
@@ -122,22 +188,35 @@ static void copy_table(MDB_env *env0, MDB_env *env1, const char *table, unsigned
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
   if (cmp)
     ((flags & MDB_DUPSORT) ? mdb_set_dupsort : mdb_set_compare)(txn0, dbi0, cmp);
-  dbr = mdb_cursor_open(txn0, dbi0, &cur0);
-  if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn1, table, flags, &dbi1);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
   if (cmp)
     ((flags & MDB_DUPSORT) ? mdb_set_dupsort : mdb_set_compare)(txn1, dbi1, cmp);
-  dbr = mdb_cursor_open(txn1, dbi1, &cur1);
-  if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+
+  dbr = mdb_txn_commit(txn1);
+  if (dbr) throw std::runtime_error("Failed to commit txn: " + std::string(mdb_strerror(dbr)));
+  tx_active1 = false;
+  MDB_stat stats;
+  dbr = mdb_env_stat(env0, &stats);
+  if (dbr) throw std::runtime_error("Failed to stat " + std::string(table) + " LMDB table: " + std::string(mdb_strerror(dbr)));
+  check_resize(env1, (stats.ms_branch_pages + stats.ms_overflow_pages + stats.ms_leaf_pages) * stats.ms_psize);
+  dbr = mdb_txn_begin(env1, NULL, 0, &txn1);
+  if (dbr) throw std::runtime_error("Failed to create LMDB transaction: " + std::string(mdb_strerror(dbr)));
+  tx_active1 = true;
 
   dbr = mdb_drop(txn1, dbi1, 0);
   if (dbr) throw std::runtime_error("Failed to empty " + std::string(table) + " LMDB table: " + std::string(mdb_strerror(dbr)));
 
+  dbr = mdb_cursor_open(txn0, dbi0, &cur0);
+  if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+  dbr = mdb_cursor_open(txn1, dbi1, &cur1);
+  if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+
   MDB_val k;
   MDB_val v;
   MDB_cursor_op op = MDB_FIRST;
+  size_t nrecords = 0, bytes = 0;
   while (1)
   {
     int ret = mdb_cursor_get(cur0, &k, &v, op);
@@ -146,6 +225,13 @@ static void copy_table(MDB_env *env0, MDB_env *env1, const char *table, unsigned
       break;
     if (ret)
       throw std::runtime_error("Failed to enumerate " + std::string(table) + " records: " + std::string(mdb_strerror(ret)));
+
+    bytes += k.mv_size + v.mv_size;
+    if (resize_point(++nrecords, env1, &txn1, bytes))
+    {
+      dbr = mdb_cursor_open(txn1, dbi1, &cur1);
+      if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+    }
 
     ret = mdb_cursor_put(cur1, &k, &v, putflags);
     if (ret)
@@ -236,6 +322,7 @@ static void prune(MDB_env *env0, MDB_env *env1)
   dbr = mdb_stat(txn0, dbi0_tx_indices, &stats);
   if (dbr) throw std::runtime_error("Failed to query size of tx_indices: " + std::string(mdb_strerror(dbr)));
   const uint64_t blockchain_height = stats.ms_entries;
+  size_t nrecords = 0, bytes = 0;
 
   MDB_cursor_op op = MDB_FIRST;
   while (1)
@@ -254,6 +341,7 @@ static void prune(MDB_env *env0, MDB_env *env1)
       MDB_val_set(vv, block_height);
       dbr = mdb_cursor_put(cur1_txs_prunable_tip, &kk, &vv, 0);
       if (dbr) throw std::runtime_error("Failed to write prunable tx tip data: " + std::string(mdb_strerror(dbr)));
+      bytes += kk.mv_size + vv.mv_size;
     }
     if (tools::has_unpruned_block(block_height, blockchain_height, pruning_seed))
     {
@@ -261,6 +349,14 @@ static void prune(MDB_env *env0, MDB_env *env1)
       MDB_val vv;
       dbr = mdb_cursor_get(cur0_txs_prunable, &kk, &vv, MDB_SET);
       if (dbr) throw std::runtime_error("Failed to read prunable tx data: " + std::string(mdb_strerror(dbr)));
+      bytes += kk.mv_size + vv.mv_size;
+      if (resize_point(++nrecords, env1, &txn1, bytes))
+      {
+        dbr = mdb_cursor_open(txn1, dbi1_txs_prunable, &cur1_txs_prunable);
+        if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+        dbr = mdb_cursor_open(txn1, dbi1_txs_prunable_tip, &cur1_txs_prunable_tip);
+        if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
+      }
       dbr = mdb_cursor_put(cur1_txs_prunable, &kk, &vv, 0);
       if (dbr) throw std::runtime_error("Failed to write prunable tx data: " + std::string(mdb_strerror(dbr)));
     }
@@ -407,6 +503,7 @@ int main(int argc, char* argv[])
           return 1;
         }
       }
+      db_path = paths[1].string();
     }
     else
     {
