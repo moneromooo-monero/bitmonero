@@ -68,11 +68,6 @@ static void close(MDB_env *env)
   mdb_env_close(env);
 }
 
-static int greater(const MDB_val *a, const MDB_val *b)
-{
-  return 1;
-}
-
 static int compare_uint64(const MDB_val *a, const MDB_val *b)
 {
   const uint64_t va = *(const uint64_t *)a->mv_data;
@@ -109,7 +104,7 @@ static void copy_table(MDB_env *env0, MDB_env *env1, const char *table, unsigned
   bool tx_active0 = false, tx_active1 = false;
   int dbr;
 
-  MINFO("Copying table " << table);
+  MINFO("Copying " << table);
 
   epee::misc_utils::auto_scope_leave_caller txn_dtor = epee::misc_utils::create_scope_leave_handler([&](){
     if (tx_active1) mdb_txn_abort(txn1);
@@ -125,13 +120,15 @@ static void copy_table(MDB_env *env0, MDB_env *env1, const char *table, unsigned
 
   dbr = mdb_dbi_open(txn0, table, flags, &dbi0);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  ((flags & MDB_DUPSORT) ? mdb_set_dupsort : mdb_set_compare)(txn0, dbi0, cmp ? cmp : greater);
+  if (cmp)
+    ((flags & MDB_DUPSORT) ? mdb_set_dupsort : mdb_set_compare)(txn0, dbi0, cmp);
   dbr = mdb_cursor_open(txn0, dbi0, &cur0);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn1, table, flags, &dbi1);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  ((flags & MDB_DUPSORT) ? mdb_set_dupsort : mdb_set_compare)(txn1, dbi1, cmp ? cmp : greater);
+  if (cmp)
+    ((flags & MDB_DUPSORT) ? mdb_set_dupsort : mdb_set_compare)(txn1, dbi1, cmp);
   dbr = mdb_cursor_open(txn1, dbi1, &cur1);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
@@ -173,6 +170,8 @@ static void prune(MDB_env *env0, MDB_env *env1)
   bool tx_active0 = false, tx_active1 = false;
   int dbr;
 
+  MGINFO("Creating pruned txs_prunable");
+
   epee::misc_utils::auto_scope_leave_caller txn_dtor = epee::misc_utils::create_scope_leave_handler([&](){
     if (tx_active1) mdb_txn_abort(txn1);
     if (tx_active0) mdb_txn_abort(txn0);
@@ -187,21 +186,25 @@ static void prune(MDB_env *env0, MDB_env *env1)
 
   dbr = mdb_dbi_open(txn0, "txs_prunable", MDB_INTEGERKEY, &dbi0_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  mdb_set_dupsort(txn0, dbi0_txs_prunable, compare_uint64);
   dbr = mdb_cursor_open(txn0, dbi0_txs_prunable, &cur0_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn0, "tx_indices", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, &dbi0_tx_indices);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  mdb_set_dupsort(txn0, dbi0_tx_indices, compare_uint64);
   dbr = mdb_cursor_open(txn0, dbi0_tx_indices, &cur0_tx_indices);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn1, "txs_prunable", MDB_INTEGERKEY, &dbi1_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  mdb_set_dupsort(txn1, dbi1_txs_prunable, compare_uint64);
   dbr = mdb_cursor_open(txn1, dbi1_txs_prunable, &cur1_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn1, "txs_prunable_tip", MDB_INTEGERKEY, &dbi1_txs_prunable_tip);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  mdb_set_dupsort(txn1, dbi1_txs_prunable_tip, compare_uint64);
   dbr = mdb_cursor_open(txn1, dbi1_txs_prunable_tip, &cur1_txs_prunable_tip);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
