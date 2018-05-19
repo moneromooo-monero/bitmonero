@@ -1935,9 +1935,21 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
       {
         MDB_val_set(kp, ti->data.tx_id);
         MDB_val_set(vp, block_height);
-        result = mdb_cursor_put(c_txs_prunable_tip, &kp, &vp, MDB_SET);
-        if (result && result != MDB_NOTFOUND)
-          throw0(DB_ERROR(lmdb_error("Error looking for transaction prunable data: ", result).c_str()));
+        if (mode == prune_mode_check)
+        {
+          result = mdb_cursor_get(c_txs_prunable_tip, &kp, &vp, MDB_SET);
+          if (result && result != MDB_NOTFOUND)
+            throw0(DB_ERROR(lmdb_error("Error looking for transaction prunable data: ", result).c_str()));
+          if (result == MDB_NOTFOUND)
+            MERROR("Transaction not found in prunable tip table for height " << block_height << "/" << blockchain_height <<
+                ", seed " << epee::string_tools::to_string_hex(pruning_seed));
+        }
+        else
+        {
+          result = mdb_cursor_put(c_txs_prunable_tip, &kp, &vp, 0);
+          if (result && result != MDB_NOTFOUND)
+            throw0(DB_ERROR(lmdb_error("Error looking for transaction prunable data: ", result).c_str()));
+        }
       }
       if (!tools::has_unpruned_block(block_height, blockchain_height, pruning_seed))
       {
