@@ -35,8 +35,8 @@ namespace tools
 
 uint32_t make_pruning_seed(uint32_t stripe, uint32_t log_stripes)
 {
-  CHECK_AND_ASSERT_MES(log_stripes <= PRUNING_SEED_LOG_STRIPES_MASK, 0, "log_stripes out of range");
-  CHECK_AND_ASSERT_MES(stripe > 0 && stripe <= (1ul << log_stripes), 0, "stripe out of range");
+  CHECK_AND_ASSERT_THROW_MES(log_stripes <= PRUNING_SEED_LOG_STRIPES_MASK, "log_stripes out of range");
+  CHECK_AND_ASSERT_THROW_MES(stripe > 0 && stripe <= (1ul << log_stripes), "stripe out of range");
   return (log_stripes << PRUNING_SEED_LOG_STRIPES_SHIFT) | (stripe << PRUNING_SEED_STRIPE_SHIFT);
 }
 

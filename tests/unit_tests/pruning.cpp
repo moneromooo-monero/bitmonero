@@ -32,6 +32,24 @@
 #include "cryptonote_config.h"
 #include "common/pruning.h"
 
+#define ASSERT_EX(x) do { bool ex = false; try { x; } catch(...) { ex = true; }  ASSERT_TRUE(ex); } while(0)
+
+TEST(pruning, parts)
+{
+  ASSERT_EQ(tools::get_pruning_stripe(tools::make_pruning_seed(3, 2)), 3);
+  ASSERT_EQ(tools::get_pruning_stripe(tools::make_pruning_seed(1, 2)), 1);
+
+  ASSERT_EQ(tools::get_pruning_log_stripes(tools::make_pruning_seed(1, 2)), 2);
+  ASSERT_EQ(tools::get_pruning_log_stripes(tools::make_pruning_seed(1, 0)), 0);
+  ASSERT_EQ(tools::get_pruning_log_stripes(tools::make_pruning_seed(1, 8)), 8);
+}
+
+TEST(pruning, out_of_range)
+{
+  ASSERT_EX(tools::make_pruning_seed(5, 2));
+  ASSERT_EX(tools::make_pruning_seed(0, 2));
+}
+
 TEST(pruning, tip)
 {
   static constexpr uint64_t H = CRYPTONOTE_PRUNING_TIP_BLOCKS + 1000;
