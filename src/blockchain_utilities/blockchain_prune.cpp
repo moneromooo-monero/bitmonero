@@ -113,6 +113,7 @@ static int compare_string(const MDB_val *a, const MDB_val *b)
 
 static void add_size(MDB_env *env, size_t bytes)
 {
+MGINFO("add size: " << bytes);
   try
   {
     boost::filesystem::path path(db_path);
@@ -155,6 +156,10 @@ static void check_resize(MDB_env *env, size_t bytes)
   mdb_env_stat(env, &mst);
 
   uint64_t size_used = mst.ms_psize * mei.me_last_pgno;
+MGINFO("size_used: " << size_used);
+MGINFO("map size: " << mei.me_mapsize);
+MGINFO("bytes: " << bytes);
+MGINFO("slack: " << slack);
   if (size_used + bytes + slack >= mei.me_mapsize)
     add_size(env, size_used + bytes + slack - mei.me_mapsize);
 }
