@@ -32,10 +32,10 @@
 
 namespace tools
 {
-  static constexpr uint32_t PRUNING_SEED_LOG_STRIPES_SHIFT = 24;
-  static constexpr uint32_t PRUNING_SEED_LOG_STRIPES_MASK = 0xff;
+  static constexpr uint32_t PRUNING_SEED_LOG_STRIPES_SHIFT = 16;
+  static constexpr uint32_t PRUNING_SEED_LOG_STRIPES_MASK = 0xf;
   static constexpr uint32_t PRUNING_SEED_STRIPE_SHIFT = 0;
-  static constexpr uint32_t PRUNING_SEED_STRIPE_MASK = 0xffffff;
+  static constexpr uint32_t PRUNING_SEED_STRIPE_MASK = 0xffff;
 
   static inline uint32_t get_pruning_log_stripes(uint32_t pruning_seed) { return (pruning_seed >> PRUNING_SEED_LOG_STRIPES_SHIFT) & PRUNING_SEED_LOG_STRIPES_MASK; }
   static inline uint32_t get_pruning_stripe(uint32_t pruning_seed) { return (pruning_seed >> PRUNING_SEED_STRIPE_SHIFT) & PRUNING_SEED_STRIPE_MASK; }
