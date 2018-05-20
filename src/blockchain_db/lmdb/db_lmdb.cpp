@@ -1893,12 +1893,12 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
           ++n_prunable_records;
           result = mdb_cursor_get(c_prunable, &k, &v, MDB_SET);
           if (result == MDB_NOTFOUND)
-            MTRACE("Already pruned at height " << block_height);
+            MDEBUG("Already pruned at height " << block_height << "/" << blockchain_height);
           else if (result)
             throw0(DB_ERROR(lmdb_error("Failed to find transaction prunable data: ", result).c_str()));
           else
           {
-            MTRACE("Pruning at height " << block_height);
+            MDEBUG("Pruning at height " << block_height << "/" << blockchain_height);
             ++n_pruned_records;
             n_bytes += k.mv_size + v.mv_size;
             result = mdb_cursor_del(c_prunable, 0);
@@ -1967,10 +1967,10 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
         {
           ++n_prunable_records;
           if (result == MDB_NOTFOUND)
-            MTRACE("Already pruned at height " << block_height);
+            MDEBUG("Already pruned at height " << block_height << "/" << blockchain_height);
           else
           {
-            MTRACE("Pruning at height " << block_height);
+            MDEBUG("Pruning at height " << block_height << "/" << blockchain_height);
             ++n_pruned_records;
             n_bytes += kp.mv_size + v.mv_size;
             result = mdb_cursor_del(c_prunable, 0);

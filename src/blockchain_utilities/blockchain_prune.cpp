@@ -265,7 +265,7 @@ static void copy_table(MDB_env *env0, MDB_env *env1, const char *table, unsigned
 
 static void prune(MDB_env *env0, MDB_env *env1)
 {
-  MDB_dbi dbi0_txs_prunable, dbi0_tx_indices, dbi1_txs_prunable, dbi1_txs_prunable_tip, dbi1_properties;
+  MDB_dbi dbi0_blocks, dbi0_txs_prunable, dbi0_tx_indices, dbi1_txs_prunable, dbi1_txs_prunable_tip, dbi1_properties;
   MDB_txn *txn0, *txn1;
   MDB_cursor *cur0_txs_prunable, *cur0_tx_indices, *cur1_txs_prunable, *cur1_txs_prunable_tip;
   bool tx_active0 = false, tx_active1 = false;
@@ -334,8 +334,11 @@ static void prune(MDB_env *env0, MDB_env *env1)
   if (dbr) throw std::runtime_error("Failed to save pruning seed: " + std::string(mdb_strerror(dbr)));
 
   MDB_stat stats;
-  dbr = mdb_stat(txn0, dbi0_tx_indices, &stats);
-  if (dbr) throw std::runtime_error("Failed to query size of tx_indices: " + std::string(mdb_strerror(dbr)));
+  dbr = mdb_dbi_open(txn0, "blocks", 0, &dbi0_blocks);
+  if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
+  dbr = mdb_stat(txn0, dbi0_blocks, &stats);
+  if (dbr) throw std::runtime_error("Failed to query size of blocks: " + std::string(mdb_strerror(dbr)));
+  mdb_dbi_close(env0, dbi0_blocks);
   const uint64_t blockchain_height = stats.ms_entries;
   size_t nrecords = 0, bytes = 0;
 
@@ -352,6 +355,7 @@ static void prune(MDB_env *env0, MDB_env *env1)
     const uint64_t block_height = ti->data.block_id;
     if (block_height + CRYPTONOTE_PRUNING_TIP_BLOCKS >= blockchain_height)
     {
+      MDEBUG(block_height << "/" << blockchain_height << " is in tip");
       MDB_val_set(kk, ti->data.tx_id);
       MDB_val_set(vv, block_height);
       dbr = mdb_cursor_put(cur1_txs_prunable_tip, &kk, &vv, 0);
@@ -374,6 +378,10 @@ static void prune(MDB_env *env0, MDB_env *env1)
       }
       dbr = mdb_cursor_put(cur1_txs_prunable, &kk, &vv, 0);
       if (dbr) throw std::runtime_error("Failed to write prunable tx data: " + std::string(mdb_strerror(dbr)));
+    }
+    else
+    {
+      MDEBUG("" << block_height << "/" << blockchain_height << " should be pruned, dropping");
     }
   }
 
