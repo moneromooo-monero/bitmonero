@@ -1790,6 +1790,7 @@ enum { prune_mode_prune, prune_mode_update, prune_mode_check };
 
 bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
 {
+MGINFO("trace");
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   const uint32_t log_stripes = tools::get_pruning_log_stripes(pruning_seed);
   if (log_stripes && log_stripes != CRYPTONOTE_PRUNING_LOG_STRIPES)
@@ -1814,6 +1815,7 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
     throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable: ", result).c_str()));
   const size_t pages0 = db_stats.ms_branch_pages + db_stats.ms_leaf_pages + db_stats.ms_overflow_pages;
 
+MGINFO("trace");
   MDB_val_copy<const char*> k("pruning_seed");
   MDB_val v;
   result = mdb_get(txn, m_properties, &k, &v);
@@ -1858,6 +1860,7 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
     throw0(DB_ERROR(lmdb_error("Failed to retrieve or create pruning seed: ", result).c_str()));
   }
 
+MGINFO("trace");
   if (mode == prune_mode_check)
     MINFO("Checking blockchain pruning...");
   else
@@ -1872,11 +1875,14 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
     throw0(DB_ERROR(lmdb_error("Failed to open a cursor for txs_prunable_tip: ", result).c_str()));
   const uint64_t blockchain_height = height();
 
+MGINFO("trace");
   if (prune_tip_table)
   {
+MGINFO("trace");
     MDB_cursor_op op = MDB_FIRST;
     while (1)
     {
+MGINFO("trace");
       int ret = mdb_cursor_get(c_txs_prunable_tip, &k, &v, op);
       op = MDB_NEXT;
       if (ret == MDB_NOTFOUND)
@@ -1914,13 +1920,16 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
   }
   else
   {
+MGINFO("trace");
     MDB_cursor *c_tx_indices;
     result = mdb_cursor_open(txn, m_tx_indices, &c_tx_indices);
     if (result)
       throw0(DB_ERROR(lmdb_error("Failed to open a cursor for tx_indices: ", result).c_str()));
     MDB_cursor_op op = MDB_FIRST;
+MGINFO("trace");
     while (1)
     {
+MGINFO("trace");
       int ret = mdb_cursor_get(c_tx_indices, &k, &v, op);
       op = MDB_NEXT;
       if (ret == MDB_NOTFOUND)
@@ -1995,12 +2004,15 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
     }
   }
 
+MGINFO("trace");
   if ((result = mdb_stat(txn, m_txs_prunable, &db_stats)))
     throw0(DB_ERROR(lmdb_error("Failed to query m_txs_prunable: ", result).c_str()));
   const size_t pages1 = db_stats.ms_branch_pages + db_stats.ms_leaf_pages + db_stats.ms_overflow_pages;
   const size_t db_bytes = (pages0 - pages1) * db_stats.ms_psize;
 
+MGINFO("trace");
   txn.commit();
+MGINFO("trace");
 
   TIME_MEASURE_FINISH(t);
 
@@ -2008,6 +2020,7 @@ bool BlockchainLMDB::prune_worker(int mode, uint32_t pruning_seed)
       t << " ms: " << (n_bytes/1024.0f/1024.0f) << " MB (" << db_bytes/1024.0f/1024.0f << " MB) pruned in " <<
       n_pruned_records << " records (" << pages0 - pages1 << "/" << pages0 << " " << db_stats.ms_psize << " byte pages), " <<
       n_prunable_records << "/" << n_total_records << " pruned records");
+MGINFO("trace");
   return true;
 }
 
@@ -2023,6 +2036,7 @@ bool BlockchainLMDB::update_pruning()
 
 bool BlockchainLMDB::check_pruning()
 {
+MGINFO("trace");
   return prune_worker(prune_mode_check, 0);
 }
 

@@ -3650,7 +3650,9 @@ bool Blockchain::update_blockchain_pruning()
 //------------------------------------------------------------------
 bool Blockchain::check_blockchain_pruning()
 {
+MGINFO("trace");
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
+MGINFO("trace");
 
   return m_db->check_pruning();
 }

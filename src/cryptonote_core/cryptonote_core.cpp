@@ -1555,6 +1555,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::check_blockchain_pruning()
   {
+MGINFO("trace");
     return m_blockchain_storage.check_blockchain_pruning();
   }
   //-----------------------------------------------------------------------------------------------
@@ -1582,11 +1583,13 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   uint32_t core::get_blockchain_pruning_seed() const
   {
+MGINFO("trace");
     return get_blockchain_storage().get_blockchain_pruning_seed();
   }
   //-----------------------------------------------------------------------------------------------
   bool core::prune_blockchain(uint32_t pruning_seed)
   {
+MGINFO("trace");
     return get_blockchain_storage().prune_blockchain(pruning_seed);
   }
   //-----------------------------------------------------------------------------------------------
