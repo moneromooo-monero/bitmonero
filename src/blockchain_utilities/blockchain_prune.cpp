@@ -161,7 +161,7 @@ MGINFO("map size: " << mei.me_mapsize);
 MGINFO("bytes: " << bytes);
 MGINFO("slack: " << slack);
   if (size_used + bytes + slack >= mei.me_mapsize)
-    add_size(env, size_used + bytes + slack - mei.me_mapsize);
+    add_size(env, size_used + bytes + 2 * slack - mei.me_mapsize);
 }
 
 static bool resize_point(size_t nrecords, MDB_env *env, MDB_txn **txn, size_t &bytes)
