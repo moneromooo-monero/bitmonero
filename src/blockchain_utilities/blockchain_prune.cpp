@@ -147,6 +147,7 @@ static void add_size(MDB_env *env, size_t bytes)
 
 static void check_resize(MDB_env *env, size_t bytes)
 {
+  static const size_t slack = 512 * 1024 * 1024;
   MDB_envinfo mei;
   MDB_stat mst;
 
@@ -154,8 +155,8 @@ static void check_resize(MDB_env *env, size_t bytes)
   mdb_env_stat(env, &mst);
 
   uint64_t size_used = mst.ms_psize * mei.me_last_pgno;
-  if (size_used + bytes >= mei.me_mapsize)
-    add_size(env, bytes + 512 * 1024 * 1024);
+  if (size_used + bytes + slack >= mei.me_mapsize)
+    add_size(env, size_used + bytes + slack - mei.me_mapsize);
 }
 
 static bool resize_point(size_t nrecords, MDB_env *env, MDB_txn **txn, size_t &bytes)
