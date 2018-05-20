@@ -27,6 +27,7 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <lmdb.h>
+#include <boost/algorithm/string.hpp>
 #include "common/command_line.h"
 #include "common/pruning.h"
 #include "cryptonote_core/cryptonote_core.h"
@@ -47,6 +48,10 @@ using namespace cryptonote;
 
 static std::string db_path;
 
+// default to fast:1
+static uint64_t records_per_sync = 128;
+static uint64_t db_flags = 0;
+
 static std::error_code replace_file(const boost::filesystem::path& replacement_name, const boost::filesystem::path& replaced_name)
 {
   return tools::replace_file(replacement_name.string(), replaced_name.string());
@@ -55,12 +60,20 @@ static std::error_code replace_file(const boost::filesystem::path& replacement_n
 static void open(MDB_env *&env, const boost::filesystem::path &path, bool readonly)
 {
   int dbr;
+  int flags = 0;
+
+  if (db_flags & DBF_FAST)
+    flags |= MDB_NOSYNC;
+  if (db_flags & DBF_FASTEST)
+    flags |= MDB_NOSYNC | MDB_WRITEMAP | MDB_MAPASYNC;
+  if (readonly)
+    flags |= MDB_RDONLY;
 
   dbr = mdb_env_create(&env);
   if (dbr) throw std::runtime_error("Failed to create LDMB environment: " + std::string(mdb_strerror(dbr)));
   dbr = mdb_env_set_maxdbs(env, 32);
   if (dbr) throw std::runtime_error("Failed to set max env dbs: " + std::string(mdb_strerror(dbr)));
-  dbr = mdb_env_open(env, path.string().c_str(), readonly ? MDB_RDONLY : 0, 0664);
+  dbr = mdb_env_open(env, path.string().c_str(), flags, 0664);
   if (dbr) throw std::runtime_error("Failed to open database file '"
       + path.string() + "': " + std::string(mdb_strerror(dbr)));
 }
@@ -140,18 +153,14 @@ static void check_resize(MDB_env *env, size_t bytes)
   mdb_env_info(env, &mei);
   mdb_env_stat(env, &mst);
 
-  // size_used doesn't include data yet to be committed, which can be
-  // significant size during batch transactions. For that, we estimate the size
-  // needed at the beginning of the batch transaction and pass in the
-  // additional size needed.
   uint64_t size_used = mst.ms_psize * mei.me_last_pgno;
   if (size_used + bytes >= mei.me_mapsize)
-    add_size(env, 512 * 1024 * 1024);
+    add_size(env, bytes + 512 * 1024 * 1024);
 }
 
 static bool resize_point(size_t nrecords, MDB_env *env, MDB_txn **txn, size_t &bytes)
 {
-  if (nrecords & 0x7f)
+  if (nrecords % records_per_sync)
     return false;
   int dbr = mdb_txn_commit(*txn);
   if (dbr) throw std::runtime_error("Failed to commit txn: " + std::string(mdb_strerror(dbr)));
@@ -377,6 +386,56 @@ static void prune(MDB_env *env0, MDB_env *env1)
   mdb_dbi_close(env0, dbi0_tx_indices);
 }
 
+static bool parse_db_sync_mode(std::string db_sync_mode)
+{
+  std::vector<std::string> options;
+  boost::trim(db_sync_mode);
+  boost::split(options, db_sync_mode, boost::is_any_of(" :"));
+
+  for(const auto &option : options)
+    MDEBUG("option: " << option);
+
+  // default to fast:async:1
+  uint64_t DEFAULT_FLAGS = DBF_FAST;
+
+  if(options.size() == 0)
+  {
+    // default to fast:async:1
+    db_flags = DEFAULT_FLAGS;
+  }
+
+  bool safemode = false;
+  if(options.size() >= 1)
+  {
+    if(options[0] == "safe")
+    {
+      safemode = true;
+      db_flags = DBF_SAFE;
+    }
+    else if(options[0] == "fast")
+    {
+      db_flags = DBF_FAST;
+    }
+    else if(options[0] == "fastest")
+    {
+      db_flags = DBF_FASTEST;
+      records_per_sync = 1000; // default to fastest:async:1000
+    }
+    else
+      db_flags = DEFAULT_FLAGS;
+  }
+
+  if(options.size() >= 2 && !safemode)
+  {
+    char *endptr;
+    uint64_t bps = strtoull(options[1].c_str(), &endptr, 0);
+    if (*endptr == '\0')
+      records_per_sync = bps;
+  }
+
+  return true;
+}
+
 int main(int argc, char* argv[])
 {
   TRY_ENTRY();
@@ -400,12 +459,18 @@ int main(int argc, char* argv[])
   const command_line::arg_descriptor<std::string> arg_database = {
     "database", available_dbs.c_str(), default_db_type
   };
+  const command_line::arg_descriptor<std::string> arg_db_sync_mode = {
+    "db-sync-mode"
+  , "Specify sync option, using format [safe|fast|fastest]:[nrecords_per_sync]." 
+  , "fast:1000"
+  };
 
   command_line::add_arg(desc_cmd_sett, cryptonote::arg_data_dir);
   command_line::add_arg(desc_cmd_sett, cryptonote::arg_testnet_on);
   command_line::add_arg(desc_cmd_sett, cryptonote::arg_stagenet_on);
   command_line::add_arg(desc_cmd_sett, arg_log_level);
   command_line::add_arg(desc_cmd_sett, arg_database);
+  command_line::add_arg(desc_cmd_sett, arg_db_sync_mode);
   command_line::add_arg(desc_cmd_only, command_line::arg_help);
 
   po::options_description desc_options("Allowed options");
@@ -453,6 +518,13 @@ int main(int argc, char* argv[])
   if (db_type != "lmdb")
   {
     MERROR("Unsupported database type: " << db_type << ". Only lmdb is supported");
+    return 1;
+  }
+
+  std::string db_sync_mode = command_line::get_arg(vm, arg_db_sync_mode);
+  if (!parse_db_sync_mode(db_sync_mode))
+  {
+    MERROR("Invalid db sync mode: " << db_sync_mode);
     return 1;
   }
 
