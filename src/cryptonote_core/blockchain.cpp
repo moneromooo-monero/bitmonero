@@ -2118,7 +2118,7 @@ bool Blockchain::get_split_transactions_blobs(const t_ids_container& txs_ids, t_
       if (m_db->get_pruned_tx_blob(tx_hash, tx))
       {
         txs.push_back(std::make_tuple(tx_hash, std::move(tx), crypto::null_hash, cryptonote::blobdata()));
-        if (m_db->get_prunable_tx_hash(tx_hash, std::get<2>(txs.back())))
+        if ((std::get<1>(txs.back()).empty() || std::get<1>(txs.back())[0] > 1) && !m_db->get_prunable_tx_hash(tx_hash, std::get<2>(txs.back())))
         {
           MERROR("Prunable data hash not found for " << tx_hash);
           return false;
