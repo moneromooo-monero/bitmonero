@@ -3643,6 +3643,8 @@ leave:
 //------------------------------------------------------------------
 bool Blockchain::update_blockchain_pruning()
 {
+  m_tx_pool.lock();
+  epee::misc_utils::auto_scope_leave_caller unlocker = epee::misc_utils::create_scope_leave_handler([&](){m_tx_pool.unlock();});
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
 
   return m_db->update_pruning();
@@ -3650,9 +3652,9 @@ bool Blockchain::update_blockchain_pruning()
 //------------------------------------------------------------------
 bool Blockchain::check_blockchain_pruning()
 {
-MGINFO("trace");
+  m_tx_pool.lock();
+  epee::misc_utils::auto_scope_leave_caller unlocker = epee::misc_utils::create_scope_leave_handler([&](){m_tx_pool.unlock();});
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
-MGINFO("trace");
 
   return m_db->check_pruning();
 }

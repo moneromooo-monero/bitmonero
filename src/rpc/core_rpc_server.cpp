@@ -2128,20 +2128,15 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_prune_blockchain(const COMMAND_RPC_PRUNE_BLOCKCHAIN::request& req, COMMAND_RPC_PRUNE_BLOCKCHAIN::response& res, epee::json_rpc::error& error_resp)
   {
-MGINFO("trace");
     try
     {
-MGINFO("trace");
       if (!(req.check ? m_core.check_blockchain_pruning() : m_core.prune_blockchain(req.pruning_seed)))
       {
-MGINFO("trace");
         error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
         error_resp.message = req.check ? "Failed to check blockchain pruning" : "Failed to prune blockchain";
         return false;
       }
-MGINFO("trace");
       res.pruning_seed = m_core.get_blockchain_pruning_seed();
-MGINFO("trace");
     }
     catch (const std::exception &e)
     {
@@ -2150,7 +2145,6 @@ MGINFO("trace");
       return false;
     }
 
-MGINFO("trace");
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
