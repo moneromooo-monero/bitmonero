@@ -54,7 +54,7 @@ using epee::string_tools::pod_to_hex;
 using namespace crypto;
 
 // Increase when the DB structure changes
-#define VERSION 2
+#define VERSION 3
 
 namespace
 {
@@ -163,6 +163,7 @@ int compare_string(const MDB_val *a, const MDB_val *b)
  * blocks           block ID     block blob
  * block_heights    block hash   block height
  * block_info       block ID     {block metadata}
+ * rct_distribution block ID     cumulative count
  *
  * txs_pruned       txn ID       pruned txn blob
  * txs_prunable     txn ID       prunable txn blob
@@ -190,6 +191,7 @@ int compare_string(const MDB_val *a, const MDB_val *b)
 const char* const LMDB_BLOCKS = "blocks";
 const char* const LMDB_BLOCK_HEIGHTS = "block_heights";
 const char* const LMDB_BLOCK_INFO = "block_info";
+const char* const LMDB_RCT_DISTRIBUTION = "rct_distribution";
 
 const char* const LMDB_TXS = "txs";
 const char* const LMDB_TXS_PRUNED = "txs_pruned";
@@ -665,7 +667,7 @@ estim:
 }
 
 void BlockchainLMDB::add_block(const block& blk, const size_t& block_size, const difficulty_type& cumulative_difficulty, const uint64_t& coins_generated,
-    const crypto::hash& blk_hash)
+    uint64_t num_rct_outs, const crypto::hash& blk_hash)
 {
   LOG_PRINT_L3("BlockchainLMDB::" << __func__);
   check_open();
@@ -699,6 +701,7 @@ void BlockchainLMDB::add_block(const block& blk, const size_t& block_size, const
 
   CURSOR(blocks)
   CURSOR(block_info)
+  CURSOR(rct_distribution)
 
   // this call to mdb_cursor_put will change height()
   MDB_val_copy<blobdata> blob(block_to_blob(blk));
@@ -723,6 +726,23 @@ void BlockchainLMDB::add_block(const block& blk, const size_t& block_size, const
   if (result)
     throw0(DB_ERROR(lmdb_error("Failed to add block height by hash to db transaction: ", result).c_str()));
 
+  if (blk.major_version > 1)
+  {
+    result = mdb_cursor_get(m_cur_rct_distribution, (MDB_val *)&zerokval, &val, MDB_FIRST);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to get first rct distribution to db transaction: ", result).c_str()));
+    result = mdb_cursor_get(m_cur_rct_distribution, (MDB_val *)&zerokval, &val, MDB_LAST_DUP);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to get last rct distribution to db transaction: ", result).c_str()));
+    num_rct_outs += *(const uint64_t*)val.mv_data;
+  }
+  num_rct_outs += m_height;
+
+  MDB_val_set(val_d, num_rct_outs);
+  result = mdb_cursor_put(m_cur_rct_distribution, (MDB_val *)&zerokval, &val_d, MDB_APPENDDUP);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to add rct distribution by hash to db transaction: ", result).c_str()));
+
   m_cum_size += block_size;
   m_cum_count++;
 }
@@ -742,6 +762,7 @@ void BlockchainLMDB::remove_block()
   CURSOR(block_info)
   CURSOR(block_heights)
   CURSOR(blocks)
+  CURSOR(rct_distribution)
   MDB_val_copy<uint64_t> k(m_height - 1);
   MDB_val h = k;
   if ((result = mdb_cursor_get(m_cur_block_info, (MDB_val *)&zerokval, &h, MDB_GET_BOTH)))
@@ -757,13 +778,28 @@ void BlockchainLMDB::remove_block()
   if ((result = mdb_cursor_del(m_cur_block_heights, 0)))
       throw1(DB_ERROR(lmdb_error("Failed to add removal of block height by hash to db transaction: ", result).c_str()));
 
-  if ((result = mdb_cursor_get(m_cur_blocks, &k, NULL, MDB_SET)))
+  MDB_val d;
+  if ((result = mdb_cursor_get(m_cur_blocks, &k, &d, MDB_SET)))
       throw1(DB_ERROR(lmdb_error("Failed to locate block for removal: ", result).c_str()));
+  uint8_t major_version = *(const uint8_t*)d.mv_data;
   if ((result = mdb_cursor_del(m_cur_blocks, 0)))
       throw1(DB_ERROR(lmdb_error("Failed to add removal of block to db transaction: ", result).c_str()));
 
   if ((result = mdb_cursor_del(m_cur_block_info, 0)))
       throw1(DB_ERROR(lmdb_error("Failed to add removal of block info to db transaction: ", result).c_str()));
+
+  if (major_version > 1)
+  {
+    result = mdb_cursor_get(m_cur_rct_distribution, (MDB_val *)&zerokval, NULL, MDB_FIRST);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to get first rct distribution to db transaction: ", result).c_str()));
+    result = mdb_cursor_get(m_cur_rct_distribution, (MDB_val *)&zerokval, NULL, MDB_LAST_DUP);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to get last rct distribution to db transaction: ", result).c_str()));
+    result = mdb_cursor_del(m_cur_rct_distribution, 0);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to add removal of rct_distribution to db transaction: ", result).c_str()));
+  }
 }
 
 uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, const transaction& tx, const crypto::hash& tx_hash, const crypto::hash& tx_prunable_hash)
@@ -1283,6 +1319,8 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
   lmdb_db_open(txn, LMDB_TXPOOL_META, MDB_CREATE, m_txpool_meta, "Failed to open db handle for m_txpool_meta");
   lmdb_db_open(txn, LMDB_TXPOOL_BLOB, MDB_CREATE, m_txpool_blob, "Failed to open db handle for m_txpool_blob");
 
+  lmdb_db_open(txn, LMDB_RCT_DISTRIBUTION, MDB_INTEGERKEY | MDB_CREATE | MDB_DUPSORT | MDB_DUPFIXED, m_rct_distribution, "Failed to open db handle for m_rct_distribution");
+
   // this subdb is dropped on sight, so it may not be present when we open the DB.
   // Since we use MDB_CREATE, we'll get an exception if we open read-only and it does not exist.
   // So we don't open for read-only, and also not drop below. It is not used elsewhere.
@@ -1303,6 +1341,7 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
     mdb_set_dupsort(txn, m_txs_prunable_tip, compare_uint64);
   mdb_set_dupsort(txn, m_txs_prunable, compare_uint64);
   mdb_set_dupsort(txn, m_txs_prunable_hash, compare_uint64);
+  mdb_set_dupsort(txn, m_rct_distribution, compare_uint64);
 
   mdb_set_compare(txn, m_txpool_meta, compare_hash32);
   mdb_set_compare(txn, m_txpool_blob, compare_hash32);
@@ -1321,6 +1360,13 @@ void BlockchainLMDB::open(const std::string& filename, const int db_flags)
     throw0(DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str()));
   LOG_PRINT_L2("Setting m_height to: " << db_stats.ms_entries);
   uint64_t m_height = db_stats.ms_entries;
+
+  MDB_stat rct_distr_stats;
+  if ((result = mdb_stat(txn, m_rct_distribution, &rct_distr_stats)))
+    throw0(DB_ERROR(lmdb_error("Failed to query m_rct_distribution: ", result).c_str()));
+  if (rct_distr_stats.ms_entries > m_height)
+    throw0(DB_ERROR("Invalid rct_distribution height"));
+  m_rct_distribution_offset = m_height - rct_distr_stats.ms_entries;
 
   bool compatible = true;
 
@@ -1466,6 +1512,8 @@ void BlockchainLMDB::reset()
   if (auto result = mdb_drop(txn, m_hf_versions, 0))
     throw0(DB_ERROR(lmdb_error("Failed to drop m_hf_versions: ", result).c_str()));
   if (auto result = mdb_drop(txn, m_properties, 0))
+    throw0(DB_ERROR(lmdb_error("Failed to drop m_properties: ", result).c_str()));
+  if (auto result = mdb_drop(txn, m_rct_distribution, 0))
     throw0(DB_ERROR(lmdb_error("Failed to drop m_properties: ", result).c_str()));
 
   // init with current version
@@ -2194,6 +2242,61 @@ uint64_t BlockchainLMDB::get_block_timestamp(const uint64_t& height) const
   uint64_t ret = bi->bi_timestamp;
   TXN_POSTFIX_RDONLY();
   return ret;
+}
+
+std::vector<uint64_t> BlockchainLMDB::get_block_cumulative_rct_outputs(const std::vector<uint64_t> &heights) const
+{
+  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  check_open();
+  std::vector<uint64_t> res;
+  int result;
+
+  if (heights.empty())
+    return {};
+  for (size_t i = 1; i < heights.size(); ++i)
+    if (heights[i] < heights[i-1])
+      throw0(DB_ERROR("Invalid heights array"));
+  res.reserve(heights.size());
+
+  TXN_PREFIX_RDONLY();
+  RCURSOR(rct_distribution);
+
+  MDB_stat db_stats;
+  if ((result = mdb_stat(m_txn, m_blocks, &db_stats)))
+    throw0(DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str()));
+  if (heights.back() >= db_stats.ms_entries)
+    throw0(BLOCK_DNE(std::string("Attempt to get rct distribution from height " + std::to_string(heights.back()) + " failed -- block size not in db").c_str()));
+
+  MDB_val k, data;
+  result = mdb_cursor_get(m_cur_rct_distribution, &k, &data, MDB_FIRST);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Error attempting to retrieve rct distribution from the db: ", result).c_str()));
+
+  uint64_t prev_height = m_rct_distribution_offset;
+  for (uint64_t height: heights)
+  {
+    if (height < m_rct_distribution_offset)
+    {
+      res.push_back(0);
+      continue;
+    }
+
+    size_t steps = height - prev_height;
+    while (steps--)
+    {
+      result = mdb_cursor_get(m_cur_rct_distribution, &k, &data, MDB_NEXT_DUP);
+      if (result)
+        throw0(DB_ERROR(lmdb_error("Error attempting to retrieve rct distribution from the db: ", result).c_str()));
+    }
+    uint64_t value = *(const uint64_t*)data.mv_data;
+    if (value < height)
+      throw0(DB_ERROR("Error attempting to retrieve rct distribution from the db: value too small"));
+    res.push_back(value - height);
+    prev_height = height;
+  }
+
+  TXN_POSTFIX_RDONLY();
+  return res;
 }
 
 uint64_t BlockchainLMDB::get_top_block_timestamp() const
@@ -4391,6 +4494,92 @@ void BlockchainLMDB::migrate_1_2()
   txn.commit();
 }
 
+void BlockchainLMDB::migrate_2_3()
+{
+  LOG_PRINT_L3("BlockchainLMDB::" << __func__);
+  uint64_t i;
+  int result;
+  mdb_txn_safe txn(false);
+  MDB_val v;
+
+  MGINFO_YELLOW("Migrating blockchain from DB version 2 to 3 - this may take a while:");
+
+  do {
+    LOG_PRINT_L1("migrating block info:");
+
+    result = mdb_txn_begin(m_env, NULL, 0, txn);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+
+    MDB_stat db_stats;
+    if ((result = mdb_stat(txn, m_blocks, &db_stats)))
+      throw0(DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str()));
+    const uint64_t blockchain_height = db_stats.ms_entries;
+
+    MDEBUG("enumerating rct outputs...");
+    std::vector<uint64_t> distribution(blockchain_height, 0);
+    bool r = for_all_outputs(0, [&](uint64_t height) {
+      if (height >= blockchain_height)
+        return false;
+      distribution[height]++;
+      return true;
+    });
+    if (!r)
+      throw0(DB_ERROR("Failed to build rct output distribution"));
+    for (size_t i = 1; i < distribution.size(); ++i)
+      distribution[i] += distribution[i - 1];
+    for (m_rct_distribution_offset = 0; m_rct_distribution_offset < distribution.size() && !distribution[m_rct_distribution_offset]; ++m_rct_distribution_offset);
+    MGINFO(distribution.back() << " rct outputs found");
+
+    MDB_cursor *c_new;
+    result = mdb_drop(txn, m_rct_distribution, 0);
+    if (result)
+      throw0(DB_ERROR(lmdb_error("Failed to reset rct_distribution for the db: ", result).c_str()));
+    for (i = 0; i < distribution.size(); ++i)
+    {
+      if (!(i % 2000)) {
+        if (i) {
+          LOGIF(el::Level::Info) {
+            std::cout << i << " / " << blockchain_height - m_rct_distribution_offset << "  \r" << std::flush;
+          }
+          txn.commit();
+          result = mdb_txn_begin(m_env, NULL, 0, txn);
+          if (result)
+            throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+        }
+        result = mdb_cursor_open(txn, m_rct_distribution, &c_new);
+        if (result)
+          throw0(DB_ERROR(lmdb_error("Failed to open a cursor for rct_distribution: ", result).c_str()));
+        if (!i)
+        {
+          i = m_rct_distribution_offset;
+          if (i == distribution.size())
+            break;
+        }
+      }
+      uint64_t value = distribution[i] + i;
+      MDB_val_set(v, value);
+      result = mdb_cursor_put(c_new, (MDB_val*)&zerokval, &v, MDB_APPENDDUP);
+      if (result)
+        throw0(DB_ERROR(lmdb_error("Failed to write a record to rct_distribution: ", result).c_str()));
+    }
+    mdb_cursor_close(c_new);
+    txn.commit();
+  } while(0);
+
+  uint32_t version = 3;
+  v.mv_data = (void *)&version;
+  v.mv_size = sizeof(version);
+  MDB_val_copy<const char *> vk("version");
+  result = mdb_txn_begin(m_env, NULL, 0, txn);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to create a transaction for the db: ", result).c_str()));
+  result = mdb_put(txn, m_properties, &vk, &v, 0);
+  if (result)
+    throw0(DB_ERROR(lmdb_error("Failed to update version for the db: ", result).c_str()));
+  txn.commit();
+}
+
 void BlockchainLMDB::migrate(const uint32_t oldversion)
 {
   switch(oldversion) {
@@ -4398,6 +4587,8 @@ void BlockchainLMDB::migrate(const uint32_t oldversion)
     migrate_0_1(); /* FALLTHRU */
   case 1:
     migrate_1_2(); /* FALLTHRU */
+  case 2:
+    migrate_2_3(); /* FALLTHRU */
   default:
     ;
   }

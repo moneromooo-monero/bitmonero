@@ -1941,16 +1941,27 @@ bool Blockchain::get_output_distribution(uint64_t amount, uint64_t from_height, 
   if (start_height >= db_height)
     return false;
   distribution.resize(db_height - start_height, 0);
-  bool r = for_all_outputs(amount, [&](uint64_t height) {
-    CHECK_AND_ASSERT_MES(height >= real_start_height && height <= db_height, false, "Height not in expected range");
-    if (height >= start_height)
-      distribution[height - start_height]++;
-    else
-      base++;
-    return true;
-  });
-  if (!r)
-    return false;
+  if (amount == 0)
+  {
+    std::vector<uint64_t> heights;
+    heights.reserve(db_height - start_height);
+    for (uint64_t h = start_height; h < db_height; ++h)
+      heights.push_back(h);
+    distribution = m_db->get_block_cumulative_rct_outputs(heights);
+  }
+  else
+  {
+    bool r = for_all_outputs(amount, [&](uint64_t height) {
+      CHECK_AND_ASSERT_MES(height >= real_start_height && height <= db_height, false, "Height not in expected range");
+      if (height >= start_height)
+        distribution[height - start_height]++;
+      else
+        base++;
+      return true;
+    });
+    if (!r)
+      return false;
+  }
   return true;
 }
 //------------------------------------------------------------------
