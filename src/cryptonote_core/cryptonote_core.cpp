@@ -316,6 +316,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   uint64_t core::get_current_blockchain_height() const
   {
+struct A { A() {printf("DLT: %p: entering get_current_blockchain_height\n", (void*)pthread_self());} ~A () {printf("DLT: %p: leaving get_current_blockchain_height\n", (void*)pthread_self());} } a;
     return m_blockchain_storage.get_current_blockchain_height();
   }
   //-----------------------------------------------------------------------------------------------

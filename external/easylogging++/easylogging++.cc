@@ -2546,21 +2546,25 @@ Writer& Writer::construct(int count, const char* loggerIds, ...) {
 }
 
 void Writer::initializeLogger(const std::string& loggerId, bool lookup, bool needLock) {
+printf("DLT: %p: entering initializeLogger\n", (void*)pthread_self());
   if (lookup) {
     m_logger = ELPP->registeredLoggers()->get(loggerId, ELPP->hasFlag(LoggingFlag::CreateLoggerAutomatically));
   }
   if (m_logger == nullptr) {
+printf("DLT: %p: locking initializeLogger\n", (void*)pthread_self());
     ELPP->acquireLock();
     if (!ELPP->registeredLoggers()->has(std::string(base::consts::kDefaultLoggerId))) {
       // Somehow default logger has been unregistered. Not good! Register again
       ELPP->registeredLoggers()->get(std::string(base::consts::kDefaultLoggerId));
     }
+printf("DLT: %p: unlocking initializeLogger\n", (void*)pthread_self());
     ELPP->releaseLock();  // Need to unlock it for next writer
     Writer(Level::Debug, m_file, m_line, m_func).construct(1, base::consts::kDefaultLoggerId)
         << "Logger [" << loggerId << "] is not registered yet!";
     m_proceed = false;
   } else {
     if (needLock) {
+printf("DLT: %p: locking initializeLogger\n", (void*)pthread_self());
       m_logger->acquireLock();  // This should not be unlocked by checking m_proceed because
       // m_proceed can be changed by lines below
     }
@@ -2571,6 +2575,7 @@ void Writer::initializeLogger(const std::string& loggerId, bool lookup, bool nee
       m_proceed = m_logger->enabled(m_level);
     }
   }
+printf("DLT: %p: leaving initializeLogger\n", (void*)pthread_self());
 }
 
 void Writer::processDispatch() {
@@ -2592,6 +2597,7 @@ void Writer::processDispatch() {
         triggerDispatch();
       } else if (m_logger != nullptr) {
         m_logger->stream().str(ELPP_LITERAL(""));
+printf("DLT: %p: unlocking processDispatch\n", (void*)pthread_self());
         m_logger->releaseLock();
       }
       if (i + 1 < m_loggerIds.size()) {
@@ -2603,12 +2609,14 @@ void Writer::processDispatch() {
       triggerDispatch();
     } else if (m_logger != nullptr) {
       m_logger->stream().str(ELPP_LITERAL(""));
+printf("DLT: %p: unlocking processDispatch\n", (void*)pthread_self());
       m_logger->releaseLock();
     }
   }
 #else
   if (m_logger != nullptr) {
     m_logger->stream().str(ELPP_LITERAL(""));
+printf("DLT: %p: unlocking processDispatch\n", (void*)pthread_self());
     m_logger->releaseLock();
   }
 #endif // ELPP_LOGGING_ENABLED
