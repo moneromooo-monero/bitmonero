@@ -1726,10 +1726,16 @@ namespace cryptonote
     if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_OUTPUT_HISTOGRAM>(invoke_http_mode::JON_RPC, "get_output_histogram", req, res, r))
       return r;
 
+std::string s;
+for (const auto &a: req.amounts) s += std::to_string(a) + "";
+MINFO("on_get_output_histogram: " << req.amounts.size() << " amounts: " << s);
+MINFO("unlocked " << req.unlocked << ", cutoff " << req.recent_cutoff << ", min count " << req.min_count);
     std::map<uint64_t, std::tuple<uint64_t, uint64_t, uint64_t>> histogram;
     try
     {
+MINFO("start");
       histogram = m_core.get_blockchain_storage().get_output_histogram(req.amounts, req.unlocked, req.recent_cutoff, req.min_count);
+MINFO("stop");
     }
     catch (const std::exception &e)
     {
@@ -1744,6 +1750,7 @@ namespace cryptonote
       if (std::get<0>(i.second) >= req.min_count && (std::get<0>(i.second) <= req.max_count || req.max_count == 0))
         res.histogram.push_back(COMMAND_RPC_GET_OUTPUT_HISTOGRAM::entry(i.first, std::get<0>(i.second), std::get<1>(i.second), std::get<2>(i.second)));
     }
+MINFO("exit");
 
     res.status = CORE_RPC_STATUS_OK;
     return true;
@@ -2086,6 +2093,10 @@ namespace cryptonote
     PERF_TIMER(on_get_output_distribution);
     try
     {
+std::string s;
+for (const auto &a: req.amounts) s += std::to_string(a) + "";
+MINFO("on_get_output_distribution: " << req.amounts.size() << " amounts: " << s);
+MINFO("from " << req.from_height << " to " << req.to_height);
       for (uint64_t amount: req.amounts)
       {
         static struct D
@@ -2120,12 +2131,14 @@ namespace cryptonote
 
         std::vector<uint64_t> distribution;
         uint64_t start_height, base;
+MINFO("start");
         if (!m_core.get_output_distribution(amount, req.from_height, req.to_height, start_height, distribution, base))
         {
           error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
           error_resp.message = "Failed to get rct distribution";
           return false;
         }
+MINFO("stop");
         if (req.to_height > 0 && req.to_height >= req.from_height)
         {
           uint64_t offset = std::max(req.from_height, start_height);
@@ -2159,6 +2172,7 @@ namespace cryptonote
       return false;
     }
 
+MINFO("exit");
     res.status = CORE_RPC_STATUS_OK;
     return true;
   }
