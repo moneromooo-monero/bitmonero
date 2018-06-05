@@ -2005,7 +2005,7 @@ bool Blockchain::get_output_distribution(uint64_t amount, uint64_t from_height, 
     start_height = 0;
   base = 0;
 
-  if (to_height < from_height)
+  if (to_height > 0 && to_height < from_height)
     return false;
 
   const uint64_t real_start_height = start_height;
@@ -2014,6 +2014,10 @@ bool Blockchain::get_output_distribution(uint64_t amount, uint64_t from_height, 
 
   distribution.clear();
   uint64_t db_height = m_db->height();
+  if (db_height == 0)
+    return false;
+  if (to_height == 0)
+    to_height = db_height - 1;
   if (start_height >= db_height || to_height >= db_height)
     return false;
   distribution.resize(to_height - start_height, 0);

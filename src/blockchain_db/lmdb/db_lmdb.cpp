@@ -726,19 +726,24 @@ void BlockchainLMDB::add_block(const block& blk, const size_t& block_size, const
   {
     MDB_val k;
     result = mdb_cursor_get(m_cur_rct_distribution, &k, &val, MDB_FIRST);
+    if (result != MDB_NOTFOUND)
+    {
+      if (result)
+        throw0(DB_ERROR(lmdb_error("Failed to get first rct distribution to db transaction: ", result).c_str()));
+      result = mdb_cursor_get(m_cur_rct_distribution, &k, &val, MDB_LAST_DUP);
+      if (result)
+        throw0(DB_ERROR(lmdb_error("Failed to get last rct distribution to db transaction: ", result).c_str()));
+      uint64_t prev_val = *(const uint64_t*)val.mv_data;
+      if (prev_val < m_height - 1)
+        throw0(DB_ERROR("Invalid value in rct_distribution"));
+      num_rct_outs += prev_val - (m_height - 1);
+    }
+    num_rct_outs += m_height;
+    MDB_val_set(val_d, num_rct_outs);
+    result = mdb_cursor_put(m_cur_rct_distribution, (MDB_val *)&zerokval, &val_d, MDB_APPENDDUP);
     if (result)
-      throw0(DB_ERROR(lmdb_error("Failed to get first rct distribution to db transaction: ", result).c_str()));
-    result = mdb_cursor_get(m_cur_rct_distribution, &k, &val, MDB_LAST_DUP);
-    if (result)
-      throw0(DB_ERROR(lmdb_error("Failed to get last rct distribution to db transaction: ", result).c_str()));
-    num_rct_outs += *(const uint64_t*)val.mv_data;
+      throw0(DB_ERROR(lmdb_error("Failed to add rct distribution by hash to db transaction: ", result).c_str()));
   }
-  num_rct_outs += m_height;
-
-  MDB_val_set(val_d, num_rct_outs);
-  result = mdb_cursor_put(m_cur_rct_distribution, (MDB_val *)&zerokval, &val_d, MDB_APPENDDUP);
-  if (result)
-    throw0(DB_ERROR(lmdb_error("Failed to add rct distribution by hash to db transaction: ", result).c_str()));
 
   m_cum_size += block_size;
   m_cum_count++;
