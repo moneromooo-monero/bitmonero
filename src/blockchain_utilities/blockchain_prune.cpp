@@ -637,6 +637,7 @@ int main(int argc, char* argv[])
   copy_table(env0, env1, "txpool_meta", 0, MDB_NODUPDATA, compare_hash32);
   copy_table(env0, env1, "txpool_blob", 0, MDB_NODUPDATA, compare_hash32);
   copy_table(env0, env1, "hf_versions", MDB_INTEGERKEY, MDB_APPEND);
+  copy_table(env0, env1, "rct_distribution", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_APPENDDUP, compare_uint64);
   copy_table(env0, env1, "properties", 0, 0, compare_string);
   prune(env0, env1);
   close(env1);
