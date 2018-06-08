@@ -1113,6 +1113,17 @@ public:
   virtual transaction get_tx(const crypto::hash& h) const;
 
   /**
+   * @brief fetches the transaction base with the given hash
+   *
+   * If the transaction does not exist, the subclass should throw TX_DNE.
+   *
+   * @param h the hash to look for
+   *
+   * @return the transaction with the given hash
+   */
+  virtual transaction get_pruned_tx(const crypto::hash& h) const;
+
+  /**
    * @brief fetches the transaction with the given hash
    *
    * If the transaction does not exist, the subclass should return false.
@@ -1122,6 +1133,17 @@ public:
    * @return true iff the transaction was found
    */
   virtual bool get_tx(const crypto::hash& h, transaction &tx) const;
+
+  /**
+   * @brief fetches the transaction base with the given hash
+   *
+   * If the transaction does not exist, the subclass should return false.
+   *
+   * @param h the hash to look for
+   *
+   * @return true iff the transaction was found
+   */
+  virtual bool get_pruned_tx(const crypto::hash& h, transaction &tx) const;
 
   /**
    * @brief fetches the transaction blob with the given hash
