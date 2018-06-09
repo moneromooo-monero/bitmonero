@@ -1247,7 +1247,6 @@ skip:
         context.m_last_response_height = 0;
         force_next_span = true;
       }
-#if 1
       if (should_drop_connection(context))
       {
         if (!context.m_is_income)
@@ -1257,21 +1256,6 @@ skip:
         }
         return 1;
       }
-#else
-      if (m_next_needed_pruning_seed && m_next_needed_pruning_seed != tools::get_pruning_stripe(context.m_pruning_seed))
-      {
-        if (context.m_anchor)
-        {
-          LOG_ERROR_CCONTEXT("The seed we need is not our own, but not dropping since this is an anchor peer");
-        }
-        else
-        {
-          LOG_ERROR_CCONTEXT("Dropping connection since the seed we need is not our own");
-          drop_connection(context, false, false);
-          return 1;
-        }
-      }
-#endif
     }
 
 skip:
@@ -1594,19 +1578,6 @@ MINFO(context << "  - last_response_height " << context.m_last_response_height <
           MLOG_PEER_STATE("pausing");
         }
 
-#if 0
-        bool filled;
-        if (m_block_queue.has_next_span(context.m_connection_id, filled) && !filled)
-        {
-          MDEBUG(context << " we have the next span, and it is scheduled, resuming");
-          context.m_state = cryptonote_connection_context::state_standby;
-          ++context.m_callback_request_count;
-          m_p2p->request_callback(context);
-          MLOG_PEER_STATE("resuming and requesting callback");
-          return true;
-        }
-#endif
-
         for (size_t n = 0; n < 50; ++n)
         {
           if (m_stopping)
@@ -1746,73 +1717,23 @@ MINFO(context << "  - last_response_height " << context.m_last_response_height <
 
       // if we're still around, we might be at a point where the peer is pruned, so we could either
       // drop it to make space for other peers, or ask for a span further down the line
-#if 1
       const uint32_t next_seed = get_next_needed_pruning_seed().second;
       if (next_seed && next_seed != context.m_pruning_seed)
-#else
-      const uint64_t next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
-      if (!tools::has_unpruned_block(next_block_height, context.m_remote_blockchain_height, context.m_pruning_seed))
-#endif
       {
         // at this point, we have to either close the connection, or start getting blocks past the
         // current point, or become dormant
-#warning TODO: decide whether to drop or not
-#if 1
-        //const uint32_t next_seed = tools::get_pruning_stripe(tools::get_pruning_seed(next_block_height, m_core.get_target_blockchain_height()));
-#if 1
         MDEBUG(context << "this peer is pruned at seed " << epee::string_tools::to_string_hex(context.m_pruning_seed) <<
             ", next seed needed is " << next_seed);
-#else
-        MDEBUG(context << "this peer is pruned at block height " << next_block_height << " (" << context.m_last_response_height <<
-            "-" << context.m_needed_objects.size() << "+1) with seed " << epee::string_tools::to_string_hex(context.m_pruning_seed) <<
-            ", next seed needed is " << next_seed);
-#endif
-#endif
-#if 1
         if (should_drop_connection(context))
         {
           if (!context.m_is_income)
             m_p2p->add_used_stripe_peer(context);
           return context.m_is_income; // drop outgoing connections
         }
-#if 0
-        unsigned int n_out_peers = 0, n_peers_on_next_seed = 0;
-        m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
-          if (!context.m_is_income)
-            ++n_out_peers;
-          if (context.m_state > cryptonote_connection_context::state_synchronizing && context.m_pruning_seed == next_seed)
-            ++n_peers_on_next_seed;
-          return true;
-        });
-        if (next_seed > 0)
-        {
-          const uint32_t distance = (context.m_pruning_seed - next_seed + (1<<CRYPTONOTE_PRUNING_LOG_STRIPES)) % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES);
-          if (n_out_peers >= m_max_out_peers || (distance > 1 && n_peers_on_next_seed <= 2))
-          {
-            MDEBUG(context << "we have no peer with seed " << next_seed << ", and either " << n_out_peers << " is at max out peers ("
-                << m_max_out_peers << ") or distance " << distance << " from " <<
-                epee::string_tools::to_string_hex(next_seed) << " to " << epee::string_tools::to_string_hex(context.m_pruning_seed) <<
-                " is too large and we have only " << n_peers_on_next_seed << " peers on next seed, dropping connection to make space");
-            m_next_needed_pruning_seed = next_seed;
-            return false;
-          }
-        }
-#endif
-#endif
         // we'll get back stuck waiting for the go ahead
-#if 1
         context.m_state = cryptonote_connection_context::state_normal;
         MLOG_PEER_STATE("Nothing to do for now, switching to normal state");
         return true;
-#else
-        LOG_PRINT_CCONTEXT_L2("requesting callback in 5 seconds (actually, now)");
-        context.m_state = cryptonote_connection_context::state_standby;
-//sleep(5);//tmp
-        ++context.m_callback_request_count;
-        m_p2p->request_callback(context);
-        MLOG_PEER_STATE("requesting callback");
-        return true;
-#endif
       }
     }
 
