@@ -269,7 +269,11 @@ static bool is_v1_tx(MDB_cursor *c_txs_pruned, MDB_val *tx_id)
     throw std::runtime_error("Failed to find transaction pruned data: " + std::string(mdb_strerror(ret)));
   if (v.mv_size == 0)
     throw std::runtime_error("Invalid transaction pruned data");
-  const uint8_t version = *(const uint8_t*)v.mv_data;
+  uint64_t version;
+  std::string tmp((const char*)v.mv_data, v.mv_size);
+  int read = tools::read_varint(tmp.begin(), tmp.end(), version);
+  if (read <= 0)
+    throw std::runtime_error("Internal error getting transaction version");
   return version <= 1;
 }
 
