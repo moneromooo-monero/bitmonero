@@ -29,6 +29,7 @@
 #include <boost/range/adaptor/reversed.hpp>
 
 #include "string_tools.h"
+#include "common/pruning.h"
 #include "blockchain_db.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "profile_tools.h"
@@ -265,9 +266,12 @@ void BlockchainDB::pop_block(block& blk, std::vector<transaction>& txs)
 
   remove_block();
 
+  CHECK_AND_ASSERT_THROW_MES(!blk.miner_tx.vin.empty(), "Miner tx has no inputs");
+  const uint64_t block_height = boost::get<cryptonote::txin_gen>(blk.miner_tx.vin.front()).height;
+  const bool has_unpruned_block = tools::has_unpruned_block(block_height, height(), get_blockchain_pruning_seed());
   for (const auto& h : boost::adaptors::reverse(blk.tx_hashes))
   {
-    txs.push_back(get_pruned_tx(h));
+    txs.push_back(has_unpruned_block ? get_tx(h) : get_pruned_tx(h));
     remove_transaction(h);
   }
   remove_transaction(get_transaction_hash(blk.miner_tx));
