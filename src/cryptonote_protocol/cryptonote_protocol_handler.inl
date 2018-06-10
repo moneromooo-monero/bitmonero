@@ -1385,10 +1385,14 @@ skip:
     std::pair<uint64_t, uint64_t> span;
     bool filled;
 
-    if (!m_block_queue.has_next_span(m_core.get_current_blockchain_height(), filled) || !filled)
+    const uint64_t blockchain_height = m_core.get_current_blockchain_height();
+    if (!m_block_queue.has_next_span(blockchain_height, filled) || !filled)
     {
-      MDEBUG(context << " we should download it as no peer reserved it, or it's not been received yet");
-      return true;
+      if (tools::has_unpruned_block(blockchain_height, context.m_remote_blockchain_height, context.m_pruning_seed))
+      {
+        MDEBUG(context << " we should download it as no peer reserved it, or it's not been received yet");
+        return true;
+      }
     }
 
     // if the next span is not scheduled (or there is none)
