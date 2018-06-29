@@ -35,7 +35,7 @@ if (WIN32 OR STATIC)
 endif ()
 
 # warnings are cleared only for GCC on Linux
-if (NOT (MINGW OR APPLE OR FREEBSD OR OPENBSD OR DRAGONFLY))
+if (NOT (MINGW OR APPLE OR FREEBSD OR OPENBSD OR DRAGONFLY OR (CMAKE_BUILD_TYPE_LOWER STREQUAL "debug")))
   add_compile_options("${WARNINGS_AS_ERRORS_FLAG}") # applies only to targets that follow
 endif()
 
