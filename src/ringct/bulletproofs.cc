@@ -1213,14 +1213,13 @@ bool bulletproof_VERIFY(const std::vector<const Bulletproof*> &proofs)
     for (size_t i = 0; i < rounds; ++i)
     {
       sc_mul(tmp.bytes, w[i].bytes, w[i].bytes);
-      sc_mul(tmp.bytes, tmp.bytes, EIGHT.bytes);
+      sc_mul(tmp.bytes, tmp.bytes, weight8.bytes);
       multiexp_data.emplace_back(tmp, proof.L[i]);
       sc_mul(tmp.bytes, winv[i].bytes, winv[i].bytes);
-      sc_mul(tmp.bytes, tmp.bytes, EIGHT.bytes);
+      sc_mul(tmp.bytes, tmp.bytes, weight8.bytes);
       multiexp_data.emplace_back(tmp, proof.R[i]);
     }
-    rct::key acc = multiexp(multiexp_data, false);
-    rct::addKeys(Z2, Z2, rct::scalarmultKey(acc, weight));
+    rct::addKeys(Z2, Z2, multiexp(multiexp_data, false));
     sc_mulsub(tmp.bytes, proof.a.bytes, proof.b.bytes, proof.t.bytes);
     sc_mul(tmp.bytes, tmp.bytes, x_ip.bytes);
     sc_muladd(z3.bytes, tmp.bytes, weight.bytes, z3.bytes);
