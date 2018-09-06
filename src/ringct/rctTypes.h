@@ -37,6 +37,7 @@
 #include <iostream>
 #include <cinttypes>
 #include <sodium/crypto_verify_32.h>
+#include "misc_log_ex.h"
 
 extern "C" {
 #include "crypto/crypto-ops.h"
@@ -113,6 +114,19 @@ namespace rct {
 
         BEGIN_SERIALIZE_OBJECT()
           FIELD(c)
+        END_SERIALIZE()
+    };
+
+    struct multiuser_out {
+        std::vector<key> a; // for all inputs
+        std::vector<unsigned> index; // for all inputs
+        size_t output_offset;
+
+        BEGIN_SERIALIZE_OBJECT()
+          FIELD(a)
+          FIELD(index)
+          if (a.size() != index.size()) return false;
+          VARINT_FIELD(output_offset)
         END_SERIALIZE()
     };
 

@@ -442,6 +442,34 @@ private:
       rct::multisig_out msout;
     };
 
+    struct multiuser_private_setup
+    {
+      std::vector<cryptonote::txin_v> vin;
+      std::vector<cryptonote::tx_out> vout;
+      rct::multiuser_out muout;
+      crypto::public_key tx_key;
+      std::vector<crypto::public_key> additional_tx_keys;
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(vin)
+        FIELD(vout)
+        FIELD(muout)
+        FIELD(tx_key)
+        FIELD(additional_tx_keys)
+      END_SERIALIZE()
+    };
+
+    struct multiuser_public_setup
+    {
+      std::vector<cryptonote::tx_destination_entry> dests;
+      std::vector<cryptonote::tx_destination_entry> conditions;
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(dests)
+        FIELD(conditions)
+      END_SERIALIZE()
+    };
+
     // The convention for destinations is:
     // dests does not include change
     // splitted_dsts (in construction_data) does
@@ -499,6 +527,23 @@ private:
       BEGIN_SERIALIZE_OBJECT()
         FIELD(m_ptx)
         FIELD(m_signers)
+      END_SERIALIZE()
+    };
+
+    struct multiuser_tx_set
+    {
+      bool m_building; // if true: ignore m_ptx, add to m_setup; if false: sign m_ptx, m_setup can't change
+      pending_tx m_ptx;
+      std::vector<std::string> m_setup;
+      rct::ctkeyM m_mixRing;
+
+      multiuser_tx_set(): m_building(true) {}
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(m_building)
+        FIELD(m_ptx)
+        FIELD(m_setup)
+        FIELD(m_mixRing)
       END_SERIALIZE()
     };
 
@@ -812,8 +857,9 @@ private:
       std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
       uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, T destination_split_strategy, const tx_dust_policy& dust_policy, cryptonote::transaction& tx, pending_tx &ptx);
     void transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t>& selected_transfers, size_t fake_outputs_count,
-      std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
-      uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, cryptonote::transaction& tx, pending_tx &ptx, const rct::RCTConfig &rct_config);
+      std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, boost::optional<crypto::secret_key> fixed_tx_key,
+      uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, cryptonote::transaction& tx, pending_tx &ptx, const rct::RCTConfig &rct_config,
+      rct::multiuser_out *muout);
 
     void commit_tx(pending_tx& ptx_vector);
     void commit_tx(std::vector<pending_tx>& ptx_vector);
@@ -835,7 +881,7 @@ private:
     bool parse_unsigned_tx_from_str(const std::string &unsigned_tx_st, unsigned_tx_set &exported_txs) const;
     bool load_tx(const std::string &signed_filename, std::vector<tools::wallet2::pending_tx> &ptx, std::function<bool(const signed_tx_set&)> accept_func = NULL);
     bool parse_tx_from_str(const std::string &signed_tx_st, std::vector<tools::wallet2::pending_tx> &ptx, std::function<bool(const signed_tx_set &)> accept_func);
-    std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices);     // pass subaddr_indices by value on purpose
+    std::vector<wallet2::pending_tx> create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices, const boost::optional<crypto::secret_key> &tx_key, rct::multiuser_out *muout = NULL);     // pass subaddr_indices by value on purpose
     std::vector<wallet2::pending_tx> create_transactions_all(uint64_t below, const cryptonote::account_public_address &address, bool is_subaddress, const size_t outputs, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices);
     std::vector<wallet2::pending_tx> create_transactions_single(const crypto::key_image &ki, const cryptonote::account_public_address &address, bool is_subaddress, const size_t outputs, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra);
     std::vector<wallet2::pending_tx> create_transactions_from(const cryptonote::account_public_address &address, bool is_subaddress, const size_t outputs, std::vector<size_t> unused_transfers_indices, std::vector<size_t> unused_dust_indices, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra);
@@ -849,6 +895,7 @@ private:
     bool sign_multisig_tx_from_file(const std::string &filename, std::vector<crypto::hash> &txids, std::function<bool(const multisig_tx_set&)> accept_func);
     bool sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto::hash> &txids);
     bool sign_multisig_tx_to_file(multisig_tx_set &exported_txs, const std::string &filename, std::vector<crypto::hash> &txids);
+    bool sign_multiuser_tx(multiuser_tx_set &tx);
     std::vector<pending_tx> create_unmixable_sweep_transactions();
     void discard_unmixable_outputs();
     bool check_connection(uint32_t *version = NULL, bool *ssl = NULL, uint32_t timeout = 200000);
@@ -859,6 +906,14 @@ private:
       uint64_t min_height, uint64_t max_height = (uint64_t)-1, const boost::optional<uint32_t>& subaddr_account = boost::none, const std::set<uint32_t>& subaddr_indices = {}) const;
     void get_unconfirmed_payments_out(std::list<std::pair<crypto::hash,wallet2::unconfirmed_transfer_details>>& unconfirmed_payments, const boost::optional<uint32_t>& subaddr_account = boost::none, const std::set<uint32_t>& subaddr_indices = {}) const;
     void get_unconfirmed_payments(std::list<std::pair<crypto::hash,wallet2::pool_payment_details>>& unconfirmed_payments, const boost::optional<uint32_t>& subaddr_account = boost::none, const std::set<uint32_t>& subaddr_indices = {}) const;
+
+    bool save_multiuser_setup(const multiuser_private_setup &private_setup, const multiuser_public_setup &public_setup, std::string &data) const;
+    bool save_multiuser_tx_to_file(const multiuser_tx_set &multiuser_txs, const std::string &filename);
+    bool load_multiuser_setup(std::string data, multiuser_private_setup &private_setup, multiuser_public_setup &public_setup, bool &ours) const;
+    bool merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool add_vouts);
+    std::string save_multiuser_tx(const multiuser_tx_set &txs);
+    bool load_multiuser_tx(const std::string &data, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func = NULL);
+    bool load_multiuser_tx_from_file(const std::string &filename, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func = NULL);
 
     uint64_t get_blockchain_current_height() const { return m_light_wallet_blockchain_height ? m_light_wallet_blockchain_height : m_blockchain.size(); }
     void rescan_spent();
@@ -1184,7 +1239,8 @@ private:
     void update_pool_state(bool refreshed = false);
     void remove_obsolete_pool_txs(const std::vector<crypto::hash> &tx_hashes);
 
-    crypto::signature authenticate(const boost::string_ref &data, const crypto::secret_key &skey) const;
+    crypto::signature get_authentication(const boost::string_ref &data, const crypto::secret_key &skey) const;
+    std::string authenticate(std::string data, const crypto::secret_key &skey) const;
     bool verify_authenticity(const std::string &ciphertext, const crypto::secret_key &skey) const;
 
     std::string encrypt(const char *plaintext, size_t len, const crypto::secret_key &skey, bool authenticated = true) const;
@@ -1374,7 +1430,7 @@ private:
     void set_unspent(size_t idx);
     void get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count);
     bool tx_add_fake_output(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t global_index, const crypto::public_key& tx_public_key, const rct::key& mask, uint64_t real_index, bool unlocked) const;
-    bool should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
+    bool should_pick_a_second_output(bool use_rct, bool multiuser, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const;
     std::vector<size_t> get_only_rct(const std::vector<size_t> &unused_dust_indices, const std::vector<size_t> &unused_transfers_indices) const;
     void scan_output(const cryptonote::transaction &tx, bool miner_tx, const crypto::public_key &tx_pub_key, size_t i, tx_scan_info_t &tx_scan_info, int &num_vouts_received, std::unordered_map<cryptonote::subaddress_index, uint64_t> &tx_money_got_in_outs, std::vector<size_t> &outs, bool pool);
     void trim_hashchain();
@@ -1564,6 +1620,9 @@ BOOST_CLASS_VERSION(tools::wallet2::signed_tx_set, 1)
 BOOST_CLASS_VERSION(tools::wallet2::tx_construction_data, 4)
 BOOST_CLASS_VERSION(tools::wallet2::pending_tx, 3)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_sig, 0)
+BOOST_CLASS_VERSION(tools::wallet2::multiuser_private_setup, 0)
+BOOST_CLASS_VERSION(tools::wallet2::multiuser_public_setup, 0)
+BOOST_CLASS_VERSION(tools::wallet2::multiuser_tx_set, 0)
 
 namespace boost
 {
@@ -1736,6 +1795,32 @@ namespace boost
     {
       a & x.m_ptx;
       a & x.m_signers;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multiuser_private_setup &x, const boost::serialization::version_type ver)
+    {
+      a & x.vin;
+      a & x.vout;
+      a & x.muout;
+      a & x.tx_key;
+      a & x.additional_tx_keys;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multiuser_public_setup &x, const boost::serialization::version_type ver)
+    {
+      a & x.dests;
+      a & x.conditions;
+    }
+
+    template <class Archive>
+    inline void serialize(Archive &a, tools::wallet2::multiuser_tx_set &x, const boost::serialization::version_type ver)
+    {
+      a & x.m_building;
+      a & x.m_ptx;
+      a & x.m_setup;
+      a & x.m_mixRing;
     }
 
     template <class Archive>

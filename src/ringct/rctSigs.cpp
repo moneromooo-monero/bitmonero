@@ -547,6 +547,15 @@ namespace rct {
         return result;
     }
 
+    static mgSig dummyMG(size_t inputs, size_t ring_size)
+    {
+        mgSig s;
+        s.ss.resize(ring_size, keyV(inputs + 1, rct::zero()));
+        s.cc = rct::zero();
+        s.II.resize(inputs + 1, rct::zero());
+        return s;
+    }
+
 
     //Ring-ct MG sigs
     //Prove: 
@@ -749,8 +758,9 @@ namespace rct {
     
     //RCT simple    
     //for post-rct only
-    rctSig genRctSimple(const key &message, const ctkeyV & inSk, const keyV & destinations, const vector<xmr_amount> &inamounts, const vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM & mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> & index, ctkeyV &outSk, const RCTConfig &rct_config, hw::device &hwdev) {
+    rctSig genRctSimple(const key &message, const ctkeyV & inSk, const std::vector<bool> &owned, const keyV & destinations, const vector<xmr_amount> &inamounts, const vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM & mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, multiuser_out *muout, const std::vector<unsigned int> & index, ctkeyV &outSk, const RCTConfig &rct_config, hw::device &hwdev) {
         const bool bulletproof = rct_config.range_proof_type != RangeProofBorromean;
+        CHECK_AND_ASSERT_THROW_MES(owned.empty() || owned.size() == inSk.size(), "Bad owned size");
         CHECK_AND_ASSERT_THROW_MES(inamounts.size() > 0, "Empty inamounts");
         CHECK_AND_ASSERT_THROW_MES(inamounts.size() == inSk.size(), "Different number of inamounts/inSk");
         CHECK_AND_ASSERT_THROW_MES(outamounts.size() == destinations.size(), "Different number of amounts/destinations");
@@ -758,7 +768,7 @@ namespace rct {
         CHECK_AND_ASSERT_THROW_MES(index.size() == inSk.size(), "Different number of index/inSk");
         CHECK_AND_ASSERT_THROW_MES(mixRing.size() == inSk.size(), "Different number of mixRing/inSk");
         for (size_t n = 0; n < mixRing.size(); ++n) {
-          CHECK_AND_ASSERT_THROW_MES(index[n] < mixRing[n].size(), "Bad index into mixRing");
+          CHECK_AND_ASSERT_THROW_MES(!owned[n] || index[n] < mixRing[n].size(), "Bad index into mixRing");
         }
         CHECK_AND_ASSERT_THROW_MES((kLRki && msout) || (!kLRki && !msout), "Only one of kLRki/msout is present");
         if (kLRki && msout) {
@@ -881,8 +891,16 @@ namespace rct {
         key full_message = get_pre_mlsag_hash(rv,hwdev);
         if (msout)
           msout->c.resize(inamounts.size());
+        if (muout)
+        {
+          muout->a = a;
+          muout->index = index;
+        }
         for (i = 0 ; i < inamounts.size(); i++) {
+          if (owned[i])
             rv.p.MGs[i] = proveRctMGSimple(full_message, rv.mixRing[i], inSk[i], a[i], pseudoOuts[i], kLRki ? &(*kLRki)[i]: NULL, msout ? &msout->c[i] : NULL, index[i], hwdev);
+          else
+            rv.p.MGs[i] = dummyMG(inamounts.size(), rv.mixRing[0].size());
         }
         return rv;
     }
@@ -897,7 +915,8 @@ namespace rct {
           mixRing[i].resize(mixin+1);
           index[i] = populateFromBlockchainSimple(mixRing[i], inPk[i], mixin);
         }
-        return genRctSimple(message, inSk, destinations, inamounts, outamounts, txnFee, mixRing, amount_keys, kLRki, msout, index, outSk, rct_config, hwdev);
+        const std::vector<bool> owned(inSk.size(), true);
+        return genRctSimple(message, inSk, owned, destinations, inamounts, outamounts, txnFee, mixRing, amount_keys, kLRki, msout, NULL, index, outSk, rct_config, hwdev);
     }
 
     //RingCT protocol
@@ -1226,6 +1245,29 @@ namespace rct {
             rct::key diff;
             sc_mulsub(diff.bytes, msout.c[n].bytes, secret_key.bytes, k[n].bytes);
             sc_add(rv.p.MGs[n].ss[indices[n]][0].bytes, rv.p.MGs[n].ss[indices[n]][0].bytes, diff.bytes);
+        }
+        return true;
+    }
+
+    bool signMultiuser(rctSig &rv, const ctkeyV &inSk, const std::vector<bool> &owned, const multiuser_out &muout, hw::device &hwdev) {
+        CHECK_AND_ASSERT_MES(rv.type == RCTTypeSimple || rv.type == RCTTypeBulletproof, false, "unsupported rct type");
+        CHECK_AND_ASSERT_MES(owned.size() == inSk.size(), false, "Mismatched owned/inSk size");
+        CHECK_AND_ASSERT_MES(owned.size() == rv.p.MGs.size(), false, "Mismatched owned/MGs size");
+        CHECK_AND_ASSERT_MES(owned.size() == rv.mixRing.size(), false, "Mismatched owned/mixRing size");
+        CHECK_AND_ASSERT_MES(owned.size() == muout.a.size(), false, "Mismatched owned/muout size");
+        CHECK_AND_ASSERT_MES(owned.size() == rv.get_pseudo_outs().size(), false, "Mismatched owned/pseudoOuts size");
+        CHECK_AND_ASSERT_MES(owned.size() == muout.index.size(), false, "Mismatched owned/index size");
+
+        try
+        {
+          const rct::key full_message = get_pre_mlsag_hash(rv, hwdev);
+          for (size_t i = 0; i < owned.size(); ++i)
+              if (owned[i])
+                  rv.p.MGs[i] = proveRctMGSimple(full_message, rv.mixRing[i], inSk[i], muout.a[i], rv.get_pseudo_outs()[i], NULL, NULL, muout.index[i], hwdev);
+        }
+        catch (const std::exception &e)
+        {
+          return false;
         }
         return true;
     }
