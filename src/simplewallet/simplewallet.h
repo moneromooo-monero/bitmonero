@@ -158,6 +158,7 @@ namespace cryptonote
     bool show_blockchain_height(const std::vector<std::string> &args);
     bool transfer_main(int transfer_type, const std::vector<std::string> &args, bool called_by_mms);
     bool transfer(const std::vector<std::string> &args);
+    bool multiuser_transfer(const std::vector<std::string>& args);
     bool locked_transfer(const std::vector<std::string> &args);
     bool locked_sweep_all(const std::vector<std::string> &args);
     bool sweep_main(uint64_t below, bool locked, const std::vector<std::string> &args);
@@ -243,6 +244,8 @@ namespace cryptonote
     bool freeze(const std::vector<std::string>& args);
     bool thaw(const std::vector<std::string>& args);
     bool frozen(const std::vector<std::string>& args);
+    bool sign_multiuser(const std::vector<std::string>& args);
+    bool submit_multiuser(const std::vector<std::string>& args);
     bool net_stats(const std::vector<std::string>& args);
     bool welcome(const std::vector<std::string>& args);
     bool version(const std::vector<std::string>& args);
@@ -254,6 +257,7 @@ namespace cryptonote
     bool accept_loaded_tx(const std::function<size_t()> get_num_txes, const std::function<const tools::wallet2::tx_construction_data&(size_t)> &get_tx, const std::string &extra_message = std::string());
     bool accept_loaded_tx(const tools::wallet2::unsigned_tx_set &txs);
     bool accept_loaded_tx(const tools::wallet2::signed_tx_set &txs);
+    bool accept_loaded_multiuser_tx(const tools::wallet2::multiuser_tx_set &txs);
     bool print_ring_members(const std::vector<tools::wallet2::pending_tx>& ptx_vector, std::ostream& ostr);
     std::string get_prompt() const;
     bool print_seed(bool encrypted);

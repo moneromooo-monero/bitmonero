@@ -333,6 +333,7 @@ bool gen_multisig_tx_validation_base::generate_with(std::vector<test_event_entry
     src.real_output_in_tx_index = 0;
     src.mask = rct::identity();
     src.rct = true;
+    src.owned = true;
     src.multisig_kLRki = kLRkis[n];
 
     for (size_t m = 0; m <= mixin; ++m)

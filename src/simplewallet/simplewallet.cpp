@@ -37,6 +37,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <random>
 #include <ctype.h>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
@@ -125,6 +126,7 @@ typedef cryptonote::simple_wallet sw;
 
 enum TransferType {
   Transfer,
+  TransferMultiuser,
   TransferLocked,
 };
 
@@ -214,6 +216,8 @@ namespace
   const char* USAGE_SIGN_MULTISIG("sign_multisig <filename>");
   const char* USAGE_SUBMIT_MULTISIG("submit_multisig <filename>");
   const char* USAGE_EXPORT_RAW_MULTISIG_TX("export_raw_multisig_tx <filename>");
+  const char* USAGE_SIGN_MULTIUSER("sign_multiuser");
+  const char* USAGE_SUBMIT_MULTIUSER("submit_multiuser");
   const char* USAGE_MMS("mms [<subcommand> [<subcommand_parameters>]]");
   const char* USAGE_MMS_INIT("mms init <required_signers>/<authorized_signers> <own_label> <own_transport_address>");
   const char* USAGE_MMS_INFO("mms info");
@@ -2769,6 +2773,9 @@ simple_wallet::simple_wallet()
   m_cmd_binder.set_handler("transfer", boost::bind(&simple_wallet::transfer, this, _1),
                            tr(USAGE_TRANSFER),
                            tr("Transfer <amount> to <address>. If the parameter \"index=<N1>[,<N2>,...]\" is specified, the wallet uses outputs received by addresses of those indices. If omitted, the wallet randomly chooses address indices to be used. In any case, it tries its best not to combine outputs across multiple addresses. <priority> is the priority of the transaction. The higher the priority, the higher the transaction fee. Valid values in priority order (from lowest to highest) are: unimportant, normal, elevated, priority. If omitted, the default value (see the command \"set priority\") is used. <ring_size> is the number of inputs to include for untraceability. Multiple payments can be made at once by adding URI_2 or <address_2> <amount_2> etcetera (before the payment ID, if it's included)"));
+  m_cmd_binder.set_handler("multiuser_transfer", boost::bind(&simple_wallet::multiuser_transfer, this, _1),
+                           tr("multiuser_transfer [+] [index=<N1>[,<N2>,...]] [<priority>] [<ring_size>] <address> <amount> [other <o_address> <o_amount> [<payment_id>]] [disclose|withhold]"),
+                           tr("Transfer <amount> to <address>, if others transfer <o_amount> to <o_addres>. If the parameter \"index=<N1>[,<N2>,...]\" is specified, the wallet uses outputs received by addresses of those indices. If omitted, the wallet randomly chooses address indices to be used. In any case, it tries its best not to combine outputs across multiple addresses. <priority> is the priority of the transaction. The higher the priority, the higher the transaction fee. Valid values in priority order (from lowest to highest) are: unimportant, normal, elevated, priority. If omitted, the default value (see the command \"set priority\") is used. <ring_size> is the number of inputs to include for untraceability. Multiple payments can be made at once by adding <address_2> <amount_2> etcetera (before the payment ID, if it's included). Others' required payments can also be mutliple. The overall payment must fit in one transaction. If the last parameter is the word \"disclose\", the amount(s) and destination address(es) will be disclosed to the other participants. If it is \"withhold\" or omitted, they will not be disclosed. If the first parameter is \"+\", the file multiuser_monero_tx is loaded first, and the transfer is added to it."));
   m_cmd_binder.set_handler("locked_transfer",
                            boost::bind(&simple_wallet::locked_transfer, this, _1),
                            tr(USAGE_LOCKED_TRANSFER),
@@ -3061,6 +3068,14 @@ simple_wallet::simple_wallet()
                            boost::bind(&simple_wallet::export_raw_multisig, this, _1),
                            tr(USAGE_EXPORT_RAW_MULTISIG_TX),
                            tr("Export a signed multisig transaction to a file"));
+  m_cmd_binder.set_handler("sign_multiuser",
+                           boost::bind(&simple_wallet::sign_multiuser, this, _1),
+                           tr(USAGE_SIGN_MULTIUSER),
+                           tr("Sign a multiuser transaction from a file"));
+  m_cmd_binder.set_handler("submit_multiuser",
+                           boost::bind(&simple_wallet::submit_multiuser, this, _1),
+                           tr(USAGE_SUBMIT_MULTIUSER),
+                           tr("Submit a signed multiuser transaction from a file"));
   m_cmd_binder.set_handler("mms",
                            boost::bind(&simple_wallet::mms, this, _1),
                            tr(USAGE_MMS),
@@ -5608,6 +5623,40 @@ bool simple_wallet::print_ring_members(const std::vector<tools::wallet2::pending
   return true;
 }
 //----------------------------------------------------------------------------------------------------
+bool simple_wallet::accept_loaded_multiuser_tx(const tools::wallet2::multiuser_tx_set &txs)
+{
+  for (const std::string &s: txs.m_setup)
+  {
+    tools::wallet2::multiuser_private_setup private_setup;
+    tools::wallet2::multiuser_public_setup public_setup;
+    bool ours;
+    if (m_wallet->load_multiuser_setup(s, private_setup, public_setup, ours))
+    {
+      if (ours)
+        message_writer() << tr("Found our setup");
+      else
+        message_writer() << tr("Found third party setup");
+
+      for (const auto &dest: public_setup.dests)
+      {
+        message_writer() << "  claims to pay " << print_money(dest.amount) << " to " << cryptonote::get_account_address_as_str(m_wallet->nettype(), dest.is_subaddress, dest.addr);
+      }
+      for (const auto &dest: public_setup.conditions)
+      {
+        message_writer() << "  wants others to pay " << cryptonote::print_money(dest.amount) << " to " << cryptonote::get_account_address_as_str(m_wallet->nettype(), dest.is_subaddress, dest.addr);
+      }
+    }
+    else
+    {
+      fail_msg_writer() << tr("invalid multiuser setup");
+      return false;
+    }
+  }
+
+  std::string prompt_str = tr("Loaded multiuser transaction, is this okay? (Y/Yes/N/No): ");
+  return command_line::is_yes(input_line(prompt_str));
+}
+//----------------------------------------------------------------------------------------------------
 bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::string> &args_, bool called_by_mms)
 {
 //  "transfer [index=<N1>[,<N2>,...]] [<priority>] [<ring_size>] <address> <amount> [<payment_id>]"
@@ -5615,6 +5664,15 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     return false;
 
   std::vector<std::string> local_args = args_;
+  bool load_multiuser_tx = false;
+  rct::multiuser_out muout;
+  boost::optional<crypto::secret_key> tx_key;
+
+  if (transfer_type == TransferMultiuser && local_args.size() > 0 && local_args.front() == "+")
+  {
+    load_multiuser_tx = true;
+    local_args.erase(local_args.begin());
+  }
 
   std::set<uint32_t> subaddr_indices;
   if (local_args.size() > 0 && local_args[0].substr(0, 6) == "index=")
@@ -5714,9 +5772,25 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     local_args.pop_back();
   }
 
+  bool multiuser_disclose = false;
+  if (transfer_type == TransferMultiuser)
+  {
+    if (local_args.back() == "disclose")
+    {
+      multiuser_disclose = true;
+      local_args.pop_back();
+    }
+    else if (local_args.back() == "withhold")
+    {
+      multiuser_disclose = false;
+      local_args.pop_back();
+    }
+  }
+
   vector<cryptonote::address_parse_info> dsts_info;
-  vector<cryptonote::tx_destination_entry> dsts;
+  vector<cryptonote::tx_destination_entry> dsts, multiuser_other_dsts;
   size_t num_subaddresses = 0;
+  bool multiuser_other = false;
   for (size_t i = 0; i < local_args.size(); )
   {
     dsts_info.emplace_back();
@@ -5744,6 +5818,12 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       de.amount = amount;
       de.original = local_args[i];
       ++i;
+    }
+    else if (transfer_type == TransferMultiuser && local_args[i] == "other")
+    {
+      multiuser_other = true;
+      ++i;
+      continue;
     }
     else if (i + 1 < local_args.size())
     {
@@ -5811,7 +5891,10 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       payment_id_seen = true;
     }
 
-    dsts.push_back(de);
+    if (multiuser_other)
+      multiuser_other_dsts.push_back(de);
+    else
+      dsts.push_back(de);
   }
 
   // prompt is there is no payment id and confirmation is required
@@ -5826,6 +5909,16 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
 
        return false;
      }
+  }
+
+  tools::wallet2::multiuser_tx_set multiuser_txs;
+  if (load_multiuser_tx)
+  {
+    bool r = m_wallet->load_multiuser_tx_from_file("multiuser_monero_tx", multiuser_txs, [this](const tools::wallet2::multiuser_tx_set &txs) {
+      return accept_loaded_multiuser_tx(txs);
+    });
+    if (!r)
+      return false;
   }
 
   SCOPED_WALLET_UNLOCK_ON_BAD_PASSWORD(return false;);
@@ -5846,13 +5939,25 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
           return false;
         }
         unlock_block = bc_height + locked_blocks;
-        ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, unlock_block /* unlock_time */, priority, extra, m_current_subaddress_account, subaddr_indices);
+        ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, unlock_block /* unlock_time */, priority, extra, m_current_subaddress_account, subaddr_indices, boost::none, NULL);
+      break;
+      case TransferMultiuser:
+      {
+        if (load_multiuser_tx)
+        {
+          tx_key = multiuser_txs.m_ptx.tx_key;
+          muout.output_offset = multiuser_txs.m_ptx.tx.vout.size();
+        }
+        else
+          muout.output_offset = 0;
+        ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra, m_current_subaddress_account, subaddr_indices, tx_key, &muout);
+      }
       break;
       default:
         LOG_ERROR("Unknown transfer method, using default");
         /* FALLTHRU */
       case Transfer:
-        ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra, m_current_subaddress_account, subaddr_indices);
+        ptx_vector = m_wallet->create_transactions_2(dsts, fake_outs_count, 0 /* unlock_time */, priority, extra, m_current_subaddress_account, subaddr_indices, boost::none, NULL);
       break;
     }
 
@@ -5999,7 +6104,58 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     }
 
     // actually commit the transactions
-    if (m_wallet->multisig() && called_by_mms)
+    if (transfer_type == TransferMultiuser)
+    {
+      if (ptx_vector.size() != 1)
+      {
+        fail_msg_writer() << tr("A multiuser tx cannot include more than one tx");
+        return false;
+      }
+      const tools::wallet2::pending_tx &ptx = ptx_vector[0];
+
+      tools::wallet2::multiuser_private_setup private_setup;
+      tools::wallet2::multiuser_public_setup public_setup;
+
+      private_setup.vin = ptx.tx.vin;
+// if disclosing, need to add change vout, but not the other
+      private_setup.vout = ptx.tx.vout;
+      private_setup.muout = muout;
+      private_setup.tx_key = cryptonote::get_tx_pub_key_from_extra(ptx.tx);
+      private_setup.additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(ptx.tx);
+
+      if (multiuser_disclose)
+      {
+        for (const cryptonote::tx_destination_entry &dst: dsts)
+          public_setup.dests.push_back(dst);
+      }
+      public_setup.conditions = multiuser_other_dsts;
+
+      std::string data;
+      if (!m_wallet->save_multiuser_setup(private_setup, public_setup, data))
+      {
+        fail_msg_writer() << tr("Failed to save multiuser setup");
+        return false;
+      }
+      multiuser_txs.m_setup.push_back(data);
+
+      if (!m_wallet->merge_multiuser_tx(multiuser_txs, ptx, !multiuser_disclose))
+      {
+        fail_msg_writer() << tr("Failed to merge multiuser transactions");
+        return false;
+      }
+
+      bool r = m_wallet->save_multiuser_tx_to_file(multiuser_txs, "multiuser_monero_tx");
+      if (!r)
+      {
+        fail_msg_writer() << tr("Failed to write transaction(s) to file");
+        return false;
+      }
+      else
+      {
+        success_msg_writer(true) << tr("Multiuser transaction(s) successfully written to file: ") << "multiuser_monero_tx";
+      }
+    }
+    else if (m_wallet->multisig() && called_by_mms)
     {
       std::string ciphertext = m_wallet->save_multisig_tx(ptx_vector);
       if (!ciphertext.empty())
@@ -6087,6 +6243,12 @@ bool simple_wallet::transfer(const std::vector<std::string> &args_)
 bool simple_wallet::locked_transfer(const std::vector<std::string> &args_)
 {
   transfer_main(TransferLocked, args_, false);
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::multiuser_transfer(const std::vector<std::string> &args_)
+{
+  transfer_main(TransferMultiuser, args_, false);
   return true;
 }
 //----------------------------------------------------------------------------------------------------
@@ -9311,6 +9473,75 @@ bool simple_wallet::show_transfer(const std::vector<std::string> &args)
   }
 
   fail_msg_writer() << tr("Transaction ID not found");
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::sign_multiuser(const std::vector<std::string>& args)
+{
+  tools::wallet2::multiuser_tx_set multiuser_txs;
+  bool r = m_wallet->load_multiuser_tx_from_file("multiuser_monero_tx", multiuser_txs, [this](const tools::wallet2::multiuser_tx_set &txs) {
+    return accept_loaded_multiuser_tx(txs);
+  });
+  if (!r)
+    return true;
+  try
+  {
+    r = m_wallet->sign_multiuser_tx(multiuser_txs);
+    if (!r)
+    {
+      fail_msg_writer() << tr("Failed to signed multiuser tx");
+      return true;
+    }
+  }
+  catch (const std::exception &e)
+  {
+    fail_msg_writer() << tr("Failed to sign multiuser tx: ") << e.what();
+    return true;
+  }
+  r = m_wallet->save_multiuser_tx_to_file(multiuser_txs, "multiuser_monero_tx");
+  if (!r)
+  {
+    fail_msg_writer() << tr("Failed to write transaction(s) to file");
+    return false;
+  }
+  success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to file: ") << "multiuser_monero_tx";
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool simple_wallet::submit_multiuser(const std::vector<std::string>& args)
+{
+  tools::wallet2::multiuser_tx_set multiuser_txs;
+  bool r = m_wallet->load_multiuser_tx_from_file("multiuser_monero_tx", multiuser_txs, [this](const tools::wallet2::multiuser_tx_set &txs) {
+    return accept_loaded_multiuser_tx(txs);
+  });
+  if (!r)
+    return true;
+
+  if (multiuser_txs.m_ptx.tx.vout.size() < 2)
+  {
+    fail_msg_writer() << tr("Transaction has fewer than 2 outputs");
+    return true;
+  }
+
+  if (!try_connect_to_daemon())
+    return false;
+
+  SCOPED_WALLET_UNLOCK();
+
+  try
+  {
+    // actually commit the transactions
+    tools::wallet2::pending_tx &ptx = multiuser_txs.m_ptx;
+    m_wallet->commit_tx(ptx);
+    success_msg_writer(true) << tr("Transaction successfully submitted, transaction ") << get_transaction_hash(ptx.tx) << ENDL
+        << tr("You can check its status by using the `show_transfers` command.");
+  }
+  catch (const std::exception &e)
+  {
+    fail_msg_writer() << tr("Error: ") << e.what();
+    return true;
+  }
+
   return true;
 }
 //----------------------------------------------------------------------------------------------------

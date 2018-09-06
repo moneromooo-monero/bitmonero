@@ -268,6 +268,14 @@ namespace boost
   }
 
   template <class Archive>
+  inline void serialize(Archive &a, rct::multiuser_out &x, const boost::serialization::version_type ver)
+  {
+    a & x.a;
+    a & x.index;
+    a & x.output_offset;
+  }
+
+  template <class Archive>
   inline typename std::enable_if<Archive::is_loading::value, void>::type serializeOutPk(Archive &a, rct::ctkeyV &outPk_, const boost::serialization::version_type ver)
   {
     rct::keyV outPk;

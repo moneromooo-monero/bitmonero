@@ -37,6 +37,7 @@ set(core_tests_sources
   double_spend.cpp
   integer_overflow.cpp
   multisig.cpp
+  multiuser.cpp
   ring_signature_1.cpp
   transaction_tests.cpp
   tx_validation.cpp
@@ -56,6 +57,7 @@ set(core_tests_headers
   double_spend.inl
   integer_overflow.h
   multisig.h
+  multiuser.h
   ring_signature_1.h
   transaction_tests.h
   tx_validation.h

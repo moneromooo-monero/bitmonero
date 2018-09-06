@@ -121,7 +121,7 @@ namespace hw {
         // map public destination key to ephemeral destination key
         Keymap key_map;
         bool  add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, const bool is_subaddress, const bool is_change,
-                                     const bool need_additional, const size_t real_output_index,
+                                     const bool need_additional, const size_t real_output_index, const size_t real_output_offset,
                                      const rct::key &amount_key,  const crypto::public_key &out_eph_public_key);
         // To speed up blockchain parsing the view key maybe handle here.
         crypto::secret_key viewkey;

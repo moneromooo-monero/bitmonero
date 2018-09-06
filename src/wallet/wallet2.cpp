@@ -103,6 +103,8 @@ using namespace cryptonote;
 #define UNSIGNED_TX_PREFIX "Monero unsigned tx set\004"
 #define SIGNED_TX_PREFIX "Monero signed tx set\004"
 #define MULTISIG_UNSIGNED_TX_PREFIX "Monero multisig unsigned tx set\001"
+#define MULTIUSER_SETUP_PREFIX "Monero multiuser setup\001"
+#define MULTIUSER_TX_PREFIX "Monero multiuser tx set\001"
 
 #define RECENT_OUTPUT_RATIO (0.5) // 50% of outputs are from the recent zone
 #define RECENT_OUTPUT_DAYS (1.8) // last 1.8 day makes up the recent zone (taken from monerolink.pdf, Miller et al)
@@ -230,6 +232,45 @@ namespace
       if (res.not_relayed)
         add_reason(reason, "tx was not relayed");
       return reason;
+  }
+
+  bool is_suitable_for_multiuser(const cryptonote::transaction &tx)
+  {
+    if (tx.version < 2)
+    {
+      MERROR("Tx version is not >= 2");
+      return false;
+    }
+    const rct::rctSig &rv = tx.rct_signatures;
+    if (!rct::is_rct_simple(rv.type))
+    {
+      MERROR("multiuser tx is not simple");
+      return false;
+    }
+    if (!rct::is_rct_bulletproof(rv.type))
+    {
+      MERROR("multiuser tx is not bulletproof");
+      return false;
+    }
+    return true;
+  }
+
+  struct multiuser_setup
+  {
+    std::string private_setup;
+    std::string public_setup;
+
+    BEGIN_SERIALIZE_OBJECT();
+      FIELD(private_setup)
+      FIELD(public_setup)
+    END_SERIALIZE();
+  };
+
+  template <class Archive>
+  inline void serialize(Archive &a, multiuser_setup &x, const boost::serialization::version_type ver)
+  {
+    a & x.private_setup;
+    a & x.public_setup;
   }
 }
 
@@ -3724,6 +3765,259 @@ void wallet2::change_password(const std::string &filename, const epee::wipeable_
     store();
 }
 //----------------------------------------------------------------------------------------------------
+bool wallet2::save_multiuser_setup(const multiuser_private_setup &private_setup, const multiuser_public_setup &public_setup, std::string &data) const
+{
+  std::ostringstream oss0;
+  boost::archive::portable_binary_oarchive ar0(oss0);
+  try { ar0 << private_setup; }
+  catch (...) { return false; }
+
+  std::ostringstream oss1;
+  boost::archive::portable_binary_oarchive ar1(oss1);
+  try { ar1 << public_setup; }
+  catch (...) { return false; }
+
+  multiuser_setup multiuser_setup;
+  multiuser_setup.private_setup = encrypt_with_view_secret_key(oss0.str());
+  multiuser_setup.public_setup = oss1.str();
+
+  std::ostringstream oss;
+  boost::archive::portable_binary_oarchive ar(oss);
+  try { ar << multiuser_setup; }
+  catch (...) { return false; }
+
+  data = MULTIUSER_SETUP_PREFIX + authenticate(oss.str(), get_account().get_keys().m_view_secret_key);
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::load_multiuser_setup(std::string data, multiuser_private_setup &private_setup, multiuser_public_setup &public_setup, bool &ours) const
+{
+  if (!boost::string_ref{data}.starts_with(MULTIUSER_SETUP_PREFIX))
+  {
+    MERROR("Decrypted multiuser setup has invalid magic");
+    return false;
+  }
+
+  const size_t prefix_size = strlen(MULTIUSER_SETUP_PREFIX);
+  data = std::string(data.data() + prefix_size, data.size() - prefix_size);
+
+  if (data.size() < sizeof(crypto::signature))
+    return false;
+
+  ours = verify_authenticity(data, get_account().get_keys().m_view_secret_key);
+
+  data = std::string(data.data(), data.size() - sizeof(crypto::signature));
+
+  multiuser_setup multiuser_setup;
+  try
+  {
+    MDEBUG("Loading multiuser setup data: " << data);
+    std::istringstream iss(data);
+    boost::archive::portable_binary_iarchive ar(iss);
+    ar >> multiuser_setup;
+  }
+  catch (...)
+  {
+    MERROR("Failed to parse data from multiuser setup");
+    return false;
+  }
+
+  if (ours)
+  {
+    try
+    {
+      std::string data = decrypt_with_view_secret_key(multiuser_setup.private_setup);
+      std::istringstream iss(data);
+      boost::archive::portable_binary_iarchive ar(iss);
+      ar >> private_setup;
+    }
+    catch (...)
+    {
+      MERROR("Failed to parse data from multiuser private setup");
+      return false;
+    }
+  }
+
+  try
+  {
+    std::istringstream iss(multiuser_setup.public_setup);
+    boost::archive::portable_binary_iarchive ar(iss);
+    ar >> public_setup;
+  }
+  catch (...)
+  {
+    MERROR("Failed to parse data from multiuser public setup");
+    return false;
+  }
+
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+std::string wallet2::save_multiuser_tx(const multiuser_tx_set &txs)
+{
+  std::ostringstream oss;
+  boost::archive::portable_binary_oarchive ar(oss);
+  try
+  {
+    ar << txs;
+  }
+  catch (...)
+  {
+    return "";
+  }
+  LOG_PRINT_L2("Saving multiuser txs data: " << oss.str());
+  return MULTIUSER_TX_PREFIX + oss.str();
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::save_multiuser_tx_to_file(const multiuser_tx_set &txs, const std::string &filename)
+{
+  std::string data = save_multiuser_tx(txs);
+  if (data.empty())
+    return false;
+  return epee::file_io_utils::save_string_to_file(filename, data);
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::load_multiuser_tx(const std::string &data, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func)
+{
+  if (!boost::string_ref{data}.starts_with(MULTIUSER_TX_PREFIX))
+  {
+    MERROR("Invalid multiuser tx set prefix");
+    return false;
+  }
+
+  try
+  {
+    std::istringstream iss(data.substr(strlen(MULTIUSER_TX_PREFIX)));
+    boost::archive::portable_binary_iarchive ar(iss);
+    ar >> txs;
+  }
+  catch (...)
+  {
+    MERROR("Failed to parse data from multiuser setup");
+    return false;
+  }
+  if (accept_func && !accept_func(txs))
+  {
+    MERROR("Accept callback returned false");
+    return false;
+  }
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::load_multiuser_tx_from_file(const std::string &filename, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func)
+{
+  std::string s;
+  boost::system::error_code errcode;
+
+  if (!boost::filesystem::exists(filename, errcode))
+  {
+    MERROR("File " << filename << " does not exist: " << errcode);
+    return false;
+  }
+  if (!epee::file_io_utils::load_file_to_string(filename.c_str(), s))
+  {
+    MERROR("Failed to load from " << filename);
+    return false;
+  }
+
+  return load_multiuser_tx(s, txs, accept_func);
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool add_vouts)
+{
+  if (!(multiuser_txs.m_ptx.tx == cryptonote::transaction()) && !is_suitable_for_multiuser(multiuser_txs.m_ptx.tx))
+    return false;
+  if (!is_suitable_for_multiuser(ptx.tx))
+    return false;
+
+  if (!multiuser_txs.m_building)
+  {
+    MERROR("Multiuser transaction cannot be modified once signing has started");
+    return false;
+  }
+
+  // use the new tx as a base
+  pending_tx new_ptx = ptx;
+  rct::ctkeyM new_mixRing;
+  const pending_tx &old_ptx = multiuser_txs.m_ptx;
+
+  // copy existing vins/vouts
+  CHECK_AND_ASSERT_MES(old_ptx.tx.vin.size() == multiuser_txs.m_mixRing.size(), false, "Invalid vin/mixRing size");
+  new_ptx.tx.vin = old_ptx.tx.vin;
+  new_ptx.tx.vout = old_ptx.tx.vout;
+  new_ptx.tx.rct_signatures.p.pseudoOuts = old_ptx.tx.rct_signatures.p.pseudoOuts;
+  new_ptx.tx.rct_signatures.outPk = old_ptx.tx.rct_signatures.outPk;
+  new_ptx.tx.rct_signatures.ecdhInfo = old_ptx.tx.rct_signatures.ecdhInfo;
+  new_ptx.tx.rct_signatures.p.bulletproofs = old_ptx.tx.rct_signatures.p.bulletproofs;
+  new_mixRing = multiuser_txs.m_mixRing;
+
+  new_ptx.tx.vout = old_ptx.tx.vout;
+
+  CHECK_AND_ASSERT_MES(ptx.tx.vin.size() == ptx.tx.rct_signatures.mixRing.size(), false, "Invalid vin/mixRing size");
+  CHECK_AND_ASSERT_MES(ptx.tx.vin.size() == ptx.tx.rct_signatures.p.pseudoOuts.size(), false, "Invalid vin/pseudoOuts size");
+  for (size_t i = 0; i < ptx.tx.vin.size(); ++i)
+  {
+    new_ptx.tx.vin.push_back(ptx.tx.vin[i]);
+    new_ptx.tx.rct_signatures.p.pseudoOuts.push_back(ptx.tx.rct_signatures.p.pseudoOuts[i]);
+    new_mixRing.push_back(ptx.tx.rct_signatures.mixRing[i]);
+  }
+
+  CHECK_AND_ASSERT_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.outPk.size(), false, "Invalid vout/outPk size");
+  CHECK_AND_ASSERT_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.ecdhInfo.size(), false, "Invalid vout/ecdhInfo size");
+  for (size_t i = 0; i < ptx.tx.vout.size(); ++i)
+  {
+    new_ptx.tx.vout.push_back(ptx.tx.vout[i]);
+    new_ptx.tx.rct_signatures.outPk.push_back(ptx.tx.rct_signatures.outPk[i]);
+    new_ptx.tx.rct_signatures.ecdhInfo.push_back(ptx.tx.rct_signatures.ecdhInfo[i]);
+  }
+
+  for (const rct::Bulletproof &proof: ptx.tx.rct_signatures.p.bulletproofs)
+    new_ptx.tx.rct_signatures.p.bulletproofs.push_back(proof);
+
+  new_ptx.tx.rct_signatures.txnFee = old_ptx.tx.rct_signatures.txnFee + ptx.tx.rct_signatures.txnFee;
+
+  // merge tx keys
+  std::vector<uint8_t> extra = old_ptx.tx.extra, unparsed;
+  std::vector<cryptonote::tx_extra_field> fields;
+  cryptonote::parse_tx_extra(extra, fields, &unparsed);
+
+  crypto::public_key tx_key = cryptonote::get_tx_pub_key_from_extra(ptx.tx);
+  cryptonote::remove_field_from_tx_extra(extra, typeid(cryptonote::tx_extra_pub_key));
+  cryptonote::add_tx_pub_key_to_extra(extra, tx_key);
+
+  std::vector<crypto::public_key> old_additional_tx_pub_keys = cryptonote::get_additional_tx_pub_keys_from_extra(old_ptx.tx);
+  if (old_additional_tx_pub_keys.size() != old_ptx.tx.vout.size())
+  {
+    MERROR("Bad number of additional tx pub keys");
+    return false;
+  }
+  std::vector<crypto::public_key> additional_tx_pub_keys = cryptonote::get_additional_tx_pub_keys_from_extra(ptx.tx);
+  if (additional_tx_pub_keys.size() != ptx.tx.vout.size())
+  {
+    MERROR("Bad number of additional tx pub keys");
+    return false;
+  }
+  std::copy(additional_tx_pub_keys.begin(), additional_tx_pub_keys.end(), std::back_inserter(old_additional_tx_pub_keys));
+  remove_field_from_tx_extra(extra, typeid(cryptonote::tx_extra_additional_pub_keys));
+  add_additional_tx_pub_keys_to_extra(extra, old_additional_tx_pub_keys);
+  new_ptx.tx.extra = extra;
+
+  new_ptx.additional_tx_keys = old_ptx.additional_tx_keys;
+  std::copy(ptx.additional_tx_keys.begin(), ptx.additional_tx_keys.end(), std::back_inserter(new_ptx.additional_tx_keys));
+
+  multiuser_txs.m_ptx = new_ptx;
+  multiuser_txs.m_mixRing = new_mixRing;
+
+  MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.vin.size() << " vins");
+  MDEBUG("new ptx has " << multiuser_txs.m_mixRing.size() << " mixRing entries");
+  MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.vout.size() << " vouts");
+  MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.rct_signatures.p.pseudoOuts.size() << " pseudoOuts");
+  MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.rct_signatures.outPk.size() << " outPks");
+  MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.rct_signatures.ecdhInfo.size() << " ecdhInfos");
+
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
 /*!
  * \brief Load wallet information from wallet file.
  * \param keys_file_name Name of wallet file
@@ -6294,7 +6588,7 @@ bool wallet2::sign_tx(unsigned_tx_set &exported_txs, std::vector<wallet2::pendin
     crypto::secret_key tx_key;
     std::vector<crypto::secret_key> additional_tx_keys;
     rct::multisig_out msout;
-    bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sd.sources, sd.splitted_dsts, sd.change_dts.addr, sd.extra, ptx.tx, sd.unlock_time, tx_key, additional_tx_keys, sd.use_rct, rct_config, m_multisig ? &msout : NULL);
+    bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sd.sources, sd.splitted_dsts, sd.change_dts.addr, sd.extra, ptx.tx, sd.unlock_time, tx_key, additional_tx_keys, sd.use_rct, rct_config, m_multisig ? &msout : NULL, NULL);
     THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sd.sources, sd.splitted_dsts, sd.unlock_time, m_nettype);
     // we don't test tx size, because we don't know the current limit, due to not having a blockchain,
     // and it's a bit pointless to fail there anyway, since it'd be a (good) guess only. We sign anyway,
@@ -6768,7 +7062,7 @@ bool wallet2::sign_multisig_tx(multisig_tx_set &exported_txs, std::vector<crypto
     rct::multisig_out msout = ptx.multisig_sigs.front().msout;
     auto sources = sd.sources;
     rct::RCTConfig rct_config = sd.rct_config;
-    bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources, sd.splitted_dsts, ptx.change_dts.addr, sd.extra, tx, sd.unlock_time, ptx.tx_key, ptx.additional_tx_keys, sd.use_rct, rct_config, &msout, false);
+    bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources, sd.splitted_dsts, ptx.change_dts.addr, sd.extra, tx, sd.unlock_time, ptx.tx_key, ptx.additional_tx_keys, sd.use_rct, rct_config, &msout, NULL, false);
     THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sd.sources, sd.splitted_dsts, sd.unlock_time, m_nettype);
 
     THROW_WALLET_EXCEPTION_IF(get_transaction_prefix_hash (tx) != get_transaction_prefix_hash(ptx.tx),
@@ -6864,6 +7158,246 @@ bool wallet2::sign_multisig_tx_from_file(const std::string &filename, std::vecto
     return false;
   }
   return sign_multisig_tx_to_file(exported_txs, filename, txids);
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
+{
+  cryptonote::transaction &tx = mtx.m_ptx.tx;
+  if (!is_suitable_for_multiuser(tx))
+    return false;
+
+  rct::rctSig &rv = tx.rct_signatures;
+  bool found = false;
+  multiuser_private_setup private_setup;
+  multiuser_public_setup public_setup;
+  for (const std::string &setup: mtx.m_setup)
+  {
+    bool ours;
+    if (load_multiuser_setup(setup, private_setup, public_setup, ours) && ours)
+    {
+      found = true;
+      break;
+    }
+  }
+  if (!found)
+  {
+    MERROR("original multiuser private setup not found");
+    return false;
+  }
+  const rct::multiuser_out &original_muout = private_setup.muout;
+
+  hw::device &hwdev =  m_account.get_device();
+
+  // check the tx keys are the same, in the right place
+  const crypto::public_key actual_tx_key = cryptonote::get_tx_pub_key_from_extra(tx);
+  if (private_setup.tx_key != actual_tx_key)
+  {
+    MERROR("tx key is not the expected one");
+    return false;
+  }
+  const std::vector<crypto::public_key> actual_additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(tx);
+  for (size_t i = 0; i < private_setup.additional_tx_keys.size(); ++i)
+  {
+    if ((i + original_muout.output_offset >= actual_additional_tx_keys.size()) || (private_setup.additional_tx_keys[i] != actual_additional_tx_keys[i + original_muout.output_offset]))
+    {
+      MERROR("additional tx keys are not the expected ones");
+      return false;
+    }
+  }
+
+  // check those tx keys match the ones in pending_tx
+  THROW_WALLET_EXCEPTION_IF(actual_additional_tx_keys.size() != mtx.m_ptx.additional_tx_keys.size(),
+      error::wallet_internal_error, "Mismatched additional tx keys");
+  crypto::public_key pk;
+  crypto::secret_key_to_public_key(mtx.m_ptx.tx_key, pk);
+  THROW_WALLET_EXCEPTION_IF(pk != actual_tx_key, error::wallet_internal_error, "Invalid tx key");
+  for (size_t i = 0; i < actual_additional_tx_keys.size(); ++i)
+  {
+    crypto::secret_key_to_public_key(mtx.m_ptx.additional_tx_keys[i], pk);
+    THROW_WALLET_EXCEPTION_IF(pk != actual_additional_tx_keys[i], error::wallet_internal_error, "Invalid additional tx key");
+  }
+
+  // check our ins are present
+  for (const auto &pin: private_setup.vin)
+  {
+    CHECKED_GET_SPECIFIC_VARIANT(pin, const txin_to_key, pink, false);
+    auto it = std::find_if(tx.vin.begin(), tx.vin.end(), [&pink](const cryptonote::txin_v &in){
+      if (in.type() != typeid(cryptonote::txin_to_key))
+        return false;
+      const cryptonote::txin_to_key &ink = boost::get<cryptonote::txin_to_key>(in);
+      if (pink.amount != ink.amount)
+        return false;
+      if (pink.key_offsets != ink.key_offsets)
+        return false;
+      if (pink.k_image != ink.k_image)
+        return false;
+      return true;
+    });
+    if (it == tx.vin.end())
+    {
+      MERROR("One of our inputs to the original multiuser transaction was not found in the final transaction to be signed");
+      return false;
+    }
+  }
+
+  // check our outs are present, in the right place
+  std::vector<bool> our_outputs(tx.vout.size(), false);
+  for (size_t i = 0; i < private_setup.vout.size(); ++i)
+  {
+    if (i + original_muout.output_offset >= tx.vout.size())
+    {
+      MERROR("One of our outputs to the original multiuser transaction was not found in the final transaction to be signed");
+      return false;
+    }
+    const cryptonote::tx_out &pout = private_setup.vout[i];
+    const cryptonote::tx_out &out = tx.vout[i + original_muout.output_offset];
+    CHECKED_GET_SPECIFIC_VARIANT(pout.target, const txout_to_key, poutk, false);
+    CHECKED_GET_SPECIFIC_VARIANT(out.target, const txout_to_key, outk, false);
+
+    if (pout.amount != out.amount || poutk.key != outk.key)
+    {
+      MERROR("One of our outputs to the original multiuser transaction was not found in the final transaction to be signed");
+      return false;
+    }
+
+    our_outputs[i + original_muout.output_offset] = true;
+  }
+
+#warning TODO: check conditions
+
+  // check claimed destinations are what they claim to be
+  std::unordered_map<cryptonote::account_public_address, uint64_t> third_party_payments;
+  for (const auto &setup: mtx.m_setup)
+  {
+    multiuser_private_setup prv;
+    multiuser_public_setup pub;
+    bool ours;
+    THROW_WALLET_EXCEPTION_IF(!load_multiuser_setup(setup, prv, pub, ours), error::wallet_internal_error, "Invalid public setup");
+    if (ours)
+      continue;
+
+    std::vector<bool> output_used(tx.vout.size(), false);
+    for (const auto &dest: pub.dests)
+    {
+      uint64_t received = 0;
+      crypto::key_derivation derivation;
+      THROW_WALLET_EXCEPTION_IF(!crypto::generate_key_derivation(dest.addr.m_view_public_key, mtx.m_ptx.tx_key, derivation),
+          error::wallet_internal_error, "Failed to generate key derivation from supplied parameters");
+      std::vector<crypto::key_derivation> additional_derivations;
+      additional_derivations.resize(mtx.m_ptx.additional_tx_keys.size());
+      for (size_t i = 0; i < mtx.m_ptx.additional_tx_keys.size(); ++i)
+        THROW_WALLET_EXCEPTION_IF(!crypto::generate_key_derivation(dest.addr.m_view_public_key, mtx.m_ptx.tx_key, additional_derivations[i]),
+          error::wallet_internal_error, "Failed to generate key derivation from supplied parameters");
+
+      for (size_t n = 0; n < tx.vout.size(); ++n)
+      {
+        if (our_outputs[n] || output_used[n])
+          continue;
+
+        const cryptonote::txout_to_key* const out_key = boost::get<cryptonote::txout_to_key>(std::addressof(tx.vout[n].target));
+        if (!out_key)
+          continue;
+
+        crypto::public_key derived_out_key;
+        crypto::key_derivation derivation;
+        bool r = hwdev.derive_public_key(derivation, n, dest.addr.m_spend_public_key, derived_out_key);
+        THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to derive public key");
+        bool found = out_key->key == derived_out_key;
+        crypto::key_derivation found_derivation = derivation;
+        if (!found && n < additional_derivations.size())
+        {
+          r = hwdev.derive_public_key(additional_derivations[n], n, dest.addr.m_spend_public_key, derived_out_key);
+          THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "Failed to derive public key");
+          found = out_key->key == derived_out_key;
+          found_derivation = additional_derivations[n];
+        }
+
+        if (!found)
+          continue;
+
+        uint64_t amount;
+        crypto::secret_key scalar1;
+        hwdev.derivation_to_scalar(found_derivation, n, scalar1);
+        rct::ecdhTuple ecdh_info = tx.rct_signatures.ecdhInfo[n];
+        hwdev.ecdhDecode(ecdh_info, rct::sk2rct(scalar1));
+        const rct::key C = tx.rct_signatures.outPk[n].mask;
+        rct::key Ctmp;
+        THROW_WALLET_EXCEPTION_IF(sc_check(ecdh_info.mask.bytes) != 0, error::wallet_internal_error, "Bad ECDH input mask");
+        THROW_WALLET_EXCEPTION_IF(sc_check(ecdh_info.amount.bytes) != 0, error::wallet_internal_error, "Bad ECDH input amount");
+        rct::addKeys2(Ctmp, ecdh_info.mask, ecdh_info.amount, rct::H);
+        if (rct::equalKeys(C, Ctmp))
+          received += rct::h2d(ecdh_info.amount);
+
+        third_party_payments[dest.addr] += received;
+        output_used[n] = true;
+      }
+
+      THROW_WALLET_EXCEPTION_IF(received < dest.amount, error::wallet_internal_error, "Transaction pays less than claimed")
+    }
+  }
+
+  // check conditions
+  for (const auto &cond: public_setup.conditions)
+  {
+    THROW_WALLET_EXCEPTION_IF(third_party_payments[cond.addr] < cond.amount, error::wallet_internal_error,
+        "Third parties did not pay at least " + cryptonote::print_money(cond.amount) + " to " + cryptonote::get_account_address_as_str(m_nettype, cond.is_subaddress, cond.addr) + ", only " + cryptonote::print_money(third_party_payments[cond.addr]));
+  }
+
+  const size_t n_inputs = tx.vin.size();
+  CHECK_AND_ASSERT_MES(original_muout.a.size() <= n_inputs, false, "Inconsistent a size");
+  CHECK_AND_ASSERT_MES(original_muout.index.size() <= n_inputs, false, "Inconsistent index size");
+
+  const account_keys& keys = get_account().get_keys();
+  rct::ctkeyV inSk(n_inputs);
+  std::vector<bool> owned(n_inputs, false);
+  rct::multiuser_out muout;
+  muout.a.resize(n_inputs, rct::zero());
+  muout.index.resize(n_inputs, 0);
+  size_t original_i = 0;
+  for (size_t i = 0; i < n_inputs; ++i)
+  {
+    if (tx.vin[i].type() != typeid(cryptonote::txin_to_key))
+    {
+      MERROR("multiuser tx vin has unexpected type: " << tx.vin[i].type().name());
+      return false;
+    }
+    const cryptonote::txin_to_key &in = boost::get<cryptonote::txin_to_key>(tx.vin[i]);
+    for (const transfer_details &td: m_transfers)
+    {
+      if (td.m_key_image_known && td.m_key_image == in.k_image)
+      {
+        MDEBUG("we can sign vin " << i);
+        crypto::key_image img;
+        cryptonote::keypair in_ephemeral;
+        const crypto::public_key tx_pub_key = get_tx_pub_key_from_extra(td.m_tx, td.m_pk_index);
+        const std::vector<crypto::public_key> additional_tx_pub_keys = get_additional_tx_pub_keys_from_extra(td.m_tx);
+        if (!generate_key_image_helper(keys, m_subaddresses, td.get_public_key(), tx_pub_key, additional_tx_pub_keys, td.m_internal_output_index, in_ephemeral, img, hwdev))
+        {
+          MERROR("Failed to generate key image");
+          return false;
+        }
+        inSk[i].dest = rct::sk2rct(in_ephemeral.sec);
+        inSk[i].mask = td.m_mask;
+        CHECK_AND_ASSERT_MES(original_i < original_muout.a.size(), false, "Invalid offset in a");
+        muout.a[i] = original_muout.a[original_i];
+        CHECK_AND_ASSERT_MES(original_i < original_muout.index.size(), false, "Invalid offset in index");
+        muout.index[i] = original_muout.index[original_i];
+        owned[i] = true;
+        ++original_i;
+        break;
+      }
+    }
+  }
+  mtx.m_building = false;
+  rv.message = rct::hash2rct(cryptonote::get_transaction_prefix_hash(tx));
+  rv.mixRing = mtx.m_mixRing;
+  rv.p.MGs.resize(n_inputs);
+  if (!rct::signMultiuser(rv, inSk, owned, muout, hwdev))
+  {
+    MERROR("Failed to sign multiuser tx");
+    return false;
+  }
+  return true;
 }
 //----------------------------------------------------------------------------------------------------
 uint64_t wallet2::get_fee_multiplier(uint32_t priority, int fee_algorithm) const
@@ -8180,7 +8714,7 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   std::vector<crypto::secret_key> additional_tx_keys;
   rct::multisig_out msout;
   LOG_PRINT_L2("constructing tx");
-  bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, false, {}, m_multisig ? &msout : NULL);
+  bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, false, {}, m_multisig ? &msout : NULL, NULL);
   LOG_PRINT_L2("constructed tx, r="<<r);
   THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_nettype);
   THROW_WALLET_EXCEPTION_IF(upper_transaction_weight_limit <= get_transaction_weight(tx), error::tx_too_big, tx, upper_transaction_weight_limit);
@@ -8228,8 +8762,9 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
 }
 
 void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t>& selected_transfers, size_t fake_outputs_count,
-  std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
-  uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, cryptonote::transaction& tx, pending_tx &ptx, const rct::RCTConfig &rct_config)
+  std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, boost::optional<crypto::secret_key> fixed_tx_key,
+  uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, cryptonote::transaction& tx, pending_tx &ptx, const rct::RCTConfig &rct_config,
+  rct::multiuser_out *muout)
 {
   using namespace cryptonote;
   // throw if attempting a transaction with no destinations
@@ -8386,7 +8921,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   change_dts.amount = found_money - needed_money;
   if (change_dts.amount == 0)
   {
-    if (splitted_dsts.size() == 1)
+    if (splitted_dsts.size() == 1 && !muout)
     {
       // If the change is 0, send it to a random address, to avoid confusing
       // the sender with a 0 amount output. We send a 0 amount in order to avoid
@@ -8412,7 +8947,15 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   rct::multisig_out msout;
   LOG_PRINT_L2("constructing tx");
   auto sources_copy = sources;
-  bool r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, true, rct_config, m_multisig ? &msout : NULL);
+  bool r;
+  if (fixed_tx_key)
+  {
+    tx_key = *fixed_tx_key;
+    generate_additional_tx_keys(additional_tx_keys, m_account.get_keys(), splitted_dsts, change_dts.addr, !!muout);
+    r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, true, rct_config, m_multisig ? &msout : NULL, muout);
+  }
+  else
+    r = cryptonote::construct_tx_and_get_tx_key(m_account.get_keys(), m_subaddresses, sources, splitted_dsts, change_dts.addr, extra, tx, unlock_time, tx_key, additional_tx_keys, true, rct_config, m_multisig ? &msout : NULL, muout);
   LOG_PRINT_L2("constructed tx, r="<<r);
   THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, dsts, unlock_time, m_nettype);
   THROW_WALLET_EXCEPTION_IF(upper_transaction_weight_limit <= get_transaction_weight(tx), error::tx_too_big, tx, upper_transaction_weight_limit);
@@ -8457,7 +9000,7 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
         LOG_PRINT_L2("Creating supplementary multisig transaction");
         cryptonote::transaction ms_tx;
         auto sources_copy_copy = sources_copy;
-        bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources_copy_copy, splitted_dsts, change_dts.addr, extra, ms_tx, unlock_time,tx_key, additional_tx_keys, true, rct_config, &msout, false);
+        bool r = cryptonote::construct_tx_with_tx_key(m_account.get_keys(), m_subaddresses, sources_copy_copy, splitted_dsts, change_dts.addr, extra, ms_tx, unlock_time,tx_key, additional_tx_keys, true, rct_config, &msout, NULL, false);
         LOG_PRINT_L2("constructed tx, r="<<r);
         THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_nettype);
         THROW_WALLET_EXCEPTION_IF(upper_transaction_weight_limit <= get_transaction_weight(tx), error::tx_too_big, tx, upper_transaction_weight_limit);
@@ -8570,9 +9113,11 @@ std::vector<size_t> wallet2::pick_preferred_rct_inputs(uint64_t needed_money, ui
   return picks;
 }
 
-bool wallet2::should_pick_a_second_output(bool use_rct, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const
+bool wallet2::should_pick_a_second_output(bool use_rct, bool multiuser, size_t n_transfers, const std::vector<size_t> &unused_transfers_indices, const std::vector<size_t> &unused_dust_indices) const
 {
   if (!use_rct)
+    return false;
+  if (multiuser)
     return false;
   if (n_transfers > 1)
     return false;
@@ -9109,8 +9654,10 @@ bool wallet2::light_wallet_key_image_is_ours(const crypto::key_image& key_image,
 // This system allows for sending (almost) the entire balance, since it does
 // not generate spurious change in all txes, thus decreasing the instantaneous
 // usable balance.
-std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices)
+std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices, const boost::optional<crypto::secret_key> &tx_key, rct::multiuser_out *muout)
 {
+  THROW_WALLET_EXCEPTION_IF(muout && m_light_wallet, error::wallet_internal_error, "Light wallet can't do multiuser transactions");
+
   //ensure device is let in NONE mode in any case
   hw::device &hwdev = m_account.get_device();
   boost::unique_lock<hw::device> hwdev_lock (hwdev);
@@ -9359,7 +9906,7 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   std::vector<size_t>* unused_dust_indices      = &unused_dust_indices_per_subaddr[0].second;
   
   hwdev.set_mode(hw::device::TRANSACTION_CREATE_FAKE);
-  while ((!dsts.empty() && dsts[0].amount > 0) || adding_fee || !preferred_inputs.empty() || should_pick_a_second_output(use_rct, txes.back().selected_transfers.size(), *unused_transfers_indices, *unused_dust_indices)) {
+  while ((!dsts.empty() && dsts[0].amount > 0) || adding_fee || !preferred_inputs.empty() || should_pick_a_second_output(use_rct, !!muout, txes.back().selected_transfers.size(), *unused_transfers_indices, *unused_dust_indices)) {
     TX &tx = txes.back();
 
     LOG_PRINT_L2("Start of loop with " << unused_transfers_indices->size() << " " << unused_dust_indices->size() << ", tx.dsts.size() " << tx.dsts.size());
@@ -9471,6 +10018,10 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
         const size_t estimated_rct_tx_weight = estimate_tx_weight(use_rct, tx.selected_transfers.size(), fake_outs_count, tx.dsts.size()+1, extra.size(), bulletproof);
         try_tx = dsts.empty() || (estimated_rct_tx_weight >= TX_WEIGHT_TARGET(upper_transaction_weight_limit));
         THROW_WALLET_EXCEPTION_IF(try_tx && tx.dsts.empty(), error::tx_too_big, estimated_rct_tx_weight, upper_transaction_weight_limit);
+
+        // never do split txes when multiuser, it'll fail if the transaction gets too large
+        if (muout && (estimated_rct_tx_weight >= TX_WEIGHT_TARGET(upper_transaction_weight_limit)))
+          try_tx = true;
       }
     }
 
@@ -9494,8 +10045,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
       LOG_PRINT_L2("Trying to create a tx now, with " << tx.dsts.size() << " outputs and " <<
         tx.selected_transfers.size() << " inputs");
       if (use_rct)
-        transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
-          test_tx, test_ptx, rct_config);
+        transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, tx_key, unlock_time, needed_fee, extra,
+          test_tx, test_ptx, rct_config, muout);
       else
         transfer_selected(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
           detail::digit_split_strategy, tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD), test_tx, test_ptx);
@@ -9537,8 +10088,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
         LOG_PRINT_L2("We made a tx, adjusting fee and saving it, we need " << print_money(needed_fee) << " and we have " << print_money(test_ptx.fee));
         while (needed_fee > test_ptx.fee) {
           if (use_rct)
-            transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
-              test_tx, test_ptx, rct_config);
+            transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, tx_key, unlock_time, needed_fee, extra,
+              test_tx, test_ptx, rct_config, muout);
           else
             transfer_selected(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
               detail::digit_split_strategy, tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD), test_tx, test_ptx);
@@ -9606,12 +10157,14 @@ skip_tx:
                             tx.selected_transfers,      /* const std::list<size_t> selected_transfers */
                             fake_outs_count,            /* CONST size_t fake_outputs_count, */
                             tx.outs,                    /* MOD   std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, */
+                            tx_key,                     /* CONST boost::optional<crypto::secret_key> &tx_key, */
                             unlock_time,                /* CONST uint64_t unlock_time,  */
                             tx.needed_fee,              /* CONST uint64_t fee, */
                             extra,                      /* const std::vector<uint8_t>& extra, */
                             test_tx,                    /* OUT   cryptonote::transaction& tx, */
                             test_ptx,                   /* OUT   cryptonote::transaction& tx, */
-                            rct_config);
+                            rct_config,
+                            muout);
     } else {
       transfer_selected(tx.dsts,
                         tx.selected_transfers,
@@ -9898,8 +10451,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_from(const crypton
       LOG_PRINT_L2("Trying to create a tx now, with " << tx.dsts.size() << " destinations and " <<
         tx.selected_transfers.size() << " outputs");
       if (use_rct)
-        transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
-          test_tx, test_ptx, rct_config);
+        transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, boost::none, unlock_time, needed_fee, extra,
+          test_tx, test_ptx, rct_config, NULL);
       else
         transfer_selected(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
           detail::digit_split_strategy, tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD), test_tx, test_ptx);
@@ -9935,8 +10488,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_from(const crypton
           dt.amount = dt_amount + dt_residue;
         }
         if (use_rct)
-          transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra, 
-            test_tx, test_ptx, rct_config);
+          transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, boost::none, unlock_time, needed_fee, extra, 
+            test_tx, test_ptx, rct_config, NULL);
         else
           transfer_selected(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
             detail::digit_split_strategy, tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD), test_tx, test_ptx);
@@ -9974,8 +10527,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_from(const crypton
     cryptonote::transaction test_tx;
     pending_tx test_ptx;
     if (use_rct) {
-      transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, tx.outs, unlock_time, tx.needed_fee, extra,
-        test_tx, test_ptx, rct_config);
+      transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, tx.outs, boost::none, unlock_time, tx.needed_fee, extra,
+        test_tx, test_ptx, rct_config, NULL);
     } else {
       transfer_selected(tx.dsts, tx.selected_transfers, fake_outs_count, tx.outs, unlock_time, tx.needed_fee, extra,
         detail::digit_split_strategy, tx_dust_policy(::config::DEFAULT_DUST_THRESHOLD), test_tx, test_ptx);
@@ -12536,7 +13089,7 @@ size_t wallet2::import_multisig(std::vector<cryptonote::blobdata> blobs)
   return n_outputs;
 }
 //----------------------------------------------------------------------------------------------------
-crypto::signature wallet2::authenticate(const boost::string_ref &data, const crypto::secret_key &skey) const
+crypto::signature wallet2::get_authentication(const boost::string_ref &data, const crypto::secret_key &skey) const
 {
   crypto::hash hash;
   crypto::cn_fast_hash(data.data(), data.size(), hash);
@@ -12545,6 +13098,14 @@ crypto::signature wallet2::authenticate(const boost::string_ref &data, const cry
   crypto::signature signature;
   crypto::generate_signature(hash, pkey, skey, signature);
   return signature;
+}
+//----------------------------------------------------------------------------------------------------
+std::string wallet2::authenticate(std::string data, const crypto::secret_key &skey) const
+{
+  data.resize(data.size() + sizeof(crypto::signature));
+  crypto::signature &signature = *(crypto::signature*)&data[data.size() - sizeof(crypto::signature)];
+  signature = get_authentication(boost::string_ref(data.data(), data.size() - sizeof(crypto::signature)), skey);
+  return data;
 }
 //----------------------------------------------------------------------------------------------------
 std::string wallet2::encrypt(const char *plaintext, size_t len, const crypto::secret_key &skey, bool authenticated) const
@@ -12559,7 +13120,7 @@ std::string wallet2::encrypt(const char *plaintext, size_t len, const crypto::se
   if (authenticated)
   {
     crypto::signature &signature = *(crypto::signature*)&ciphertext[ciphertext.size() - sizeof(crypto::signature)];
-    signature = authenticate(boost::string_ref(ciphertext.data(), ciphertext.size() - sizeof(crypto::signature)), skey);
+    signature = get_authentication(boost::string_ref(ciphertext.data(), ciphertext.size() - sizeof(crypto::signature)), skey);
   }
   return ciphertext;
 }
@@ -12584,17 +13145,17 @@ std::string wallet2::encrypt_with_view_secret_key(const std::string &plaintext, 
   return encrypt(plaintext, get_account().get_keys().m_view_secret_key, authenticated);
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::verify_authenticity(const std::string &ciphertext, const crypto::secret_key &skey) const
+bool wallet2::verify_authenticity(const std::string &data, const crypto::secret_key &skey) const
 {
-  const size_t prefix_size = sizeof(chacha_iv) + sizeof(crypto::signature);
-  THROW_WALLET_EXCEPTION_IF(ciphertext.size() < prefix_size,
-    error::wallet_internal_error, "Unexpected ciphertext size");
+  const size_t prefix_size = sizeof(crypto::signature);
+  THROW_WALLET_EXCEPTION_IF(data.size() < prefix_size,
+    error::wallet_internal_error, "Unexpected data size");
 
   crypto::hash hash;
-  crypto::cn_fast_hash(ciphertext.data(), ciphertext.size() - sizeof(signature), hash);
+  crypto::cn_fast_hash(data.data(), data.size() - sizeof(signature), hash);
   crypto::public_key pkey;
   crypto::secret_key_to_public_key(skey, pkey);
-  const crypto::signature &signature = *(const crypto::signature*)&ciphertext[ciphertext.size() - sizeof(crypto::signature)];
+  const crypto::signature &signature = *(const crypto::signature*)&data[data.size() - sizeof(crypto::signature)];
   return crypto::check_signature(hash, pkey, signature);
 }
 //----------------------------------------------------------------------------------------------------
