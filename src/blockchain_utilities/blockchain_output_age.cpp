@@ -170,6 +170,8 @@ int main(int argc, char* argv[])
 
   LOG_PRINT_L0("Reading blockchain from " << input);
 
+  uint64_t n_txes = 0;
+  uint8_t version = 1;
   const uint64_t blockchain_height = core_storage->get_current_blockchain_height();
   for (uint64_t height = 0; height < blockchain_height; ++height)
   {
@@ -180,6 +182,14 @@ int main(int argc, char* argv[])
       MERROR("Failed to parse block at height " << height);
       return 1;
     }
+
+    if (version != b.major_version)
+    {
+      MINFO("txes till v" << (unsigned)b.major_version << " (" << height << "): " << n_txes << " (without coinbases)");
+      version = b.major_version;
+    }
+    n_txes += b.tx_hashes.size();
+
     for (const auto &out: b.miner_tx.vout)
     {
       uint64_t amount = out.amount;
