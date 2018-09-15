@@ -224,6 +224,7 @@ int main(int argc, char* argv[])
         if (out.target.type() == typeid(txout_to_key))
         {
           outputs[out.amount].push_back(height);
+          MINFO("out" << sep << out.amount << sep << outputs[out.amount].size()-1 << sep << height << sep << b.timestamp);
         }
       }
 
@@ -235,7 +236,7 @@ int main(int argc, char* argv[])
           if (opt_rct_only && ink.amount)
             continue;
           std::stringstream str;
-          str << height << sep << epee::string_tools::pod_to_hex(txid) << sep << ink.key_offsets.size();
+          str << "tx" << sep << height << sep << epee::string_tools::pod_to_hex(txid) << sep << ink.key_offsets.size();
           uint64_t offset = 0;
           for (uint64_t o: ink.key_offsets)
           {
