@@ -1307,7 +1307,15 @@ namespace nodetool
       }
       if(m_net_server.is_stop_signal_sent())
         return false;
-      conn_count = get_outgoing_connections_count();
+      size_t new_conn_count = get_outgoing_connections_count();
+      if (new_conn_count <= conn_count)
+      {
+        // we did not make any connection, sleep a bit to avoid a busy loop in case we don't have
+        // any peers to try, then break so we will try seeds to get more peers
+        boost::this_thread::sleep_for(boost::chrono::seconds(1));
+        break;
+      }
+      conn_count = new_conn_count;
     }
 
     if (start_conn_count == get_outgoing_connections_count() && start_conn_count < m_config.m_net_config.max_out_connection_count)
