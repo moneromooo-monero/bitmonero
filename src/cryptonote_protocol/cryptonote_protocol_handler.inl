@@ -42,6 +42,7 @@
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "profile_tools.h"
 #include "net/network_throttle-detail.hpp"
+#include "common/perf_timer.h"
 #include "common/pruning.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
@@ -1086,6 +1087,8 @@ namespace cryptonote
   template<class t_core>
   int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connection_context& context)
   {
+    PERF_TIMER(try_add_next_blocks);
+
     bool force_next_span = false;
 
     {
@@ -1723,6 +1726,7 @@ skip:
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_connection_context& context, bool check_having_blocks, bool force_next_span)
   {
+    PERF_TIMER(request_missing_objects);
     // flush stale spans
     std::set<boost::uuids::uuid> live_connections;
     m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{

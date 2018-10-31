@@ -51,6 +51,7 @@ using namespace epee;
 #include "blockchain_db/blockchain_db.h"
 #include "ringct/rctSigs.h"
 #include "common/notify.h"
+#include "common/perf_timer.h"
 #include "version.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
@@ -735,6 +736,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::handle_incoming_tx_pre(const blobdata& tx_blob, tx_verification_context& tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, bool keeped_by_block, bool relayed, bool do_not_relay)
   {
+    PERF_TIMER(handle_incoming_tx_pre);
     tvc = boost::value_initialized<tx_verification_context>();
 
     if(tx_blob.size() > get_max_tx_size())
@@ -782,6 +784,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::handle_incoming_tx_post(const blobdata& tx_blob, tx_verification_context& tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, bool keeped_by_block, bool relayed, bool do_not_relay)
   {
+    PERF_TIMER(handle_incoming_tx_post);
     if(!check_tx_syntax(tx))
     {
       LOG_PRINT_L1("WRONG TRANSACTION BLOB, Failed to check tx " << tx_hash << " syntax, rejected");
@@ -817,6 +820,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::handle_incoming_tx_accumulated_batch(std::vector<tx_verification_batch_info> &tx_info, bool keeped_by_block)
   {
+    PERF_TIMER(handle_incoming_tx_accumulated_batch);
     bool ret = true;
     if (keeped_by_block && get_blockchain_storage().is_within_compiled_block_hash_area())
     {
@@ -911,6 +915,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::handle_incoming_txs(const std::vector<blobdata>& tx_blobs, std::vector<tx_verification_context>& tvc, bool keeped_by_block, bool relayed, bool do_not_relay)
   {
+    PERF_TIMER(handle_incoming_txs);
     TRY_ENTRY();
     CRITICAL_REGION_LOCAL(m_incoming_tx_lock);
 
@@ -1405,6 +1410,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry, std::vector<block> &blocks)
   {
+    PERF_TIMER(prepare_handle_incoming_blocks);
     m_incoming_tx_lock.lock();
     if (!m_blockchain_storage.prepare_handle_incoming_blocks(blocks_entry, blocks))
     {
@@ -1417,6 +1423,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::cleanup_handle_incoming_blocks(bool force_sync)
   {
+    PERF_TIMER(cleanup_handle_incoming_blocks);
     bool success = false;
     try {
       success = m_blockchain_storage.cleanup_handle_incoming_blocks(force_sync);
@@ -1429,6 +1436,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   bool core::handle_incoming_block(const blobdata& block_blob, const block *b, block_verification_context& bvc, bool update_miner_blocktemplate)
   {
+    PERF_TIMER(handle_incoming_block);
     TRY_ENTRY();
 
     bvc = boost::value_initialized<block_verification_context>();
