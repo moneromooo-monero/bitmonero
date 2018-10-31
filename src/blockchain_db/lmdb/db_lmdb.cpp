@@ -91,6 +91,36 @@ inline void throw1(const T &e)
 #define MDB_val_str(var, val) MDB_val var = {strlen(val) + 1, (void *)val}
 
 template<typename T>
+struct MDB_val_nocopy: public MDB_val
+{
+  MDB_val_nocopy(const T &t)
+  {
+    mv_size = sizeof (T);
+    mv_data = &t;
+  }
+};
+
+template<>
+struct MDB_val_nocopy<cryptonote::blobdata>: public MDB_val
+{
+  MDB_val_nocopy(const cryptonote::blobdata &bd)
+  {
+    mv_size = bd.size();
+    mv_data = (void*)bd.data();
+  }
+};
+
+template<>
+struct MDB_val_nocopy<const char*>: public MDB_val
+{
+  MDB_val_nocopy(const char *s)
+  {
+    mv_size = strlen(s) + 1; // include the NUL, makes it easier for compares
+    mv_data = (void*)s;
+  }
+};
+
+template<typename T>
 struct MDB_val_copy: public MDB_val
 {
   MDB_val_copy(const T &t) :
