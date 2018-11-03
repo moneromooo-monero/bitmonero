@@ -106,7 +106,6 @@ namespace wallet_args
     const command_line::arg_descriptor<std::string> arg_log_file = {"log-file", wallet_args::tr("Specify log file"), ""};
     const command_line::arg_descriptor<std::string> arg_config_file = {"config-file", wallet_args::tr("Config file"), "", true};
 
-
     std::string lang = i18n_get_language();
     tools::on_startup();
 #ifdef NDEBUG
