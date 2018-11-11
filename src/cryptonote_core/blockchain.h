@@ -1374,7 +1374,7 @@ namespace cryptonote
      * @return true
      */
     bool update_next_cumulative_weight_limit();
-    void return_tx_to_pool(std::vector<transaction> &txs);
+    void return_tx_to_pool(std::vector<std::pair<transaction, blobdata>> &txs);
 
     /**
      * @brief make sure a transaction isn't attempting a double-spend
