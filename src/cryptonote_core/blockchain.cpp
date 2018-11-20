@@ -3369,7 +3369,7 @@ leave:
     {
       if (memcmp(&id, &expected_hash, sizeof(hash)) != 0)
       {
-        MERROR_VER("Block with id is INVALID: " << id);
+        MERROR_VER("Block with id is INVALID: " << id << ", expected " << expected_hash);
         bvc.m_verifivation_failed = true;
         goto leave;
       }
@@ -3973,6 +3973,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
 
   // hash and check
   uint64_t usable = first_index * HASH_OF_HASHES_STEP - height; // may start negative, but unsigned under/overflow is not UB
+  MDEBUG("Counting usable hashes starting at " << (int64_t)usable);
   for (size_t n = first_index; n <= last_index; ++n)
   {
     if (n < m_blocks_hash_of_hashes.size())
@@ -3998,6 +3999,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
         CHECK_AND_ASSERT_MES(m_blocks_hash_check[i] == crypto::null_hash || m_blocks_hash_check[i] == data[i - first_index * HASH_OF_HASHES_STEP],
             0, "Consistency failure in m_blocks_hash_check construction");
         m_blocks_hash_check[i] = data[i - first_index * HASH_OF_HASHES_STEP];
+        MDEBUG("m_blocks_hash_check[" << i << "]: " << m_blocks_hash_check[i]);
       }
       usable += HASH_OF_HASHES_STEP;
     }
