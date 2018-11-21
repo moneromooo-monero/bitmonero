@@ -3643,6 +3643,8 @@ leave:
     try
     {
       PERF_TIMER(db_add_block);
+      cryptonote::blobdata bd = cryptonote::block_to_blob(bl);
+      new_height = m_db->add_block(std::make_pair(std::move(bl), std::move(bd)), block_weight, cumulative_difficulty, already_generated_coins, txs);
     }
     catch (const KEY_IMAGE_EXISTS& e)
     {
