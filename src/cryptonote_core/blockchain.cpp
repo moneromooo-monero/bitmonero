@@ -3948,7 +3948,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
   // find hashes encompassing those block
   size_t first_index = height / HASH_OF_HASHES_STEP;
   size_t last_index = (height + hashes.size() - 1) / HASH_OF_HASHES_STEP;
-  MDEBUG("Blocks " << height << " - " << (height + hashes.size() - 1) << " start at " << first_index << " and end at " << last_index);
+  MINFO("Blocks " << height << " - " << (height + hashes.size() - 1) << " start at " << first_index << " and end at " << last_index);
 
   // case of not enough to calculate even a single hash
   if (first_index == last_index && hashes.size() < HASH_OF_HASHES_STEP && (height + hashes.size()) % HASH_OF_HASHES_STEP)
@@ -3987,7 +3987,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
 
   // hash and check
   uint64_t usable = first_index * HASH_OF_HASHES_STEP - height; // may start negative, but unsigned under/overflow is not UB
-  MDEBUG("Counting usable hashes starting at " << (int64_t)usable);
+  MINFO("Counting usable hashes starting at " << (int64_t)usable);
   for (size_t n = first_index; n <= last_index; ++n)
   {
     if (n < m_blocks_hash_of_hashes.size())
@@ -4003,7 +4003,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
       // add to the known hashes array
       if (!valid)
       {
-        MDEBUG("invalid hash for blocks " << n * HASH_OF_HASHES_STEP << " - " << (n * HASH_OF_HASHES_STEP + HASH_OF_HASHES_STEP - 1));
+        MINFO("invalid hash for blocks " << n * HASH_OF_HASHES_STEP << " - " << (n * HASH_OF_HASHES_STEP + HASH_OF_HASHES_STEP - 1));
         break;
       }
 
@@ -4013,7 +4013,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
         CHECK_AND_ASSERT_MES(m_blocks_hash_check[i] == crypto::null_hash || m_blocks_hash_check[i] == data[i - first_index * HASH_OF_HASHES_STEP],
             0, "Consistency failure in m_blocks_hash_check construction");
         m_blocks_hash_check[i] = data[i - first_index * HASH_OF_HASHES_STEP];
-        MDEBUG("m_blocks_hash_check[" << i << "]: " << m_blocks_hash_check[i]);
+        CINFO(el::base::Writer,el::base::DispatchAction::FileOnlyLog,MONERO_DEFAULT_LOG_CATEGORY) << "m_blocks_hash_check[" << i << "]: " << m_blocks_hash_check[i];
       }
       usable += HASH_OF_HASHES_STEP;
     }
@@ -4025,7 +4025,7 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
         usable = hashes.size();
     }
   }
-  MDEBUG("usable: " << usable << " / " << hashes.size());
+  MINFO("usable: " << usable << " / " << hashes.size());
   CHECK_AND_ASSERT_MES(usable < std::numeric_limits<uint64_t>::max() / 2, 0, "usable is negative");
   return usable;
 }
