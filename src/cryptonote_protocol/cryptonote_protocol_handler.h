@@ -43,6 +43,7 @@
 #include "cryptonote_protocol_defs.h"
 #include "cryptonote_protocol_handler_common.h"
 #include "block_queue.h"
+#include "common/perf_timer.h"
 #include "cryptonote_basic/connection_context.h"
 #include "cryptonote_basic/cryptonote_stat_info.h"
 #include <boost/circular_buffer.hpp>
@@ -151,6 +152,7 @@ namespace cryptonote
     epee::math_helper::once_a_time_seconds<30> m_idle_peer_kicker;
     epee::math_helper::once_a_time_seconds<150> m_wedged_sync_restarter;
     std::atomic<unsigned int> m_max_out_peers;
+    tools::PerformanceTimer m_sync_timer, m_add_timer;
 
     boost::mutex m_buffer_mutex;
     double get_avg_block_size();

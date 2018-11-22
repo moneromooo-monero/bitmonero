@@ -80,6 +80,10 @@ namespace cryptonote
   template<class t_core>
   bool t_cryptonote_protocol_handler<t_core>::init(const boost::program_options::variables_map& vm)
   {
+    m_sync_timer.pause();
+    m_sync_timer.reset();
+    m_add_timer.pause();
+    m_add_timer.reset();
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -323,7 +327,6 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
     /* As I don't know if accessing hshd from core could be a good practice,
     I prefer pushing target height to the core at the same time it is pushed to the user.
     Nz. */
-    m_core.set_target_blockchain_height((hshd.current_height));
     int64_t diff = static_cast<int64_t>(hshd.current_height) - static_cast<int64_t>(m_core.get_current_blockchain_height());
     uint64_t abs_diff = std::abs(diff);
     uint64_t max_block_height = std::max(hshd.current_height,m_core.get_current_blockchain_height());
@@ -334,8 +337,18 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
       << (0 <= diff ? std::string("behind") : std::string("ahead"))
       << "] " << ENDL << "SYNCHRONIZATION started");
       if (hshd.current_height >= m_core.get_current_blockchain_height() + 5) // don't switch to unsafe mode just for a few blocks
+      {
         m_core.safesyncmode(false);
+      }
+      if (m_core.get_target_blockchain_height() == 0) // only when sync starts
+      {
+        m_sync_timer.resume();
+        m_sync_timer.reset();
+        m_add_timer.pause();
+        m_add_timer.reset();
+      }
     }
+    m_core.set_target_blockchain_height((hshd.current_height));
     MINFO(context << "Remote blockchain height: " << hshd.current_height << ", id: " << hshd.top_id);
     context.m_state = cryptonote_connection_context::state_synchronizing;
     //let the socket to send response to handshake, but request callback, to let send request data after response
@@ -1029,8 +1042,11 @@ skip:
 
       {
         m_core.pause_mine();
-        epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler(
-          boost::bind(&t_core::resume_mine, &m_core));
+        m_add_timer.resume();
+        epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([this]() {
+          m_add_timer.pause();
+          m_core.resume_mine();
+        });
 
         while (1)
         {
@@ -1884,6 +1900,15 @@ skip:
         << ENDL
         << "Use the \"help\" command to see the list of available commands." << ENDL
         << "**********************************************************************");
+      m_sync_timer.pause();
+      if (ELPP->vRegistry()->allowed(el::Level::Info, "sync-info"))
+      {
+        const uint64_t sync_time = m_sync_timer.value();
+        const uint64_t add_time = m_add_timer.value();
+        if (sync_time && add_time)
+          MGINFO_YELLOW("Sync time: " << sync_time/1e9/60 << " min, idle time " <<
+              (100.f * (1.0f - add_time / (float)sync_time)) << "%");
+      }
       m_core.on_synchronized();
     }
     m_core.safesyncmode(true);
