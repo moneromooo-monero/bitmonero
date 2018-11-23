@@ -4065,13 +4065,14 @@ static bool update_output_map(std::map<uint64_t, std::vector<output_data_t>> &ex
   return true;
 }
 
-bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry)
+bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry, std::vector<block> &blocks)
 {
   MTRACE("Blockchain::" << __func__);
   TIME_MEASURE_START(prepare);
   bool stop_batch;
   uint64_t bytes = 0;
   size_t total_txs = 0;
+  blocks.clear();
 
   // Order of locking must be:
   //  m_incoming_tx_lock (optional)
@@ -4118,7 +4119,6 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
   bool blocks_exist = false;
   tools::threadpool& tpool = tools::threadpool::getInstance();
   unsigned threads = tpool.get_max_concurrency();
-  std::vector<block> blocks;
   blocks.resize(blocks_entry.size());
 
   if (1)
