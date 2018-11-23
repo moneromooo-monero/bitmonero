@@ -1286,7 +1286,12 @@ namespace cryptonote
       return false;
     }
     std::vector<block> pblocks;
-    prepare_handle_incoming_blocks(blocks, pblocks);
+    if (!prepare_handle_incoming_blocks(blocks, pblocks))
+    {
+      MERROR("Block found, but failed to prepare to add");
+      m_miner.resume();
+      return false;
+    }
     m_blockchain_storage.add_new_block(b, bvc);
     cleanup_handle_incoming_blocks(true);
     //anyway - update miner template
@@ -1341,7 +1346,11 @@ namespace cryptonote
   {
     PERF_TIMER(prepare_handle_incoming_blocks);
     m_incoming_tx_lock.lock();
-    m_blockchain_storage.prepare_handle_incoming_blocks(blocks_entry, blocks);
+    if (!m_blockchain_storage.prepare_handle_incoming_blocks(blocks_entry, blocks))
+    {
+      cleanup_handle_incoming_blocks(false);
+      return false;
+    }
     return true;
   }
 
