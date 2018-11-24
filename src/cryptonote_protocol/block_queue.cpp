@@ -345,7 +345,7 @@ bool block_queue::get_next_span(uint64_t &height, std::vector<cryptonote::block_
   return false;
 }
 
-bool block_queue::has_next_span(const boost::uuids::uuid &connection_id, bool &filled) const
+bool block_queue::has_next_span(const boost::uuids::uuid &connection_id, bool &filled, boost::posix_time::ptime &time) const
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
   if (blocks.empty())
@@ -356,10 +356,11 @@ bool block_queue::has_next_span(const boost::uuids::uuid &connection_id, bool &f
   if (i->connection_id != connection_id)
     return false;
   filled = !i->blocks.empty();
+  time = i->time;
   return true;
 }
 
-bool block_queue::has_next_span(uint64_t height, bool &filled) const
+bool block_queue::has_next_span(uint64_t height, bool &filled, boost::posix_time::ptime &time) const
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
   if (blocks.empty())
@@ -370,6 +371,7 @@ bool block_queue::has_next_span(uint64_t height, bool &filled) const
   if (i->start_block_height > height)
     return false;
   filled = !i->blocks.empty();
+  time = i->time;
   return true;
 }
 

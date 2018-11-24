@@ -1969,7 +1969,7 @@ bool t_rpc_command_executor::sync_info()
       std::string address = epee::string_tools::pad_string(p.info.address, 24);
       uint64_t nblocks = 0, size = 0;
       for (const auto &s: res.spans)
-        if (s.rate > 0.0f && s.connection_id == p.info.connection_id)
+        if (s.connection_id == p.info.connection_id)
           nblocks += s.nblocks, size += s.size;
       tools::success_msg_writer() << address << "  " << epee::string_tools::pad_string(p.info.peer_id, 16, '0', true) << "  " <<
           epee::string_tools::pad_string(p.info.state, 16) << "  " <<

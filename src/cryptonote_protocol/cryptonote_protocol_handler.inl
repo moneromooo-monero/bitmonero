@@ -55,7 +55,7 @@
 #define BLOCK_QUEUE_NSPANS_THRESHOLD 10 // chunks of N blocks
 #define BLOCK_QUEUE_SIZE_THRESHOLD (100*1024*1024) // MB
 #define BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS 1000
-#define REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD (5 * 1000000) // microseconds
+#define REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD (10 * 1000000) // microseconds
 #define IDLE_PEER_KICK_TIME (600 * 1000000) // microseconds
 #define PASSIVE_PEER_KICK_TIME (60 * 1000000) // microseconds
 
@@ -901,6 +901,9 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
     MLOG_P2P_MESSAGE("Received NOTIFY_RESPONSE_GET_OBJECTS (" << arg.blocks.size() << " blocks, " << arg.txs.size() << " txes)");
     MLOG_PEER_STATE("received objects");
 
+    boost::posix_time::ptime request_time = context.m_last_request_time;
+    context.m_last_request_time = boost::date_time::not_a_date_time;
+
     // calculate size of request
     size_t size = 0;
     for (const auto &element : arg.txs) size += element.size();
@@ -1016,7 +1019,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
           " (pruning seed " << epee::string_tools::to_string_hex(context.m_pruning_seed) << ")");
 
       // add that new span to the block queue
-      const boost::posix_time::time_duration dt = now - context.m_last_request_time;
+      const boost::posix_time::time_duration dt = now - request_time;
       const float rate = size * 1e6 / (dt.total_microseconds() + 1);
       MDEBUG(context << " adding span: " << arg.blocks.size() << " at height " << start_height << ", " << dt.total_microseconds()/1e6 << " seconds, " << (rate/1e3) << " kB/s, size now " << (m_block_queue.get_data_size() + blocks_size) / 1048576.f << " MB");
       m_block_queue.add_blocks(start_height, arg.blocks, context.m_connection_id, rate, blocks_size);
@@ -1133,7 +1136,6 @@ skip:
           }
 
           const boost::posix_time::ptime start = boost::posix_time::microsec_clock::universal_time();
-          context.m_last_request_time = start;
 
           std::vector<block> pblocks;
           if (!m_core.prepare_handle_incoming_blocks(blocks, pblocks))
@@ -1353,27 +1355,22 @@ skip:
     std::vector<boost::uuids::uuid> kick_connections;
     m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool
     {
-      if (context.m_state == cryptonote_connection_context::state_synchronizing || context.m_state == cryptonote_connection_context::state_before_handshake)
+      if (context.m_state == cryptonote_connection_context::state_synchronizing && context.m_last_request_time != boost::date_time::not_a_date_time)
       {
-        const bool passive = context.m_state == cryptonote_connection_context::state_before_handshake;
         const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
         const boost::posix_time::time_duration dt = now - context.m_last_request_time;
-        const int64_t threshold = passive ? PASSIVE_PEER_KICK_TIME : IDLE_PEER_KICK_TIME;
-        if (dt.total_microseconds() > threshold)
+        if (dt.total_microseconds() > IDLE_PEER_KICK_TIME)
         {
-          MINFO(context << " kicking " << (passive ? "passive" : "idle") << " peer, last update " << (dt.total_microseconds() / 1.e6) << " seconds ago");
-          kick_connections.push_back(context.m_connection_id);
+          MINFO(context << " kicking idle peer, last update " << (dt.total_microseconds() / 1.e6) << " seconds ago");
+          LOG_PRINT_CCONTEXT_L2("requesting callback");
+          context.m_last_request_time = boost::date_time::not_a_date_time;
+          context.m_state = cryptonote_connection_context::state_standby; // we'll go back to adding, then (if we can't), download
+          ++context.m_callback_request_count;
+          m_p2p->request_callback(context);
         }
       }
       return true;
     });
-    for (const boost::uuids::uuid &conn_id: kick_connections)
-    {
-      m_p2p->for_connection(conn_id, [this](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags) {
-        drop_connection(context, false, false);
-        return true;
-      });
-    }
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1438,7 +1435,8 @@ skip:
     const uint64_t blockchain_height = m_core.get_current_blockchain_height();
     if (context.m_remote_blockchain_height <= blockchain_height)
       return false;
-    if (!m_block_queue.has_next_span(blockchain_height, filled) || !filled)
+    const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
+    if (!m_block_queue.has_next_span(blockchain_height, filled, request_time) || (!filled && (now - request_time).total_microseconds() > REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD))
     {
       if (tools::has_unpruned_block(blockchain_height, context.m_remote_blockchain_height, context.m_pruning_seed))
       {
@@ -1493,7 +1491,6 @@ skip:
         return true;
       }
     }
-    const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
     if ((now - request_time).total_microseconds() > REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD)
     {
       if (has_unpruned_block)
@@ -1659,7 +1656,8 @@ MINFO(context << "  - last_response_height " << context.m_last_response_height <
         if (sync.owns_lock())
         {
           bool filled = false;
-          if (m_block_queue.has_next_span(m_core.get_current_blockchain_height(), filled) && filled)
+          boost::posix_time::ptime time;
+          if (m_block_queue.has_next_span(m_core.get_current_blockchain_height(), filled, time) && filled)
           {
             LOG_DEBUG_CC(context, "No other thread is adding blocks, and next span needed is ready, resuming");
             MLOG_PEER_STATE("resuming");
@@ -1959,6 +1957,8 @@ skip:
     MLOG_P2P_MESSAGE("Received NOTIFY_RESPONSE_CHAIN_ENTRY: m_block_ids.size()=" << arg.m_block_ids.size()
       << ", m_start_height=" << arg.start_height << ", m_total_height=" << arg.total_height);
     MLOG_PEER_STATE("received chain");
+
+    context.m_last_request_time = boost::date_time::not_a_date_time;
 
     if(!arg.m_block_ids.size())
     {
