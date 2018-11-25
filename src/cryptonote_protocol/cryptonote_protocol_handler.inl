@@ -1296,7 +1296,7 @@ skip:
                 << progress_message << timing_message);
             const uint32_t previous_stripe = tools::get_pruning_stripe(previous_height, target_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
             const uint32_t current_stripe = tools::get_pruning_stripe(current_blockchain_height, target_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
-            if (previous_height != current_stripe)
+            if (previous_stripe != current_stripe)
               notify_new_stripe(context, current_stripe);
           }
         }
@@ -1337,6 +1337,8 @@ skip:
     m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool
     {
       if (cntxt.m_connection_id == context.m_connection_id)
+        return true;
+      if (stripe && tools::get_pruning_stripe(context.m_pruning_seed) != stripe)
         return true;
       if (context.m_state == cryptonote_connection_context::state_normal)
       {
