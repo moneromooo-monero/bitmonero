@@ -84,6 +84,7 @@ namespace cryptonote
     m_sync_timer.reset();
     m_add_timer.pause();
     m_add_timer.reset();
+    m_last_add_end_time = 0;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -346,6 +347,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
         m_sync_timer.reset();
         m_add_timer.pause();
         m_add_timer.reset();
+        m_last_add_end_time = 0;
       }
     }
     m_core.set_target_blockchain_height((hshd.current_height));
@@ -1057,11 +1059,19 @@ skip:
       MLOG_PEER_STATE("adding blocks");
 
       {
+        if (m_last_add_end_time)
+        {
+          const uint64_t tnow = tools::get_tick_count();
+          const uint64_t ns = tools::ticks_to_ns(tnow - m_last_add_end_time);
+          if (ns >= 1000000000)
+            MINFO("Restarting adding block after idle for " << ns/1e9 << " seconds");
+        }
         m_core.pause_mine();
         m_add_timer.resume();
         epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([this]() {
           m_add_timer.pause();
           m_core.resume_mine();
+          m_last_add_end_time = tools::get_tick_count();
         });
 
         while (1)

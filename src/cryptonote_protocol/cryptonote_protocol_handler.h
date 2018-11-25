@@ -153,6 +153,7 @@ namespace cryptonote
     epee::math_helper::once_a_time_seconds<150> m_wedged_sync_restarter;
     std::atomic<unsigned int> m_max_out_peers;
     tools::PerformanceTimer m_sync_timer, m_add_timer;
+    uint64_t m_last_add_end_time;
 
     boost::mutex m_buffer_mutex;
     double get_avg_block_size();
