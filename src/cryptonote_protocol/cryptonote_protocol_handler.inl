@@ -1338,10 +1338,11 @@ skip:
     {
       if (cntxt.m_connection_id == context.m_connection_id)
         return true;
-      if (stripe && tools::get_pruning_stripe(context.m_pruning_seed) != stripe)
-        return true;
       if (context.m_state == cryptonote_connection_context::state_normal)
       {
+        const uint32_t peer_stripe = tools::get_pruning_stripe(context.m_pruning_seed);
+        if (stripe && peer_stripe && peer_stripe != stripe)
+          return true;
         context.m_state = cryptonote_connection_context::state_synchronizing;
         LOG_PRINT_CCONTEXT_L2("requesting callback");
         ++context.m_callback_request_count;
