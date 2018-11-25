@@ -85,6 +85,11 @@ namespace cryptonote
     m_add_timer.pause();
     m_add_timer.reset();
     m_last_add_end_time = 0;
+    m_sync_spans_downloaded = 0;
+    m_sync_old_spans_downloaded = 0;
+    m_sync_bad_spans_downloaded = 0;
+    m_sync_download_chain_size = 0;
+    m_sync_download_objects_size = 0;
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -348,6 +353,11 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
         m_add_timer.pause();
         m_add_timer.reset();
         m_last_add_end_time = 0;
+        m_sync_spans_downloaded = 0;
+        m_sync_old_spans_downloaded = 0;
+        m_sync_bad_spans_downloaded = 0;
+        m_sync_download_chain_size = 0;
+        m_sync_download_objects_size = 0;
       }
     }
     m_core.set_target_blockchain_height((hshd.current_height));
@@ -926,6 +936,8 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
       CRITICAL_REGION_LOCAL(m_buffer_mutex);
       m_avg_buffer.push_back(size);
     }
+    ++m_sync_spans_downloaded;
+    m_sync_download_objects_size += size;
     MDEBUG(context << " downloaded " << size << " bytes worth of blocks");
 
     /*using namespace boost::chrono;
@@ -940,6 +952,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
       LOG_ERROR_CCONTEXT("sent wrong NOTIFY_HAVE_OBJECTS: arg.m_current_blockchain_height=" << arg.current_blockchain_height
         << " < m_last_response_height=" << context.m_last_response_height << ", dropping connection");
       drop_connection(context, false, false);
+      ++m_sync_bad_spans_downloaded;
       return 1;
     }
 
@@ -964,6 +977,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
         LOG_ERROR_CCONTEXT("sent wrong block: failed to parse and validate block: "
           << epee::string_tools::buff_to_hex_nodelimer(block_entry.block) << ", dropping connection");
         drop_connection(context, false, false);
+        ++m_sync_bad_spans_downloaded;
         return 1;
       }
       if (b.miner_tx.vin.size() != 1 || b.miner_tx.vin.front().type() != typeid(txin_gen))
@@ -971,6 +985,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
         LOG_ERROR_CCONTEXT("sent wrong block: block: miner tx does not have exactly one txin_gen input"
           << epee::string_tools::buff_to_hex_nodelimer(block_entry.block) << ", dropping connection");
         drop_connection(context, false, false);
+        ++m_sync_bad_spans_downloaded;
         return 1;
       }
       if (start_height == std::numeric_limits<uint64_t>::max())
@@ -983,6 +998,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
           << " wasn't requested, dropping connection");
         drop_connection(context, false, false);
+        ++m_sync_bad_spans_downloaded;
         return 1;
       }
       if(b.tx_hashes.size() != block_entry.txs.size())
@@ -990,6 +1006,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
         LOG_ERROR_CCONTEXT("sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id=" << epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
           << ", tx_hashes.size()=" << b.tx_hashes.size() << " mismatch with block_complete_entry.m_txs.size()=" << block_entry.txs.size() << ", dropping connection");
         drop_connection(context, false, false);
+        ++m_sync_bad_spans_downloaded;
         return 1;
       }
 
@@ -1002,6 +1019,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
       MERROR("returned not all requested objects (context.m_requested_objects.size()="
         << context.m_requested_objects.size() << "), dropping connection");
       drop_connection(context, false, false);
+      ++m_sync_bad_spans_downloaded;
       return 1;
     }
 
@@ -1012,6 +1030,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
       const uint64_t subchain_height = start_height + arg.blocks.size();
       LOG_DEBUG_CC(context, "These are old blocks, ignoring: blocks " << start_height << " - " << (subchain_height-1) << ", blockchain height " << m_core.get_current_blockchain_height());
       m_block_queue.remove_spans(context.m_connection_id, start_height);
+      ++m_sync_old_spans_downloaded;
       goto skip;
     }
 
@@ -1059,19 +1078,14 @@ skip:
       MLOG_PEER_STATE("adding blocks");
 
       {
-        if (m_last_add_end_time)
-        {
-          const uint64_t tnow = tools::get_tick_count();
-          const uint64_t ns = tools::ticks_to_ns(tnow - m_last_add_end_time);
-          if (ns >= 1000000000)
-            MINFO("Restarting adding block after idle for " << ns/1e9 << " seconds");
-        }
         m_core.pause_mine();
         m_add_timer.resume();
-        epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([this]() {
+        bool starting = true;
+        epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([this, &starting]() {
           m_add_timer.pause();
           m_core.resume_mine();
-          m_last_add_end_time = tools::get_tick_count();
+          if (!starting)
+            m_last_add_end_time = tools::get_tick_count();
         });
 
         while (1)
@@ -1146,6 +1160,17 @@ skip:
           }
 
           const boost::posix_time::ptime start = boost::posix_time::microsec_clock::universal_time();
+
+          if (starting)
+          {
+            starting = false;
+            if (m_last_add_end_time)
+            {
+              const uint64_t tnow = tools::get_tick_count();
+              const uint64_t ns = tools::ticks_to_ns(tnow - m_last_add_end_time);
+              MINFO("Restarting adding block after idle for " << ns/1e9 << " seconds");
+            }
+          }
 
           std::vector<block> pblocks;
           if (!m_core.prepare_handle_incoming_blocks(blocks, pblocks))
@@ -1284,18 +1309,19 @@ skip:
               progress_message = " (" + std::to_string(completion_percent) + "%, "
                   + std::to_string(target_blockchain_height - current_blockchain_height) + " left)";
             }
+            const uint32_t previous_stripe = tools::get_pruning_stripe(previous_height, target_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
+            const uint32_t current_stripe = tools::get_pruning_stripe(current_blockchain_height, target_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
             std::string timing_message = "";
             if (ELPP->vRegistry()->allowed(el::Level::Info, "sync-info"))
               timing_message = std::string(" (") + std::to_string(dt.total_microseconds()/1e6) + " sec, "
                 + std::to_string((current_blockchain_height - previous_height) * 1e6 / dt.total_microseconds())
                 + " blocks/sec), " + std::to_string(m_block_queue.get_data_size() / 1048576.f) + " MB queued in "
-                + std::to_string(m_block_queue.get_num_filled_spans()) + " spans";
+                + std::to_string(m_block_queue.get_num_filled_spans()) + " spans, stripe "
+                + std::to_string(previous_stripe) + " -> " + std::to_string(current_stripe);
             if (ELPP->vRegistry()->allowed(el::Level::Debug, "sync-info"))
               timing_message += std::string(": ") + m_block_queue.get_overview(current_blockchain_height);
             MGINFO_YELLOW("Synced " << current_blockchain_height << "/" << target_blockchain_height
                 << progress_message << timing_message);
-            const uint32_t previous_stripe = tools::get_pruning_stripe(previous_height, target_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
-            const uint32_t current_stripe = tools::get_pruning_stripe(current_blockchain_height, target_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
             if (previous_stripe != current_stripe)
               notify_new_stripe(context, current_stripe);
           }
@@ -1942,8 +1968,14 @@ skip:
         const uint64_t sync_time = m_sync_timer.value();
         const uint64_t add_time = m_add_timer.value();
         if (sync_time && add_time)
+        {
           MGINFO_YELLOW("Sync time: " << sync_time/1e9/60 << " min, idle time " <<
-              (100.f * (1.0f - add_time / (float)sync_time)) << "%");
+              (100.f * (1.0f - add_time / (float)sync_time)) << "%" << ", " <<
+              (10 * m_sync_download_objects_size / 1024 / 1024) / 10.f << " + " <<
+              (10 * m_sync_download_chain_size / 1024 / 1024) / 10.f << " MB downloaded, " <<
+              100.0f * m_sync_old_spans_downloaded / m_sync_spans_downloaded << "% old spans, " <<
+              100.0f * m_sync_bad_spans_downloaded / m_sync_spans_downloaded << "% bad spans");
+        }
       }
       m_core.on_synchronized();
     }
@@ -1972,6 +2004,8 @@ skip:
     MLOG_PEER_STATE("received chain");
 
     context.m_last_request_time = boost::date_time::not_a_date_time;
+
+    m_sync_download_chain_size += arg.m_block_ids.size() * sizeof(crypto::hash);
 
     if(!arg.m_block_ids.size())
     {

@@ -4012,7 +4012,8 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
         CHECK_AND_ASSERT_MES(m_blocks_hash_check[i] == crypto::null_hash || m_blocks_hash_check[i] == data[i - first_index * HASH_OF_HASHES_STEP],
             0, "Consistency failure in m_blocks_hash_check construction");
         m_blocks_hash_check[i] = data[i - first_index * HASH_OF_HASHES_STEP];
-        CINFO(el::base::Writer,el::base::DispatchAction::FileOnlyLog,MONERO_DEFAULT_LOG_CATEGORY) << "m_blocks_hash_check[" << i << "]: " << m_blocks_hash_check[i];
+        if (m_blocks_hash_check[i] == crypto::null_hash)
+          CINFO(el::base::Writer,el::base::DispatchAction::FileOnlyLog,MONERO_DEFAULT_LOG_CATEGORY) << "m_blocks_hash_check[" << i << "]: " << m_blocks_hash_check[i];
       }
       usable += HASH_OF_HASHES_STEP;
     }

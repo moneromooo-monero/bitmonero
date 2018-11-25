@@ -154,6 +154,8 @@ namespace cryptonote
     std::atomic<unsigned int> m_max_out_peers;
     tools::PerformanceTimer m_sync_timer, m_add_timer;
     uint64_t m_last_add_end_time;
+    uint64_t m_sync_spans_downloaded, m_sync_old_spans_downloaded, m_sync_bad_spans_downloaded;
+    uint64_t m_sync_download_chain_size, m_sync_download_objects_size;
 
     boost::mutex m_buffer_mutex;
     double get_avg_block_size();
