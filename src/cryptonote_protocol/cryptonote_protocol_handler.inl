@@ -1479,7 +1479,10 @@ skip:
     {
       if (tools::has_unpruned_block(blockchain_height, context.m_remote_blockchain_height, context.m_pruning_seed))
       {
-        MDEBUG(context << " we should download it as no peer reserved it, or it's not been received yet");
+        if (filled)
+          MDEBUG(context << " we should download it as it's not been received yet after " << (now - request_time).total_microseconds()/1e6);
+        else
+          MDEBUG(context << " we should download it as no peer reserved it");
         return true;
       }
     }
