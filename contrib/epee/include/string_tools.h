@@ -118,14 +118,11 @@ namespace string_tools
   }
   //----------------------------------------------------------------------------
   template<class CharT>
-  bool parse_hexstr_to_binbuff(const std::basic_string<CharT>& s, std::basic_string<CharT>& res)
+  bool parse_hexstr_to_binbuff(const epee::span<const CharT>& s, epee::span<CharT>& res)
   {
-    res.clear();
-    if (s.size() & 1)
-      return false;
-    try
-    {
-      res.resize(s.size() / 2);
+      if (s.size() != res.size() * 2)
+        return false;
+
       unsigned char *dst = (unsigned char *)res.data();
       const unsigned char *src = (const unsigned char *)s.data();
       for(size_t i = 0; i < s.size(); i += 2)
@@ -140,28 +137,16 @@ namespace string_tools
       }
 
       return true;
-    }
-    catch(...)
-    {
-      return false;
-    }
   }
   //----------------------------------------------------------------------------
-  template<class t_pod_type>
-  bool parse_tpod_from_hex_string(const std::string& str_hash, t_pod_type& t_pod)
+  template<class CharT>
+  bool parse_hexstr_to_binbuff(const std::basic_string<CharT>& s, std::basic_string<CharT>& res)
   {
-    static_assert(std::is_pod<t_pod_type>::value, "expected pod type");
-    std::string buf;
-    bool res = epee::string_tools::parse_hexstr_to_binbuff(str_hash, buf);
-    if (!res || buf.size() != sizeof(t_pod_type))
-    {
+    if (s.size() & 1)
       return false;
-    }
-    else
-    {
-      buf.copy(reinterpret_cast<char *>(&t_pod), sizeof(t_pod_type));
-      return true;
-    }
+    res.resize(s.size() / 2);
+    epee::span<CharT> rspan((char*)res.data(), res.size());
+    return parse_hexstr_to_binbuff(epee::span<const CharT>(s.data(), s.size()), rspan);
   }
   //----------------------------------------------------------------------------
 PUSH_WARNINGS
@@ -369,17 +354,10 @@ POP_WARNINGS
   bool hex_to_pod(const std::string& hex_str, t_pod_type& s)
   {
     static_assert(std::is_pod<t_pod_type>::value, "expected pod type");
-    std::string hex_str_tr = trim(hex_str);
     if(sizeof(s)*2 != hex_str.size())
       return false;
-    std::string bin_buff;
-    if(!parse_hexstr_to_binbuff(hex_str_tr, bin_buff))
-      return false;
-    if(bin_buff.size()!=sizeof(s))
-      return false;
-
-    s = *(t_pod_type*)bin_buff.data();
-    return true;
+    epee::span<char> rspan((char*)&s, sizeof(s));
+    return parse_hexstr_to_binbuff(epee::span<const char>(hex_str.data(), hex_str.size()), rspan);
   }
   //----------------------------------------------------------------------------
   template<class t_pod_type>
