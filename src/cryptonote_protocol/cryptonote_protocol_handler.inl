@@ -1016,7 +1016,7 @@ LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_to
 
     if(context.m_requested_objects.size())
     {
-      MERROR("returned not all requested objects (context.m_requested_objects.size()="
+      MERROR(context << "returned not all requested objects (context.m_requested_objects.size()="
         << context.m_requested_objects.size() << "), dropping connection");
       drop_connection(context, false, false);
       ++m_sync_bad_spans_downloaded;
