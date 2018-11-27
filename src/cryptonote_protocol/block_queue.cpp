@@ -107,7 +107,7 @@ void block_queue::flush_stale_spans(const std::set<boost::uuids::uuid> &live_con
   while (i != blocks.end())
   {
     block_map::iterator j = i++;
-    if (live_connections.find(j->connection_id) == live_connections.end() && j->blocks.size() == 0)
+    if (j->blocks.empty() && live_connections.find(j->connection_id) == live_connections.end())
     {
       erase_block(j);
     }
