@@ -1336,7 +1336,7 @@ skip:
         //context.m_last_response_height = 0;
         force_next_span = true;
       }
-      if (should_drop_connection(context, get_next_needed_pruning_stripe().first))
+      else if (should_drop_connection(context, get_next_needed_pruning_stripe().first))
       {
         if (!context.m_is_income)
         {
