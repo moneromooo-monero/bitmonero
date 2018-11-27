@@ -1332,8 +1332,8 @@ skip:
 
       if (should_download_next_span(context))
       {
-        context.m_needed_objects.clear();
-        context.m_last_response_height = 0;
+        //context.m_needed_objects.clear();
+        //context.m_last_response_height = 0;
         force_next_span = true;
       }
       if (should_drop_connection(context, get_next_needed_pruning_stripe().first))
