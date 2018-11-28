@@ -2179,7 +2179,8 @@ skip:
       }
       return true;
     });
-    const bool use_next = (n_next > m_max_out_peers / 2 && n_subsequent <= 1) || (n_next > 2 && n_subsequent == 0);
+    const bool use_next = (n_next > m_max_out_peers / 2 && n_subsequent <= 1) || (n_next > 2 && n_subsequent == 0) ||
+        (n_next > 0 && tools::get_pruning_stripe(want_height_from_block_queue, blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES) == subsequent_pruning_stripe);
     const uint32_t ret_stripe = use_next ? subsequent_pruning_stripe: next_pruning_stripe;
     MDEBUG("get_next_needed_pruning_stripe: want height " << want_height << " (" <<
         want_height_from_blockchain << " from blockchain, " << want_height_from_block_queue << " from block queue), stripe " <<
