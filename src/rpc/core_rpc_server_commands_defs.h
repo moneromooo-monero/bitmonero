@@ -936,6 +936,8 @@ namespace cryptonote
       bool was_bootstrap_ever_used;
       uint64_t database_size;
       bool update_available;
+      uint64_t num_txs;
+      uint64_t num_outputs;
       std::string version;
 
       BEGIN_KV_SERIALIZE_MAP()
@@ -971,6 +973,8 @@ namespace cryptonote
         KV_SERIALIZE(was_bootstrap_ever_used)
         KV_SERIALIZE(database_size)
         KV_SERIALIZE(update_available)
+        KV_SERIALIZE(num_txs)
+        KV_SERIALIZE(num_outputs)
         KV_SERIALIZE(version)
       END_KV_SERIALIZE_MAP()
     };

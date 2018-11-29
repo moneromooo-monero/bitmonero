@@ -213,6 +213,8 @@ namespace cryptonote
     }
     res.database_size = m_restricted ? 0 : m_core.get_blockchain_storage().get_db().get_database_size();
     res.update_available = m_restricted ? false : m_core.is_update_available();
+    res.num_txs = m_core.get_blockchain_storage().get_db().get_tx_count();
+    res.num_outputs = m_core.get_blockchain_storage().get_db().get_output_count();
     res.version = m_restricted ? "" : MONERO_VERSION;
     return true;
   }
@@ -1657,6 +1659,8 @@ namespace cryptonote
     }
     res.database_size = m_restricted ? 0 : m_core.get_blockchain_storage().get_db().get_database_size();
     res.update_available = m_restricted ? false : m_core.is_update_available();
+    res.num_txs = m_core.get_blockchain_storage().get_db().get_tx_count();
+    res.num_outputs = m_core.get_blockchain_storage().get_db().get_output_count();
     res.version = m_restricted ? "" : MONERO_VERSION;
     return true;
   }
