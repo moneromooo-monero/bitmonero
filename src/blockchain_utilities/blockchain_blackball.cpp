@@ -26,6 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <set>
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/archive/portable_binary_iarchive.hpp>
@@ -1000,10 +1001,9 @@ static std::vector<std::pair<uint64_t, uint64_t>> load_outputs(const std::string
   return outputs;
 }
 
-static std::vector<std::pair<uint64_t, uint64_t>> load_outputs_keys(const std::string &filename, const std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>> &pkeys)
+static std::unordered_set<crypto::public_key> load_outputs_keys(const std::string &filename)
 {
-  std::vector<std::pair<uint64_t, uint64_t>> outputs;
-  uint64_t amount = std::numeric_limits<uint64_t>::max();
+  std::unordered_set<crypto::public_key> outputs;
   crypto::public_key pubkey;
   FILE *f;
 
@@ -1028,24 +1028,18 @@ static std::vector<std::pair<uint64_t, uint64_t>> load_outputs_keys(const std::s
       continue;
     }
 
-    const std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>>::const_iterator i = pkeys.find(pubkey);
-    if (i == pkeys.end())
-    {
-      MERROR("Unknown pubkey in " << filename << ": " << pubkey);
-      continue;
-    }
-    outputs.push_back(i->second);
+    outputs.insert(pubkey);
   }
   fclose(f);
   return outputs;
 }
 
-static std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>> load_pubkeys(MDB_env *env, MDB_txn *txn)
+static void add_output_keys(MDB_env *env, MDB_txn *txn, std::vector<std::pair<uint64_t, uint64_t>> &outputs, const std::unordered_set<crypto::public_key> &pubkeys)
 {
-  std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>> pkeys;
   std::map<uint64_t, uint64_t> count;
   MDB_cursor *cur;
   MDB_dbi dbi;
+  size_t found = 0;
 
   int dbr = mdb_dbi_open(txn, "txs_pruned", MDB_INTEGERKEY, &dbi);
   CHECK_AND_ASSERT_THROW_MES(!dbr, "Failed to open LMDB dbi (txs_pruned): " + std::string(mdb_strerror(dbr)));
@@ -1073,7 +1067,11 @@ static std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>> loa
           "Unsupported output type in tx " + epee::string_tools::pod_to_hex(cryptonote::get_transaction_hash(tx)));
       const cryptonote::txout_to_key &out_to_key = boost::get<cryptonote::txout_to_key>(vout.target);
       uint64_t amount = (is_miner_tx && tx.version >= 2) ? 0 : vout.amount;
-      pkeys[out_to_key.key] = std::make_pair(amount, count[amount]);
+      if (pubkeys.find(out_to_key.key) != pubkeys.end())
+      {
+        outputs.push_back(std::make_pair(amount, count[amount]));
+        ++found;
+      }
       ++count[amount];
     }
   }
@@ -1081,7 +1079,8 @@ static std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>> loa
   mdb_cursor_close(cur);
   mdb_dbi_close(env, dbi);
 
-  return pkeys;
+  if (found != pubkeys.size())
+    MWARNING((pubkeys.size() - found) << " user specified output keys were not found");
 }
 
 static bool export_spent_outputs(MDB_cursor *cur, const std::string &filename)
@@ -1370,10 +1369,8 @@ int main(int argc, char* argv[])
   std::vector<std::pair<uint64_t, uint64_t>> extra_spent_outputs = extra_spent_list.empty() ? std::vector<std::pair<uint64_t, uint64_t>>() : load_outputs(extra_spent_list);
   if (!extra_spent_keys.empty())
   {
-    std::unordered_map<crypto::public_key, std::pair<uint64_t, uint64_t>> pkeys = load_pubkeys(env0, txn0);
-    std::vector<std::pair<uint64_t, uint64_t>> extra_spent_outputs_new = load_outputs_keys(extra_spent_keys, pkeys);
-    for (const auto &e: extra_spent_outputs_new)
-      extra_spent_outputs.push_back(e);
+    std::unordered_set<crypto::public_key> pubkeys = load_outputs_keys(extra_spent_keys);
+    add_output_keys(env0, txn0, extra_spent_outputs, pubkeys);
   }
 
   if (!extra_spent_outputs.empty())
