@@ -59,8 +59,6 @@
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "blockchain"
 
-#define LOG_DIFF(x) MCINFO("blockchain.diff", x)
-
 #define FIND_BLOCKCHAIN_SUPPLEMENT_MAX_SIZE (100*1024*1024) // 100 MB
 
 using namespace crypto;
@@ -479,7 +477,6 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
       std::vector<transaction> popped_txs;
       try
       {
-    LOG_DIFF("popping block from height " << m_db->height());
         m_db->pop_block(popped_block, popped_txs);
       }
       // anything that could cause this to throw is likely catastrophic,
@@ -503,7 +500,6 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
     uint64_t top_block_height;
     crypto::hash top_block_hash = get_tail_id(top_block_height);
     m_tx_pool.on_blockchain_dec(top_block_height, top_block_hash);
-LOG_DIFF("Blockchain decreased: " << top_block_height << " " << top_block_hash);
   }
 
   update_next_cumulative_weight_limit();
@@ -635,7 +631,6 @@ block Blockchain::pop_block_from_blockchain()
 
   try
   {
-    LOG_DIFF("popping block from height " << m_db->height());
     m_db->pop_block(popped_block, popped_txs);
   }
   // anything that could cause this to throw is likely catastrophic,
@@ -696,7 +691,6 @@ block Blockchain::pop_block_from_blockchain()
   uint64_t top_block_height;
   crypto::hash top_block_hash = get_tail_id(top_block_height);
   m_tx_pool.on_blockchain_dec(top_block_height, top_block_hash);
-LOG_DIFF("Blockchain decreased: " << top_block_height << " " << top_block_hash);
   invalidate_block_template_cache();
 
   return popped_block;
@@ -862,16 +856,13 @@ bool Blockchain::get_block_by_hash(const crypto::hash &h, block &blk, bool *orph
 // less blocks than desired if there aren't enough.
 difficulty_type Blockchain::get_difficulty_for_next_block()
 {
-  LOG_DIFF("call at " << m_db->height());
   if (m_fixed_difficulty)
   {
-    LOG_DIFF("return fixed " << (m_db->height() ? m_fixed_difficulty : 1));
     return m_db->height() ? m_fixed_difficulty : 1;
   }
 
   LOG_PRINT_L3("Blockchain::" << __func__);
 
-difficulty_type D = 0;
   crypto::hash top_hash = get_tail_id();
   {
     CRITICAL_REGION_LOCAL(m_difficulty_lock);
@@ -880,22 +871,15 @@ difficulty_type D = 0;
     // requires the blockchain lock will have acquired it in the first place,
     // and it will be unlocked only when called from the getinfo RPC
     if (top_hash == m_difficulty_for_next_block_top_hash)
-    {
-      LOG_DIFF("return " << m_difficulty_for_next_block << " for top hash " << top_hash);
-      //return m_difficulty_for_next_block;
-      D = m_difficulty_for_next_block;
-    }
+      return m_difficulty_for_next_block;
   }
 
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
-  bool check = false;
   std::vector<uint64_t> timestamps;
   std::vector<difficulty_type> difficulties;
   uint64_t height;
   top_hash = get_tail_id(height); // get it again now that we have the lock
   ++height; // top block height to blockchain height
-if (!(top_hash == m_difficulty_for_next_block_top_hash)) D=0;
-LOG_DIFF("top hash in locked area is " << top_hash);
   // ND: Speedup
   // 1. Keep a list of the last 735 (or less) blocks that is used to compute difficulty,
   //    then when the next block difficulty is queried, push the latest height data and
@@ -906,7 +890,6 @@ LOG_DIFF("top hash in locked area is " << top_hash);
     uint64_t index = height - 1;
     m_timestamps.push_back(m_db->get_block_timestamp(index));
     m_difficulties.push_back(m_db->get_block_cumulative_difficulty(index));
-    LOG_DIFF("cached at " << index << ", adding " << m_difficulties.back() << " at " << m_timestamps.back());
 
     while (m_timestamps.size() > DIFFICULTY_BLOCKS_COUNT)
       m_timestamps.erase(m_timestamps.begin());
@@ -916,16 +899,12 @@ LOG_DIFF("top hash in locked area is " << top_hash);
     m_timestamps_and_difficulties_height = height;
     timestamps = m_timestamps;
     difficulties = m_difficulties;
-    check = true;
   }
-std::vector<uint64_t> timestamps_from_cache = timestamps;
-std::vector<difficulty_type> difficulties_from_cache = difficulties;
-  //else
+  else
   {
     uint64_t offset = height - std::min <uint64_t> (height, static_cast<uint64_t>(DIFFICULTY_BLOCKS_COUNT));
     if (offset == 0)
       ++offset;
-    LOG_DIFF("uncached from " << offset);
 
     timestamps.clear();
     difficulties.clear();
@@ -940,18 +919,6 @@ std::vector<difficulty_type> difficulties_from_cache = difficulties;
       difficulties.push_back(m_db->get_block_cumulative_difficulty(offset));
     }
 
-if (check) if (timestamps != timestamps_from_cache || difficulties !=difficulties_from_cache)
-{
-  MGINFO("Inconsistency:");
-  MGINFO("top hash: "<<top_hash);
-  MGINFO("timestamps: " << timestamps_from_cache.size() << " from cache, but " << timestamps.size() << " without");
-  MGINFO("difficulties: " << difficulties_from_cache.size() << " from cache, but " << difficulties.size() << " without");
-  MGINFO("timestamps_from_cache:"); for (const auto &v :timestamps_from_cache) MGINFO("  " << v);
-  MGINFO("timestamps:"); for (const auto &v :timestamps) MGINFO("  " << v);
-  MGINFO("difficulties_from_cache:"); for (const auto &v :difficulties_from_cache) MGINFO("  " << v);
-  MGINFO("difficulties:"); for (const auto &v :difficulties) MGINFO("  " << v);
-}
-
     m_timestamps_and_difficulties_height = height;
     m_timestamps = timestamps;
     m_difficulties = difficulties;
@@ -960,10 +927,8 @@ if (check) if (timestamps != timestamps_from_cache || difficulties !=difficultie
   difficulty_type diff = next_difficulty(timestamps, difficulties, target);
 
   CRITICAL_REGION_LOCAL1(m_difficulty_lock);
-if (D && D != diff) MGINFO("Inconsistency at " << height << "/" << top_hash << "/" << get_tail_id() << ": cached " << D << ", real " << diff);
   m_difficulty_for_next_block_top_hash = top_hash;
   m_difficulty_for_next_block = diff;
-  LOG_DIFF("Remembering " << diff << " for new top hash " << top_hash);
   return diff;
 }
 //------------------------------------------------------------------
@@ -997,7 +962,6 @@ bool Blockchain::rollback_blockchain_switching(std::list<block>& original_chain,
   // remove blocks from blockchain until we get back to where we should be.
   while (m_db->height() != rollback_height)
   {
-    LOG_DIFF("popping block from height " << m_db->height());
     pop_block_from_blockchain();
   }
 
@@ -1046,7 +1010,6 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<blocks_ext_by_hash::
   std::list<block> disconnected_chain;
   while (m_db->top_block_hash() != alt_chain.front()->second.bl.prev_id)
   {
-    LOG_DIFF("popping block from height " << m_db->height());
     block b = pop_block_from_blockchain();
     disconnected_chain.push_front(b);
   }
@@ -1334,7 +1297,6 @@ bool Blockchain::create_block_template(block& b, const account_public_address& m
   m_tx_pool.lock();
   const auto unlock_guard = epee::misc_utils::create_scope_leave_handler([&]() { m_tx_pool.unlock(); });
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
-  LOG_DIFF("start bt");
   height = m_db->height();
   if (m_btc_valid) {
     // The pool cookie is atomic. The lack of locking is OK, as if it changes
@@ -1369,8 +1331,6 @@ bool Blockchain::create_block_template(block& b, const account_public_address& m
 
   median_weight = m_current_block_cumul_weight_limit / 2;
   already_generated_coins = m_db->get_block_already_generated_coins(height - 1);
-
-  LOG_DIFF("done with bt");
 
   size_t txs_weight;
   uint64_t fee;
@@ -3723,7 +3683,6 @@ leave:
       PERF_TIMER(db_add_block);
       cryptonote::blobdata bd = cryptonote::block_to_blob(bl);
       new_height = m_db->add_block(std::make_pair(std::move(bl), std::move(bd)), block_weight, cumulative_difficulty, already_generated_coins, txs);
-      LOG_DIFF("adding new block at " << new_height << ", new height " << m_db->height());
     }
     catch (const KEY_IMAGE_EXISTS& e)
     {
@@ -3768,7 +3727,6 @@ leave:
 
   // appears to be a NOP *and* is called elsewhere.  wat?
   m_tx_pool.on_blockchain_inc(new_height, id);
-LOG_DIFF("Blockchain increased: " << new_height << " " << id);
   get_difficulty_for_next_block(); // just to cache it
   invalidate_block_template_cache();
 
