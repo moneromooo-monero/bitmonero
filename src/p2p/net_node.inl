@@ -70,6 +70,7 @@
 #define NET_MAKE_IP(b1,b2,b3,b4)  ((LPARAM)(((DWORD)(b1)<<24)+((DWORD)(b2)<<16)+((DWORD)(b3)<<8)+((DWORD)(b4))))
 
 #define MIN_WANTED_SEED_NODES 12
+#define MAX_CONNECTIONS_PER_HOST 8
 
 namespace nodetool
 {
@@ -156,17 +157,34 @@ namespace nodetool
   template<class t_payload_net_handler>
   bool node_server<t_payload_net_handler>::is_remote_host_allowed(const epee::net_utils::network_address &address)
   {
-    CRITICAL_REGION_LOCAL(m_blocked_hosts_lock);
+    CRITICAL_REGION_BEGIN(m_blocked_hosts_lock);
     auto it = m_blocked_hosts.find(address.host_str());
-    if(it == m_blocked_hosts.end())
-      return true;
-    if(time(nullptr) >= it->second)
+    if(it != m_blocked_hosts.end())
     {
+      if(time(nullptr) < it->second)
+        return false;
       m_blocked_hosts.erase(it);
       MCLOG_CYAN(el::Level::Info, "global", "Host " << address.host_str() << " unblocked.");
-      return true;
     }
-    return false;
+    CRITICAL_REGION_END();
+
+    // do not accept more than N non-local connections from the same IP
+    if (!address.is_local() && !address.is_loopback())
+    {
+      int existing = 0;
+      m_net_server.get_config_object().foreach_connection([&](p2p_connection_context& cntx){
+        if (cntx.m_remote_address.is_same_host(address))
+          ++existing;
+        return true;
+      });
+      if (existing >= MAX_CONNECTIONS_PER_HOST)
+      {
+        MDEBUG("Denying connection to " << address.str() << ", already " << existing << " connection(s) to that host");
+        return false;
+      }
+    }
+
+    return true;
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
