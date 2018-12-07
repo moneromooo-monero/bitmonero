@@ -267,7 +267,6 @@ namespace hw {
 
     int device_ledger::set_command_header(unsigned char ins, unsigned char p1, unsigned char p2) {
       reset_buffer();
-      int offset = 0;
       this->buffer_send[0] = 0x00;
       this->buffer_send[1] = ins;
       this->buffer_send[2] = p1;
@@ -687,7 +686,7 @@ namespace hw {
 
     bool  device_ledger::verify_keys(const crypto::secret_key &secret_key, const crypto::public_key &public_key) {
         AUTO_LOCK_CMD();
-        int offset, sw;
+        int offset;
 
         offset = set_command_header_noopt(INS_VERIFY_KEY);
         //sec
@@ -1406,7 +1405,6 @@ namespace hw {
     bool device_ledger::mlsag_prepare(const rct::key &H, const rct::key &xx,
                                      rct::key &a, rct::key &aG, rct::key &aHP, rct::key &II) {
         AUTO_LOCK_CMD();
-        unsigned char options;
 
         #ifdef DEBUG_HWDEVICE
         const rct::key H_x = H;
@@ -1450,7 +1448,6 @@ namespace hw {
 
     bool device_ledger::mlsag_prepare(rct::key &a, rct::key &aG) {
         AUTO_LOCK_CMD();
-        unsigned char options;
 
         #ifdef DEBUG_HWDEVICE
         rct::key a_x;
@@ -1473,7 +1470,6 @@ namespace hw {
 
     bool device_ledger::mlsag_hash(const rct::keyV &long_message, rct::key &c) {
         AUTO_LOCK_CMD();
-        unsigned char options;
         size_t cnt;
 
         #ifdef DEBUG_HWDEVICE
