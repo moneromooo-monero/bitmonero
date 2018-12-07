@@ -1360,6 +1360,7 @@ skip:
   bool t_cryptonote_protocol_handler<t_core>::on_idle()
   {
     m_idle_peer_kicker.do_call(boost::bind(&t_cryptonote_protocol_handler<t_core>::kick_idle_peers, this));
+    m_standby_checker.do_call(boost::bind(&t_cryptonote_protocol_handler<t_core>::check_standby_peers, this));
     return m_core.on_idle();
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1383,6 +1384,22 @@ skip:
           ++context.m_callback_request_count;
           m_p2p->request_callback(context);
         }
+      }
+      return true;
+    });
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------
+  template<class t_core>
+  bool t_cryptonote_protocol_handler<t_core>::check_standby_peers()
+  {
+    m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool
+    {
+      if (context.m_state == cryptonote_connection_context::state_standby)
+      {
+        LOG_PRINT_CCONTEXT_L2("requesting callback");
+        ++context.m_callback_request_count;
+        m_p2p->request_callback(context);
       }
       return true;
     });
@@ -1582,8 +1599,7 @@ skip:
     bool start_from_current_chain = false;
     if (!force_next_span)
     {
-      bool first = true;
-      while (1)
+      do
       {
         size_t nspans = m_block_queue.get_num_filled_spans();
         size_t size = m_block_queue.get_data_size();
@@ -1629,7 +1645,7 @@ skip:
 
         if (proceed)
         {
-          if (!first)
+          if (context.m_state != cryptonote_connection_context::state_standby)
           {
             LOG_DEBUG_CC(context, "Block queue is " << nspans << " and " << size << ", resuming");
             MLOG_PEER_STATE("resuming");
@@ -1672,24 +1688,18 @@ skip:
           }
         }
 
-        if (first)
+        if (context.m_state != cryptonote_connection_context::state_standby)
         {
           if (!queue_proceed)
             LOG_DEBUG_CC(context, "Block queue is " << nspans << " and " << size << ", pausing");
           else if (!stripe_proceed_main && !stripe_proceed_secondary)
             LOG_DEBUG_CC(context, "We do not have the stripe required to download another block, pausing");
-          first = false;
           context.m_state = cryptonote_connection_context::state_standby;
           MLOG_PEER_STATE("pausing");
         }
 
-        for (size_t n = 0; n < 50; ++n)
-        {
-          if (m_stopping)
-            return true;
-          boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
-        }
-      }
+        return true;
+      } while(0);
       context.m_state = cryptonote_connection_context::state_synchronizing;
     }
 
