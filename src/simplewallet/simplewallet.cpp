@@ -1994,11 +1994,6 @@ bool simple_wallet::set_store_tx_info(const std::vector<std::string> &args/* = s
 
 bool simple_wallet::set_default_ring_size(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
-  if (m_wallet->watch_only())
-  {
-    fail_msg_writer() << tr("wallet is watch-only and cannot transfer");
-    return true;
-  }
   try
   {
     if (strchr(args[1].c_str(), '-'))
