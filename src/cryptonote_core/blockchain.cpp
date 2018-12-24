@@ -4054,34 +4054,6 @@ uint64_t Blockchain::prevalidate_block_hashes(uint64_t height, const std::vector
 //    vs [k_image, output_keys] (m_scan_table). This is faster because it takes advantage of bulk queries
 //    and is threaded if possible. The table (m_scan_table) will be used later when querying output
 //    keys.
-static bool update_output_map(std::map<uint64_t, std::vector<output_data_t>> &extra_tx_map, const transaction &tx, uint64_t height, bool miner)
-{
-  MTRACE("Blockchain::" << __func__);
-  for (size_t i = 0; i < tx.vout.size(); ++i)
-  {
-    const auto &out = tx.vout[i];
-    if (out.target.type() != typeid(txout_to_key))
-      continue;
-    const txout_to_key &out_to_key = boost::get<txout_to_key>(out.target);
-    rct::key commitment;
-    uint64_t amount = out.amount;
-    if (miner && tx.version == 2)
-    {
-      commitment = rct::zeroCommit(amount);
-      amount = 0;
-    }
-    else if (tx.version > 1)
-    {
-      CHECK_AND_ASSERT_MES(i < tx.rct_signatures.outPk.size(), false, "Invalid outPk size");
-      commitment = tx.rct_signatures.outPk[i].mask;
-    }
-    else
-      commitment = rct::zero();
-    extra_tx_map[amount].push_back(output_data_t{out_to_key.key, tx.unlock_time, height, commitment});
-  }
-  return true;
-}
-
 bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry, std::vector<block> &blocks)
 {
   MTRACE("Blockchain::" << __func__);
