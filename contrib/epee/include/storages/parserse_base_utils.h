@@ -30,11 +30,30 @@
 
 #include <algorithm>
 #include <boost/utility/string_ref.hpp>
+#include <boost/optional.hpp>
 
 namespace epee 
 {
 namespace misc_utils
 {
+  class backed_string_ref: public boost::string_ref
+  {
+  public:
+    backed_string_ref(): boost::string_ref() {}
+    backed_string_ref(const char *ptr, size_t n): boost::string_ref(ptr, n) {}
+    backed_string_ref(const std::string &s): backing_string(s) { *(boost::string_ref*)this = boost::string_ref(backing_string->data(), backing_string->size()); }
+
+    std::string take_string()
+    {
+      if (backing_string)
+        return std::move(*backing_string);
+      return std::string(data(), size());
+    }
+
+  private:
+    boost::optional<std::string> backing_string;
+  };
+
   namespace parse
   {
     // 1: digit
@@ -125,7 +144,7 @@ namespace misc_utils
       \\  Backslash character
 
       */
-      inline void match_string2(std::string::const_iterator& star_end_string, std::string::const_iterator buf_end, std::string& val)
+      inline void match_string2(std::string::const_iterator& star_end_string, std::string::const_iterator buf_end, backed_string_ref& sval)
       {
         bool escape_mode = false;
         std::string::const_iterator it = star_end_string;
@@ -133,6 +152,14 @@ namespace misc_utils
         std::string::const_iterator fi = it;
         while (fi != buf_end && ((lut[(uint8_t)*fi] & 32)) == 0)
           ++fi;
+        if (fi == buf_end || *fi == '\"')
+        {
+          // common case, no escapes, we don't need backing
+          star_end_string = fi;
+          sval = backed_string_ref(&*it, std::distance(it, fi));
+          return;
+        }
+        std::string val;
         val.assign(it, fi);
         val.reserve(std::distance(star_end_string, buf_end));
         it = fi;
@@ -170,6 +197,7 @@ namespace misc_utils
           }else if(*it == '"')
           {
             star_end_string = it;
+            sval = backed_string_ref(std::move(val));
             return;
           }else if(*it == '\\')
           {
@@ -182,7 +210,7 @@ namespace misc_utils
         }
         ASSERT_MES_AND_THROW("Failed to match string in json entry: " << std::string(star_end_string, buf_end));
       }
-      inline bool match_string(std::string::const_iterator& star_end_string, std::string::const_iterator buf_end, std::string& val)
+      inline bool match_string(std::string::const_iterator& star_end_string, std::string::const_iterator buf_end, backed_string_ref& val)
       {
         try
         {
