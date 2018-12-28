@@ -45,6 +45,7 @@ set(common_sources
   threadpool.cpp
   updates.cpp
   aligned.c
+  timings.cc
   combinator.cpp)
 
 if (STACK_TRACE)
@@ -83,6 +84,7 @@ set(common_private_headers
   threadpool.h
   updates.h
   aligned.h
+  timings.h
   combinator.h)
 
 monero_private_headers(common
