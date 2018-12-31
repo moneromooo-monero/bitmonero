@@ -1184,6 +1184,9 @@ private:
     void update_pool_state(bool refreshed = false);
     void remove_obsolete_pool_txs(const std::vector<crypto::hash> &tx_hashes);
 
+    crypto::signature authenticate(const boost::string_ref &data, const crypto::secret_key &skey) const;
+    bool verify_authenticity(const std::string &ciphertext, const crypto::secret_key &skey) const;
+
     std::string encrypt(const char *plaintext, size_t len, const crypto::secret_key &skey, bool authenticated = true) const;
     std::string encrypt(const epee::span<char> &span, const crypto::secret_key &skey, bool authenticated = true) const;
     std::string encrypt(const std::string &plaintext, const crypto::secret_key &skey, bool authenticated = true) const;

@@ -12533,6 +12533,17 @@ size_t wallet2::import_multisig(std::vector<cryptonote::blobdata> blobs)
   return n_outputs;
 }
 //----------------------------------------------------------------------------------------------------
+crypto::signature wallet2::authenticate(const boost::string_ref &data, const crypto::secret_key &skey) const
+{
+  crypto::hash hash;
+  crypto::cn_fast_hash(data.data(), data.size(), hash);
+  crypto::public_key pkey;
+  crypto::secret_key_to_public_key(skey, pkey);
+  crypto::signature signature;
+  crypto::generate_signature(hash, pkey, skey, signature);
+  return signature;
+}
+//----------------------------------------------------------------------------------------------------
 std::string wallet2::encrypt(const char *plaintext, size_t len, const crypto::secret_key &skey, bool authenticated) const
 {
   crypto::chacha_key key;
@@ -12544,12 +12555,8 @@ std::string wallet2::encrypt(const char *plaintext, size_t len, const crypto::se
   memcpy(&ciphertext[0], &iv, sizeof(iv));
   if (authenticated)
   {
-    crypto::hash hash;
-    crypto::cn_fast_hash(ciphertext.data(), ciphertext.size() - sizeof(signature), hash);
-    crypto::public_key pkey;
-    crypto::secret_key_to_public_key(skey, pkey);
     crypto::signature &signature = *(crypto::signature*)&ciphertext[ciphertext.size() - sizeof(crypto::signature)];
-    crypto::generate_signature(hash, pkey, skey, signature);
+    signature = authenticate(boost::string_ref(ciphertext.data(), ciphertext.size() - sizeof(crypto::signature)), skey);
   }
   return ciphertext;
 }
@@ -12574,6 +12581,20 @@ std::string wallet2::encrypt_with_view_secret_key(const std::string &plaintext, 
   return encrypt(plaintext, get_account().get_keys().m_view_secret_key, authenticated);
 }
 //----------------------------------------------------------------------------------------------------
+bool wallet2::verify_authenticity(const std::string &ciphertext, const crypto::secret_key &skey) const
+{
+  const size_t prefix_size = sizeof(chacha_iv) + sizeof(crypto::signature);
+  THROW_WALLET_EXCEPTION_IF(ciphertext.size() < prefix_size,
+    error::wallet_internal_error, "Unexpected ciphertext size");
+
+  crypto::hash hash;
+  crypto::cn_fast_hash(ciphertext.data(), ciphertext.size() - sizeof(signature), hash);
+  crypto::public_key pkey;
+  crypto::secret_key_to_public_key(skey, pkey);
+  const crypto::signature &signature = *(const crypto::signature*)&ciphertext[ciphertext.size() - sizeof(crypto::signature)];
+  return crypto::check_signature(hash, pkey, signature);
+}
+//----------------------------------------------------------------------------------------------------
 template<typename T>
 T wallet2::decrypt(const std::string &ciphertext, const crypto::secret_key &skey, bool authenticated) const
 {
@@ -12586,12 +12607,7 @@ T wallet2::decrypt(const std::string &ciphertext, const crypto::secret_key &skey
   const crypto::chacha_iv &iv = *(const crypto::chacha_iv*)&ciphertext[0];
   if (authenticated)
   {
-    crypto::hash hash;
-    crypto::cn_fast_hash(ciphertext.data(), ciphertext.size() - sizeof(signature), hash);
-    crypto::public_key pkey;
-    crypto::secret_key_to_public_key(skey, pkey);
-    const crypto::signature &signature = *(const crypto::signature*)&ciphertext[ciphertext.size() - sizeof(crypto::signature)];
-    THROW_WALLET_EXCEPTION_IF(!crypto::check_signature(hash, pkey, signature),
+    THROW_WALLET_EXCEPTION_IF(!verify_authenticity(ciphertext, skey),
       error::wallet_internal_error, "Failed to authenticate ciphertext");
   }
   std::unique_ptr<char[]> buffer{new char[ciphertext.size() - prefix_size]};
