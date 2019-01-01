@@ -640,8 +640,14 @@ block Blockchain::pop_block_from_blockchain()
   }
 
   // return transactions from popped block to the tx_pool
+  size_t pruned = 0;
   for (transaction& tx : popped_txs)
   {
+    if (tx.pruned)
+    {
+      ++pruned;
+      continue;
+    }
     if (!is_coinbase(tx))
     {
       cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
@@ -668,6 +674,8 @@ block Blockchain::pop_block_from_blockchain()
       }
     }
   }
+  if (pruned)
+    MWARNING(pruned << " pruned txes could not be added back to the txpool");
 
   m_blocks_longhash_table.clear();
   m_scan_table.clear();
