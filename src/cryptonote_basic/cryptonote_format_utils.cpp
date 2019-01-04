@@ -455,9 +455,11 @@ namespace cryptonote
     return r;
   }
   //---------------------------------------------------------------
-  bool parse_tx_extra(const std::vector<uint8_t>& tx_extra, std::vector<tx_extra_field>& tx_extra_fields)
+  bool parse_tx_extra(const std::vector<uint8_t>& tx_extra, std::vector<tx_extra_field>& tx_extra_fields, std::vector<uint8_t> *unparsed)
   {
     tx_extra_fields.clear();
+    if (unparsed)
+      unparsed->clear();
 
     if(tx_extra.empty())
       return true;
@@ -467,18 +469,38 @@ namespace cryptonote
     binary_archive<false> ar(iss);
 
     bool eof = false;
+    size_t processed = 0;
     while (!eof)
     {
       tx_extra_field field;
       bool r = ::do_serialize(ar, field);
-      CHECK_AND_NO_ASSERT_MES_L1(r, false, "failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
+      if (!r)
+      {
+        MERROR("failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
+        if (unparsed)
+        {
+          unparsed->resize(tx_extra.size() - processed);
+          memcpy(unparsed->data(), tx_extra.data() + processed, tx_extra.size() - processed);
+        }
+        return false;
+      }
       tx_extra_fields.push_back(field);
+      processed = iss.tellg();
 
       std::ios_base::iostate state = iss.rdstate();
       eof = (EOF == iss.peek());
       iss.clear(state);
     }
-    CHECK_AND_NO_ASSERT_MES_L1(::serialization::check_stream_state(ar), false, "failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
+    if (!::serialization::check_stream_state(ar))
+    {
+      MERROR("failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
+      if (unparsed)
+      {
+        unparsed->resize(tx_extra.size() - processed);
+        memcpy(unparsed->data(), tx_extra.data() + processed, tx_extra.size() - processed);
+      }
+      return false;
+    }
 
     return true;
   }
@@ -508,36 +530,10 @@ namespace cryptonote
       return true;
     }
 
-    std::string extra_str(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size());
-    std::istringstream iss(extra_str);
-    binary_archive<false> ar(iss);
-
-    bool eof = false;
-    size_t processed = 0;
-    while (!eof)
-    {
-      tx_extra_field field;
-      bool r = ::do_serialize(ar, field);
-      if (!r)
-      {
-        MWARNING("failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
-        if (!allow_partial)
-          return false;
-        break;
-      }
-      tx_extra_fields.push_back(field);
-      processed = iss.tellg();
-
-      std::ios_base::iostate state = iss.rdstate();
-      eof = (EOF == iss.peek());
-      iss.clear(state);
-    }
-    if (!::serialization::check_stream_state(ar))
-    {
-      MWARNING("failed to deserialize extra field. extra = " << string_tools::buff_to_hex_nodelimer(std::string(reinterpret_cast<const char*>(tx_extra.data()), tx_extra.size())));
-      if (!allow_partial)
-        return false;
-    }
+    std::vector<uint8_t> unparsed;
+    if (!parse_tx_extra(tx_extra, tx_extra_fields, &unparsed) && !allow_partial)
+      return false;
+    const size_t processed = tx_extra.size() - unparsed.size();
     MTRACE("Sorted " << processed << "/" << tx_extra.size());
 
     std::ostringstream oss;
@@ -562,7 +558,7 @@ namespace cryptonote
     if (allow_partial && processed < tx_extra.size())
     {
       MDEBUG("Appending unparsed data");
-      oss_str += std::string((const char*)tx_extra.data() + processed, tx_extra.size() - processed);
+      oss_str += std::string((const char*)unparsed.data(), unparsed.size());
     }
     sorted_tx_extra = std::vector<uint8_t>(oss_str.begin(), oss_str.end());
     return true;
