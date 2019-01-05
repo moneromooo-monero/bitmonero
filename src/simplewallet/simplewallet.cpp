@@ -6119,7 +6119,6 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       tools::wallet2::multiuser_public_setup public_setup;
 
       private_setup.vin = ptx.tx.vin;
-// if disclosing, need to add change vout, but not the other
       private_setup.vout = ptx.tx.vout;
       private_setup.muout = muout;
       private_setup.tx_key = cryptonote::get_tx_pub_key_from_extra(ptx.tx);
@@ -9492,22 +9491,22 @@ bool simple_wallet::sign_multiuser(const std::vector<std::string>& args)
     r = m_wallet->sign_multiuser_tx(multiuser_txs);
     if (!r)
     {
-      fail_msg_writer() << tr("Failed to signed multiuser tx");
+      fail_msg_writer() << tr("Failed to signed multiuser transaction");
       return true;
     }
   }
   catch (const std::exception &e)
   {
-    fail_msg_writer() << tr("Failed to sign multiuser tx: ") << e.what();
+    fail_msg_writer() << tr("Failed to sign multiuser transaction: ") << e.what();
     return true;
   }
   r = m_wallet->save_multiuser_tx_to_file(multiuser_txs, "multiuser_monero_tx");
   if (!r)
   {
-    fail_msg_writer() << tr("Failed to write transaction(s) to file");
+    fail_msg_writer() << tr("Failed to write mulituser transaction to file");
     return false;
   }
-  success_msg_writer(true) << tr("Unsigned transaction(s) successfully written to file: ") << "multiuser_monero_tx";
+  success_msg_writer(true) << tr("Multiuser transaction successfully written to file: ") << "multiuser_monero_tx";
   return true;
 }
 //----------------------------------------------------------------------------------------------------

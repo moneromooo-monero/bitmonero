@@ -3811,7 +3811,6 @@ bool wallet2::load_multiuser_setup(std::string data, multiuser_private_setup &pr
   multiuser_setup multiuser_setup;
   try
   {
-    MDEBUG("Loading multiuser setup data: " << data);
     std::istringstream iss(data);
     boost::archive::portable_binary_iarchive ar(iss);
     ar >> multiuser_setup;
@@ -3865,7 +3864,6 @@ std::string wallet2::save_multiuser_tx(const multiuser_tx_set &txs)
   {
     return "";
   }
-  LOG_PRINT_L2("Saving multiuser txs data: " << oss.str());
   return MULTIUSER_TX_PREFIX + oss.str();
 }
 //----------------------------------------------------------------------------------------------------
@@ -3975,6 +3973,21 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     new_ptx.tx.rct_signatures.p.bulletproofs.push_back(proof);
 
   new_ptx.tx.rct_signatures.txnFee = old_ptx.tx.rct_signatures.txnFee + ptx.tx.rct_signatures.txnFee;
+
+  // sort inputs by key images
+  std::vector<size_t> ins_order(new_ptx.tx.vin.size());
+  for (size_t n = 0; n < ins_order.size(); ++n)
+    ins_order[n] = n;
+  std::sort(ins_order.begin(), ins_order.end(), [&](size_t i0, size_t i1) {
+    const txin_to_key &tk0 = boost::get<txin_to_key>(new_ptx.tx.vin[i0]);
+    const txin_to_key &tk1 = boost::get<txin_to_key>(new_ptx.tx.vin[i1]);
+    return memcmp(&tk0.k_image, &tk1.k_image, sizeof(tk0.k_image)) > 0;
+  });
+  tools::apply_permutation(ins_order, [&] (size_t i0, size_t i1) {
+    std::swap(new_ptx.tx.vin[i0], new_ptx.tx.vin[i1]);
+    std::swap(new_ptx.tx.rct_signatures.p.pseudoOuts[i0], new_ptx.tx.rct_signatures.p.pseudoOuts[i1]);
+    std::swap(new_mixRing[i0], new_mixRing[i1]);
+  });
 
   // merge tx keys
   std::vector<uint8_t> extra = old_ptx.tx.extra, unparsed;
@@ -7338,7 +7351,6 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
   rct::multiuser_out muout;
   muout.a.resize(n_inputs, rct::zero());
   muout.index.resize(n_inputs, 0);
-  size_t original_i = 0;
   for (size_t i = 0; i < n_inputs; ++i)
   {
     THROW_WALLET_EXCEPTION_IF(tx.vin[i].type() != typeid(cryptonote::txin_to_key),
@@ -7358,12 +7370,25 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
             error::wallet_internal_error, "Failed to generate key image");
         inSk[i].dest = rct::sk2rct(in_ephemeral.sec);
         inSk[i].mask = td.m_mask;
+
+        // work out which original input it was before it got sorted
+        size_t original_i;
+        THROW_WALLET_EXCEPTION_IF(original_muout.a.size() != private_setup.vin.size(), error::wallet_internal_error, "Unexpected a/vin size");
+        for (original_i = 0; original_i < private_setup.vin.size(); ++original_i)
+        {
+          if (private_setup.vin[original_i].type() != typeid(cryptonote::txin_to_key))
+            continue;
+          const cryptonote::txin_to_key &ink = boost::get<cryptonote::txin_to_key>(private_setup.vin[original_i]);
+          if (ink.k_image == in.k_image)
+            break;
+        }
+        CHECK_AND_ASSERT_THROW_MES(original_i < private_setup.vin.size(), "vin not found");
+
         CHECK_AND_ASSERT_THROW_MES(original_i < original_muout.a.size(), "Invalid offset in a");
         muout.a[i] = original_muout.a[original_i];
         CHECK_AND_ASSERT_THROW_MES(original_i < original_muout.index.size(), "Invalid offset in index");
         muout.index[i] = original_muout.index[original_i];
         owned[i] = true;
-        ++original_i;
         break;
       }
     }
