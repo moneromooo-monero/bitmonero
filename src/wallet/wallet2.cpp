@@ -7247,8 +7247,6 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
     our_outputs[i + original_muout.output_offset] = true;
   }
 
-#warning TODO: check conditions
-
   // check claimed destinations are what they claim to be
   std::unordered_map<cryptonote::account_public_address, uint64_t> third_party_payments;
   for (const auto &setup: mtx.m_setup)
@@ -7370,6 +7368,10 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
       }
     }
   }
+
+  // check sundry
+  THROW_WALLET_EXCEPTION_IF(mtx.m_ptx.tx.unlock_time != 0, error::wallet_internal_error, "The transaction has an unlock_time set");
+
   mtx.m_building = false;
   rv.message = rct::hash2rct(cryptonote::get_transaction_prefix_hash(tx));
   rv.mixRing = mtx.m_mixRing;
