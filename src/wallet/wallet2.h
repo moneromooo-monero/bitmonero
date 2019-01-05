@@ -463,10 +463,12 @@ private:
     {
       std::vector<cryptonote::tx_destination_entry> dests;
       std::vector<cryptonote::tx_destination_entry> conditions;
+      uint64_t unlock_time;
 
       BEGIN_SERIALIZE_OBJECT()
         FIELD(dests)
         FIELD(conditions)
+        VARINT_FIELD(unlock_time)
       END_SERIALIZE()
     };
 
@@ -1812,6 +1814,7 @@ namespace boost
     {
       a & x.dests;
       a & x.conditions;
+      a & x.unlock_time;
     }
 
     template <class Archive>

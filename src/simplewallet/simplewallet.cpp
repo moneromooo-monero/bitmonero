@@ -5639,12 +5639,14 @@ bool simple_wallet::accept_loaded_multiuser_tx(const tools::wallet2::multiuser_t
 
       for (const auto &dest: public_setup.dests)
       {
-        message_writer() << "  claims to pay " << print_money(dest.amount) << " to " << cryptonote::get_account_address_as_str(m_wallet->nettype(), dest.is_subaddress, dest.addr);
+        message_writer() << "  " << (boost::format("claims to pay %s to %s") % print_money(dest.amount) % cryptonote::get_account_address_as_str(m_wallet->nettype(), dest.is_subaddress, dest.addr)).str();
       }
       for (const auto &dest: public_setup.conditions)
       {
-        message_writer() << "  wants others to pay " << cryptonote::print_money(dest.amount) << " to " << cryptonote::get_account_address_as_str(m_wallet->nettype(), dest.is_subaddress, dest.addr);
+        message_writer() << "  " << (boost::format("wants others to pay %s to %s") % cryptonote::print_money(dest.amount) % cryptonote::get_account_address_as_str(m_wallet->nettype(), dest.is_subaddress, dest.addr)).str();
       }
+      if (public_setup.unlock_time)
+        message_writer() << tr("requires unlock time: ") << public_setup.unlock_time;
     }
     else
     {
@@ -6129,6 +6131,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
           public_setup.dests.push_back(dst);
       }
       public_setup.conditions = multiuser_other_dsts;
+      public_setup.unlock_time = ptx.tx.unlock_time;
 
       std::string data;
       if (!m_wallet->save_multiuser_setup(private_setup, public_setup, data))
