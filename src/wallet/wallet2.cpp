@@ -7370,7 +7370,8 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
   }
 
   // check sundry
-  THROW_WALLET_EXCEPTION_IF(mtx.m_ptx.tx.unlock_time != 0, error::wallet_internal_error, "The transaction has an unlock_time set");
+  THROW_WALLET_EXCEPTION_IF(mtx.m_ptx.tx.unlock_time != public_setup.unlock_time, error::wallet_internal_error,
+      "The transaction has an unlock_time which differs from our own");
 
   mtx.m_building = false;
   rv.message = rct::hash2rct(cryptonote::get_transaction_prefix_hash(tx));
