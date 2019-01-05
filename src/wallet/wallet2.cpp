@@ -7163,8 +7163,8 @@ bool wallet2::sign_multisig_tx_from_file(const std::string &filename, std::vecto
 bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
 {
   cryptonote::transaction &tx = mtx.m_ptx.tx;
-  if (!is_suitable_for_multiuser(tx))
-    return false;
+  THROW_WALLET_EXCEPTION_IF(!is_suitable_for_multiuser(tx), error::wallet_internal_error,
+      "Transaction is not suitable for multiuser");
 
   rct::rctSig &rv = tx.rct_signatures;
   bool found = false;
@@ -7179,28 +7179,20 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
       break;
     }
   }
-  if (!found)
-  {
-    MERROR("original multiuser private setup not found");
-    return false;
-  }
+  THROW_WALLET_EXCEPTION_IF(!found, error::wallet_internal_error, "original multiuser private setup not found");
   const rct::multiuser_out &original_muout = private_setup.muout;
 
   hw::device &hwdev =  m_account.get_device();
 
   // check the tx keys are the same, in the right place
   const crypto::public_key actual_tx_key = cryptonote::get_tx_pub_key_from_extra(tx);
-  if (private_setup.tx_key != actual_tx_key)
-  {
-    MERROR("tx key is not the expected one");
-    return false;
-  }
+  THROW_WALLET_EXCEPTION_IF(private_setup.tx_key != actual_tx_key, error::wallet_internal_error, "tx key is not the expected one");
   const std::vector<crypto::public_key> actual_additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(tx);
   for (size_t i = 0; i < private_setup.additional_tx_keys.size(); ++i)
   {
     if ((i + original_muout.output_offset >= actual_additional_tx_keys.size()) || (private_setup.additional_tx_keys[i] != actual_additional_tx_keys[i + original_muout.output_offset]))
     {
-      MERROR("additional tx keys are not the expected ones");
+      THROW_WALLET_EXCEPTION(error::wallet_internal_error, "additional tx keys are not the expected ones");
       return false;
     }
   }
@@ -7233,32 +7225,24 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
         return false;
       return true;
     });
-    if (it == tx.vin.end())
-    {
-      MERROR("One of our inputs to the original multiuser transaction was not found in the final transaction to be signed");
-      return false;
-    }
+    THROW_WALLET_EXCEPTION_IF(it == tx.vin.end(), error::wallet_internal_error,
+        "One of our inputs to the original multiuser transaction was not found in the final transaction to be signed");
   }
 
   // check our outs are present, in the right place
   std::vector<bool> our_outputs(tx.vout.size(), false);
   for (size_t i = 0; i < private_setup.vout.size(); ++i)
   {
-    if (i + original_muout.output_offset >= tx.vout.size())
-    {
-      MERROR("One of our outputs to the original multiuser transaction was not found in the final transaction to be signed");
-      return false;
-    }
+    THROW_WALLET_EXCEPTION_IF(i + original_muout.output_offset >= tx.vout.size(), error::wallet_internal_error,
+        "One of our outputs to the original multiuser transaction was not found in the final transaction to be signed");
+
     const cryptonote::tx_out &pout = private_setup.vout[i];
     const cryptonote::tx_out &out = tx.vout[i + original_muout.output_offset];
     CHECKED_GET_SPECIFIC_VARIANT(pout.target, const txout_to_key, poutk, false);
     CHECKED_GET_SPECIFIC_VARIANT(out.target, const txout_to_key, outk, false);
 
-    if (pout.amount != out.amount || poutk.key != outk.key)
-    {
-      MERROR("One of our outputs to the original multiuser transaction was not found in the final transaction to be signed");
-      return false;
-    }
+    THROW_WALLET_EXCEPTION_IF(pout.amount != out.amount || poutk.key != outk.key, error::wallet_internal_error,
+        "One of our outputs to the original multiuser transaction was not found in the final transaction to be signed");
 
     our_outputs[i + original_muout.output_offset] = true;
   }
@@ -7328,6 +7312,9 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
         if (rct::equalKeys(C, Ctmp))
           received += rct::h2d(ecdh_info.amount);
 
+        THROW_WALLET_EXCEPTION_IF(third_party_payments[dest.addr] > std::numeric_limits<uint64_t>::max() - received,
+            error::wallet_internal_error, "Amount overflow");
+
         third_party_payments[dest.addr] += received;
         output_used[n] = true;
       }
@@ -7356,11 +7343,9 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
   size_t original_i = 0;
   for (size_t i = 0; i < n_inputs; ++i)
   {
-    if (tx.vin[i].type() != typeid(cryptonote::txin_to_key))
-    {
-      MERROR("multiuser tx vin has unexpected type: " << tx.vin[i].type().name());
-      return false;
-    }
+    THROW_WALLET_EXCEPTION_IF(tx.vin[i].type() != typeid(cryptonote::txin_to_key),
+        error::wallet_internal_error, "multiuser tx vin has unexpected type: " + std::string(tx.vin[i].type().name()));
+
     const cryptonote::txin_to_key &in = boost::get<cryptonote::txin_to_key>(tx.vin[i]);
     for (const transfer_details &td: m_transfers)
     {
@@ -7371,16 +7356,13 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
         cryptonote::keypair in_ephemeral;
         const crypto::public_key tx_pub_key = get_tx_pub_key_from_extra(td.m_tx, td.m_pk_index);
         const std::vector<crypto::public_key> additional_tx_pub_keys = get_additional_tx_pub_keys_from_extra(td.m_tx);
-        if (!generate_key_image_helper(keys, m_subaddresses, td.get_public_key(), tx_pub_key, additional_tx_pub_keys, td.m_internal_output_index, in_ephemeral, img, hwdev))
-        {
-          MERROR("Failed to generate key image");
-          return false;
-        }
+        THROW_WALLET_EXCEPTION_IF(!generate_key_image_helper(keys, m_subaddresses, td.get_public_key(), tx_pub_key, additional_tx_pub_keys, td.m_internal_output_index, in_ephemeral, img, hwdev),
+            error::wallet_internal_error, "Failed to generate key image");
         inSk[i].dest = rct::sk2rct(in_ephemeral.sec);
         inSk[i].mask = td.m_mask;
-        CHECK_AND_ASSERT_MES(original_i < original_muout.a.size(), false, "Invalid offset in a");
+        CHECK_AND_ASSERT_THROW_MES(original_i < original_muout.a.size(), "Invalid offset in a");
         muout.a[i] = original_muout.a[original_i];
-        CHECK_AND_ASSERT_MES(original_i < original_muout.index.size(), false, "Invalid offset in index");
+        CHECK_AND_ASSERT_THROW_MES(original_i < original_muout.index.size(), "Invalid offset in index");
         muout.index[i] = original_muout.index[original_i];
         owned[i] = true;
         ++original_i;
