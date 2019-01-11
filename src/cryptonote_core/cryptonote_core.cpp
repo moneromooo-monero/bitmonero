@@ -106,6 +106,11 @@ namespace cryptonote
     "disable-dns-checkpoints"
   , "Do not retrieve checkpoints from DNS"
   };
+  const command_line::arg_descriptor<size_t> arg_block_download_max_size  = {
+    "block-download-max-size"
+  , "Set maximum size of block download queue in bytes (0 for default)"
+  , 0
+  };
 
   static const command_line::arg_descriptor<bool> arg_test_drop_download = {
     "test-drop-download"
@@ -298,6 +303,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_test_dbg_lock_sleep);
     command_line::add_arg(desc, arg_offline);
     command_line::add_arg(desc, arg_disable_dns_checkpoints);
+    command_line::add_arg(desc, arg_block_download_max_size);
     command_line::add_arg(desc, arg_max_txpool_weight);
     command_line::add_arg(desc, arg_pad_transactions);
     command_line::add_arg(desc, arg_block_notify);

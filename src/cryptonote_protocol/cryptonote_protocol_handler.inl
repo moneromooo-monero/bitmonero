@@ -93,6 +93,9 @@ namespace cryptonote
     m_sync_bad_spans_downloaded = 0;
     m_sync_download_chain_size = 0;
     m_sync_download_objects_size = 0;
+
+    m_block_download_max_size = command_line::get_arg(vm, cryptonote::arg_block_download_max_size);
+
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------
@@ -1672,7 +1675,8 @@ skip:
         const auto next_needed_pruning_stripe = get_next_needed_pruning_stripe();
         const uint32_t add_stripe = tools::get_pruning_stripe(bc_height, context.m_remote_blockchain_height, CRYPTONOTE_PRUNING_LOG_STRIPES);
         const uint32_t peer_stripe = tools::get_pruning_stripe(context.m_pruning_seed);
-        bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < BLOCK_QUEUE_SIZE_THRESHOLD;
+        const size_t block_queue_size_threshold = m_block_download_max_size ? m_block_download_max_size : BLOCK_QUEUE_SIZE_THRESHOLD;
+        bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < block_queue_size_threshold;
         // get rid of blocks we already requested, or already have
         skip_unneeded_hashes(context, true);
         uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
