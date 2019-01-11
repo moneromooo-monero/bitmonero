@@ -116,8 +116,8 @@ namespace
     for (std::vector<Language::Base*>::iterator it1 = language_instances.begin();
       it1 != language_instances.end(); it1++)
     {
-      const std::unordered_map<epee::wipeable_string, uint32_t> &word_map = (*it1)->get_word_map();
-      const std::unordered_map<epee::wipeable_string, uint32_t> &trimmed_word_map = (*it1)->get_trimmed_word_map();
+      const std::unordered_map<epee::wipeable_string, uint32_t, Language::WordHash, Language::WordEqual> &word_map = (*it1)->get_word_map();
+      const std::unordered_map<epee::wipeable_string, uint32_t, Language::WordHash, Language::WordEqual> &trimmed_word_map = (*it1)->get_trimmed_word_map();
       // To iterate through seed words
       bool full_match = true;
 
@@ -230,7 +230,7 @@ namespace
       checksum;
     epee::wipeable_string trimmed_last_word = last_word.length() > unique_prefix_length ? Language::utf8prefix(last_word, unique_prefix_length) :
       last_word;
-    bool ret = trimmed_checksum == trimmed_last_word;
+    bool ret = Language::WordEqual()(trimmed_checksum, trimmed_last_word);
     MINFO("Checksum is " << (ret ? "valid" : "invalid"));
     return ret;
   }
