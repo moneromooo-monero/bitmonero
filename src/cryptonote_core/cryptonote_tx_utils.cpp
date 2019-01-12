@@ -198,6 +198,31 @@ namespace cryptonote
     return addr.m_view_public_key;
   }
   //---------------------------------------------------------------
+  bool create_output(const tx_destination_entry &dst_entr, size_t output_index, cryptonote::tx_out &vout, crypto::secret_key &tx_key, crypto::secret_key &amount_key, hw::device &hwdev)
+  {
+    crypto::key_derivation derivation;
+    crypto::public_key out_eph_public_key;
+
+    tx_key = cryptonote::keypair::generate(hwdev).sec;
+
+    bool r = hwdev.generate_key_derivation(dst_entr.addr.m_view_public_key, tx_key, derivation);
+    CHECK_AND_ASSERT_MES(r, false, "create_output: failed to generate_key_derivation(" << dst_entr.addr.m_view_public_key << ", " << tx_key << ")");
+
+    crypto::secret_key scalar1;
+    hwdev.derivation_to_scalar(derivation, output_index, scalar1);
+    amount_key = scalar1;
+
+    r = hwdev.derive_public_key(derivation, output_index, dst_entr.addr.m_spend_public_key, out_eph_public_key);
+    CHECK_AND_ASSERT_MES(r, false, "create_output: failed to derive_public_key(" << derivation << ", " << output_index << ", "<< dst_entr.addr.m_spend_public_key << ")");
+
+    vout.amount = dst_entr.amount;
+    txout_to_key tk;
+    tk.key = out_eph_public_key;
+    vout.target = tk;
+
+    return true;
+  }
+  //---------------------------------------------------------------
   bool construct_tx_with_tx_key(const account_keys& sender_account_keys, const std::unordered_map<crypto::public_key, subaddress_index>& subaddresses, std::vector<tx_source_entry>& sources, std::vector<tx_destination_entry>& destinations, const boost::optional<cryptonote::account_public_address>& change_addr, const std::vector<uint8_t> &extra, transaction& tx, uint64_t unlock_time, const crypto::secret_key &tx_key, const std::vector<crypto::secret_key> &additional_tx_keys, bool rct, const rct::RCTConfig &rct_config, rct::multisig_out *msout, rct::multiuser_out *muout, bool shuffle_outs)
   {
     hw::device &hwdev = sender_account_keys.get_device();
