@@ -3923,7 +3923,8 @@ bool wallet2::load_multiuser_tx_from_file(const std::string &filename, multiuser
 //----------------------------------------------------------------------------------------------------
 bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool add_vouts)
 {
-  if (!(multiuser_txs.m_ptx.tx == cryptonote::transaction()) && !is_suitable_for_multiuser(multiuser_txs.m_ptx.tx))
+  const bool first = multiuser_txs.m_ptx.tx == cryptonote::transaction();
+  if (!first && !is_suitable_for_multiuser(multiuser_txs.m_ptx.tx))
     return false;
   if (!is_suitable_for_multiuser(ptx.tx))
     return false;
@@ -3972,7 +3973,7 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
   for (const rct::Bulletproof &proof: ptx.tx.rct_signatures.p.bulletproofs)
     new_ptx.tx.rct_signatures.p.bulletproofs.push_back(proof);
 
-  new_ptx.tx.rct_signatures.txnFee = old_ptx.tx.rct_signatures.txnFee + ptx.tx.rct_signatures.txnFee;
+  new_ptx.tx.rct_signatures.txnFee = (first ? 0 : old_ptx.tx.rct_signatures.txnFee) + ptx.tx.rct_signatures.txnFee;
 
   // sort inputs by key images
   std::vector<size_t> ins_order(new_ptx.tx.vin.size());
