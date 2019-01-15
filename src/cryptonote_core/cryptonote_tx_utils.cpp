@@ -215,7 +215,7 @@ namespace cryptonote
     r = hwdev.derive_public_key(derivation, output_index, dst_entr.addr.m_spend_public_key, out_eph_public_key);
     CHECK_AND_ASSERT_MES(r, false, "create_output: failed to derive_public_key(" << derivation << ", " << output_index << ", "<< dst_entr.addr.m_spend_public_key << ")");
 
-    vout.amount = dst_entr.amount;
+    vout.amount = 0;
     txout_to_key tk;
     tk.key = out_eph_public_key;
     vout.target = tk;
