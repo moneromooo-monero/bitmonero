@@ -4067,6 +4067,11 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
     new_ptx.tx.rct_signatures.outPk[out_idx + output_offset].mask = std::get<3>(vouts.back()[out_idx + output_offset]);
     new_ptx.tx.rct_signatures.p.bulletproofs[out_idx + output_offset] = std::get<4>(vouts.back()[out_idx + output_offset]);
     multiuser_txs.m_vouts.push_back(vouts.back());
+
+    // clear out some private information
+    new_ptx.selected_transfers.clear();
+    if (!disclose)
+      std::get<1>(vouts.back()[out_idx + output_offset]) = crypto::null_skey;
   }
 //for (size_t k = 0; k < new_ptx.tx.vout.size(); ++k) MGINFO("after creation: tx out: " << new_ptx.tx.vout[k].amount << "/" << boost::get<cryptonote::txout_to_key>(new_ptx.tx.vout[k].target).key);
   // shuffle the array, then vouts, selecting from the array
