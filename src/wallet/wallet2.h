@@ -445,7 +445,7 @@ private:
     struct multiuser_private_setup
     {
       std::vector<cryptonote::txin_v> vin;
-      std::vector<cryptonote::tx_out> vout;
+      std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> vout;
       rct::multiuser_out muout;
       crypto::public_key tx_key;
       std::vector<crypto::public_key> additional_tx_keys;
@@ -537,6 +537,7 @@ private:
       bool m_building; // if true: ignore m_ptx, add to m_setup; if false: sign m_ptx, m_setup can't change
       pending_tx m_ptx;
       std::vector<std::string> m_setup;
+      std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> m_vouts;
       rct::ctkeyM m_mixRing;
 
       multiuser_tx_set(): m_building(true) {}
@@ -545,6 +546,7 @@ private:
         FIELD(m_building)
         FIELD(m_ptx)
         FIELD(m_setup)
+        FIELD(m_vouts)
         FIELD(m_mixRing)
       END_SERIALIZE()
     };
@@ -912,7 +914,7 @@ private:
     bool save_multiuser_setup(const multiuser_private_setup &private_setup, const multiuser_public_setup &public_setup, std::string &data) const;
     bool save_multiuser_tx_to_file(const multiuser_tx_set &multiuser_txs, const std::string &filename);
     bool load_multiuser_setup(std::string data, multiuser_private_setup &private_setup, multiuser_public_setup &public_setup, bool &ours) const;
-    bool merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool add_vouts);
+    bool merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool add_vouts, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts);
     std::string save_multiuser_tx(const multiuser_tx_set &txs);
     bool load_multiuser_tx(const std::string &data, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func = NULL);
     bool load_multiuser_tx_from_file(const std::string &filename, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func = NULL);
@@ -1823,6 +1825,7 @@ namespace boost
       a & x.m_building;
       a & x.m_ptx;
       a & x.m_setup;
+      a & x.m_vouts;
       a & x.m_mixRing;
     }
 

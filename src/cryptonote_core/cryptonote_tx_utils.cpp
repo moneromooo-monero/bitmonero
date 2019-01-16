@@ -442,7 +442,7 @@ namespace cryptonote
       crypto::public_key out_eph_public_key;
 
       hwdev.generate_output_ephemeral_keys(tx.version,sender_account_keys, txkey_pub, tx_key,
-                                           dst_entr, change_addr, output_index, output_offset,
+                                           dst_entr, change_addr, output_index, output_offset, muout != NULL,
                                            need_additional_txkeys, additional_tx_keys,
                                            additional_tx_public_keys, amount_keys, out_eph_public_key);
 
