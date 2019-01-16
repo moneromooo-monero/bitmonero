@@ -6119,7 +6119,6 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       tools::wallet2::multiuser_public_setup public_setup;
 
       private_setup.vin = ptx.tx.vin;
-      private_setup.vout = ptx.tx.vout;
       private_setup.muout = muout;
       private_setup.tx_key = cryptonote::get_tx_pub_key_from_extra(ptx.tx);
       private_setup.additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(ptx.tx);
@@ -6132,6 +6131,12 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       public_setup.conditions = multiuser_other_dsts;
       public_setup.unlock_time = ptx.tx.unlock_time;
 
+      if (!m_wallet->merge_multiuser_tx(multiuser_txs, ptx, !multiuser_disclose, private_setup.vout))
+      {
+        fail_msg_writer() << tr("Failed to merge multiuser transactions");
+        return false;
+      }
+
       std::string data;
       if (!m_wallet->save_multiuser_setup(private_setup, public_setup, data))
       {
@@ -6139,12 +6144,6 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         return false;
       }
       multiuser_txs.m_setup.push_back(data);
-
-      if (!m_wallet->merge_multiuser_tx(multiuser_txs, ptx, !multiuser_disclose))
-      {
-        fail_msg_writer() << tr("Failed to merge multiuser transactions");
-        return false;
-      }
 
       bool r = m_wallet->save_multiuser_tx_to_file(multiuser_txs, "multiuser_monero_tx");
       if (!r)
