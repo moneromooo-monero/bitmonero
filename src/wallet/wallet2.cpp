@@ -3924,7 +3924,7 @@ bool wallet2::load_multiuser_tx_from_file(const std::string &filename, multiuser
   return load_multiuser_tx(s, txs, accept_func);
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool add_vouts, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts)
+bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool disclose, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts)
 {
   const bool first = multiuser_txs.m_ptx.tx == cryptonote::transaction();
   if (!first && !is_suitable_for_multiuser(multiuser_txs.m_ptx.tx))

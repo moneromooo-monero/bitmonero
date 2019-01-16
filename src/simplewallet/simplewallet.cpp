@@ -6129,7 +6129,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       public_setup.conditions = multiuser_other_dsts;
       public_setup.unlock_time = ptx.tx.unlock_time;
 
-      if (!m_wallet->merge_multiuser_tx(multiuser_txs, ptx, !multiuser_disclose, private_setup.vout))
+      if (!m_wallet->merge_multiuser_tx(multiuser_txs, ptx, multiuser_disclose, private_setup.vout))
       {
         fail_msg_writer() << tr("Failed to merge multiuser transactions");
         return false;
