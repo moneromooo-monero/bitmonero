@@ -2162,8 +2162,8 @@ namespace nodetool
   {
     CRITICAL_REGION_LOCAL(m_used_stripe_peers_mutex);
     MINFO("clearing used stripe peers");
-    for (size_t i = 0; i < 1ul << CRYPTONOTE_PRUNING_LOG_STRIPES; ++i)
-      m_used_stripe_peers[i].clear();
+    for (auto &e: m_used_stripe_peers)
+      e.clear();
   }
 
   template<class t_payload_net_handler>

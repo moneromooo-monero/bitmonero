@@ -328,6 +328,11 @@ public:
 
   bool get_output_distribution(uint64_t amount, uint64_t from_height, uint64_t to_height, std::vector<uint64_t> &distribution, uint64_t &base) const;
 
+  // helper functions
+  static int compare_uint64(const MDB_val *a, const MDB_val *b);
+  static int compare_hash32(const MDB_val *a, const MDB_val *b);
+  static int compare_string(const MDB_val *a, const MDB_val *b);
+
 private:
   void do_resize(uint64_t size_increase=0);
 

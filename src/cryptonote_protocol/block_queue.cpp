@@ -240,6 +240,11 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
     MDEBUG("reserve_span: early out: first_block_height " << first_block_height << ", last_block_height " << last_block_height << ", max_blocks " << max_blocks);
     return std::make_pair(0, 0);
   }
+  if (block_hashes.size() >= last_block_height)
+  {
+    MDEBUG("reserve_span: more block hashes than fit within last_block_height: " << block_hashes.size() << " and " << last_block_height);
+    return std::make_pair(0, 0);
+  }
 
   // skip everything we've already requested
   uint64_t span_start_height = last_block_height - block_hashes.size() + 1;
@@ -491,7 +496,6 @@ float block_queue::get_speed(const boost::uuids::uuid &connection_id) const
 float block_queue::get_download_rate(const boost::uuids::uuid &connection_id) const
 {
   boost::unique_lock<boost::recursive_mutex> lock(mutex);
-  std::unordered_map<boost::uuids::uuid, float> speeds;
   float conn_rate = -1.f;
   for (const auto &span: blocks)
   {

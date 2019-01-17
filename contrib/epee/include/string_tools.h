@@ -208,7 +208,7 @@ POP_WARNINGS
 		return boost::lexical_cast<std::string>(val);
 	}
 	//----------------------------------------------------------------------------
-	template<typename T> inline std::string to_string_hex(const T &val)
+	inline std::string to_string_hex(uint32_t val)
 	{
 		std::stringstream ss;
 		ss << std::hex << val;

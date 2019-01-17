@@ -87,35 +87,7 @@ static void close(MDB_env *env)
   mdb_env_close(env);
 }
 
-static int compare_uint64(const MDB_val *a, const MDB_val *b)
-{
-  const uint64_t va = *(const uint64_t *)a->mv_data;
-  const uint64_t vb = *(const uint64_t *)b->mv_data;
-  return (va < vb) ? -1 : va > vb;
-}
-
-static int compare_hash32(const MDB_val *a, const MDB_val *b)
-{
-  const uint32_t *va = (const uint32_t*) a->mv_data;
-  const uint32_t *vb = (const uint32_t*) b->mv_data;
-  for (int n = 7; n >= 0; n--)
-  {
-    if (va[n] == vb[n])
-      continue;
-    return va[n] < vb[n] ? -1 : 1;
-  }
-
-  return 0;
-}
-
-static int compare_string(const MDB_val *a, const MDB_val *b)
-{
-  const char *va = (const char*) a->mv_data;
-  const char *vb = (const char*) b->mv_data;
-  return strcmp(va, vb);
-}
-
-static void add_size(MDB_env *env, size_t bytes)
+static void add_size(MDB_env *env, uint64_t bytes)
 {
   try
   {
@@ -139,7 +111,7 @@ static void add_size(MDB_env *env, size_t bytes)
   MDB_stat mst;
   mdb_env_stat(env, &mst);
 
-  uint64_t new_mapsize = mei.me_mapsize + bytes;
+  uint64_t new_mapsize = (uint64_t)mei.me_mapsize + bytes;
   new_mapsize += (new_mapsize % mst.ms_psize);
 
   int result = mdb_env_set_mapsize(env, new_mapsize);
@@ -269,12 +241,7 @@ static bool is_v1_tx(MDB_cursor *c_txs_pruned, MDB_val *tx_id)
     throw std::runtime_error("Failed to find transaction pruned data: " + std::string(mdb_strerror(ret)));
   if (v.mv_size == 0)
     throw std::runtime_error("Invalid transaction pruned data");
-  uint64_t version;
-  std::string tmp((const char*)v.mv_data, v.mv_size);
-  int read = tools::read_varint(tmp.begin(), tmp.end(), version);
-  if (read <= 0)
-    throw std::runtime_error("Internal error getting transaction version");
-  return version <= 1;
+  return cryptonote::is_v1_tx(cryptonote::blobdata_ref{(const char*)v.mv_data, v.mv_size});
 }
 
 static void prune(MDB_env *env0, MDB_env *env1)
@@ -301,31 +268,31 @@ static void prune(MDB_env *env0, MDB_env *env1)
 
   dbr = mdb_dbi_open(txn0, "txs_pruned", MDB_INTEGERKEY, &dbi0_txs_pruned);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  mdb_set_compare(txn0, dbi0_txs_pruned, compare_uint64);
+  mdb_set_compare(txn0, dbi0_txs_pruned, BlockchainLMDB::compare_uint64);
   dbr = mdb_cursor_open(txn0, dbi0_txs_pruned, &cur0_txs_pruned);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn0, "txs_prunable", MDB_INTEGERKEY, &dbi0_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  mdb_set_compare(txn0, dbi0_txs_prunable, compare_uint64);
+  mdb_set_compare(txn0, dbi0_txs_prunable, BlockchainLMDB::compare_uint64);
   dbr = mdb_cursor_open(txn0, dbi0_txs_prunable, &cur0_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn0, "tx_indices", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, &dbi0_tx_indices);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  mdb_set_dupsort(txn0, dbi0_tx_indices, compare_hash32);
+  mdb_set_dupsort(txn0, dbi0_tx_indices, BlockchainLMDB::compare_hash32);
   dbr = mdb_cursor_open(txn0, dbi0_tx_indices, &cur0_tx_indices);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn1, "txs_prunable", MDB_INTEGERKEY, &dbi1_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  mdb_set_compare(txn1, dbi1_txs_prunable, compare_uint64);
+  mdb_set_compare(txn1, dbi1_txs_prunable, BlockchainLMDB::compare_uint64);
   dbr = mdb_cursor_open(txn1, dbi1_txs_prunable, &cur1_txs_prunable);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
   dbr = mdb_dbi_open(txn1, "txs_prunable_tip", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, &dbi1_txs_prunable_tip);
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
-  mdb_set_dupsort(txn1, dbi1_txs_prunable_tip, compare_uint64);
+  mdb_set_dupsort(txn1, dbi1_txs_prunable_tip, BlockchainLMDB::compare_uint64);
   dbr = mdb_cursor_open(txn1, dbi1_txs_prunable_tip, &cur1_txs_prunable_tip);
   if (dbr) throw std::runtime_error("Failed to create LMDB cursor: " + std::string(mdb_strerror(dbr)));
 
@@ -338,8 +305,7 @@ static void prune(MDB_env *env0, MDB_env *env1)
   if (dbr) throw std::runtime_error("Failed to open LMDB dbi: " + std::string(mdb_strerror(dbr)));
 
   MDB_val k, v;
-  uint32_t pruning_seed = 1 + crypto::rand<uint8_t>() % (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES);
-  pruning_seed = tools::make_pruning_seed(pruning_seed, CRYPTONOTE_PRUNING_LOG_STRIPES);
+  uint32_t pruning_seed = tools::make_pruning_seed(tools::get_random_stripe(), CRYPTONOTE_PRUNING_LOG_STRIPES);
   static char pruning_seed_key[] = "pruning_seed";
   k.mv_data = pruning_seed_key;
   k.mv_size = strlen("pruning_seed") + 1;
@@ -798,25 +764,25 @@ int main(int argc, char* argv[])
   open(env0, paths[0], db_flags, true);
   open(env1, paths[1], db_flags, false);
   copy_table(env0, env1, "blocks", MDB_INTEGERKEY, MDB_APPEND);
-  copy_table(env0, env1, "block_info", MDB_INTEGERKEY | MDB_DUPSORT| MDB_DUPFIXED, MDB_APPENDDUP, compare_uint64);
-  copy_table(env0, env1, "block_heights", MDB_INTEGERKEY | MDB_DUPSORT| MDB_DUPFIXED, 0, compare_hash32);
+  copy_table(env0, env1, "block_info", MDB_INTEGERKEY | MDB_DUPSORT| MDB_DUPFIXED, MDB_APPENDDUP, BlockchainLMDB::compare_uint64);
+  copy_table(env0, env1, "block_heights", MDB_INTEGERKEY | MDB_DUPSORT| MDB_DUPFIXED, 0, BlockchainLMDB::compare_hash32);
   //copy_table(env0, env1, "txs", MDB_INTEGERKEY);
   copy_table(env0, env1, "txs_pruned", MDB_INTEGERKEY, MDB_APPEND);
   copy_table(env0, env1, "txs_prunable_hash", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_APPEND);
   // not copied: prunable, prunable_tip
-  copy_table(env0, env1, "tx_indices", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, 0, compare_hash32);
+  copy_table(env0, env1, "tx_indices", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, 0, BlockchainLMDB::compare_hash32);
   copy_table(env0, env1, "tx_outputs", MDB_INTEGERKEY, MDB_APPEND);
-  copy_table(env0, env1, "output_txs", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_APPENDDUP, compare_uint64);
-  copy_table(env0, env1, "output_amounts", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_APPENDDUP, compare_uint64);
-  copy_table(env0, env1, "spent_keys", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_NODUPDATA, compare_hash32);
-  copy_table(env0, env1, "txpool_meta", 0, MDB_NODUPDATA, compare_hash32);
-  copy_table(env0, env1, "txpool_blob", 0, MDB_NODUPDATA, compare_hash32);
+  copy_table(env0, env1, "output_txs", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_APPENDDUP, BlockchainLMDB::compare_uint64);
+  copy_table(env0, env1, "output_amounts", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_APPENDDUP, BlockchainLMDB::compare_uint64);
+  copy_table(env0, env1, "spent_keys", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_NODUPDATA, BlockchainLMDB::compare_hash32);
+  copy_table(env0, env1, "txpool_meta", 0, MDB_NODUPDATA, BlockchainLMDB::compare_hash32);
+  copy_table(env0, env1, "txpool_blob", 0, MDB_NODUPDATA, BlockchainLMDB::compare_hash32);
   copy_table(env0, env1, "hf_versions", MDB_INTEGERKEY, MDB_APPEND);
-  copy_table(env0, env1, "properties", 0, 0, compare_string);
+  copy_table(env0, env1, "properties", 0, 0, BlockchainLMDB::compare_string);
   if (already_pruned)
   {
-    copy_table(env0, env1, "txs_prunable", MDB_INTEGERKEY, MDB_APPEND, compare_uint64);
-    copy_table(env0, env1, "txs_prunable_tip", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_NODUPDATA, compare_uint64);
+    copy_table(env0, env1, "txs_prunable", MDB_INTEGERKEY, MDB_APPEND, BlockchainLMDB::compare_uint64);
+    copy_table(env0, env1, "txs_prunable_tip", MDB_INTEGERKEY | MDB_DUPSORT | MDB_DUPFIXED, MDB_NODUPDATA, BlockchainLMDB::compare_uint64);
   }
   else
   {

@@ -28,6 +28,7 @@
 
 #include "cryptonote_config.h"
 #include "misc_log_ex.h"
+#include "crypto/crypto.h"
 #include "pruning.h"
 
 namespace tools
@@ -45,11 +46,9 @@ bool has_unpruned_block(uint64_t block_height, uint64_t blockchain_height, uint3
   const uint32_t stripe = get_pruning_stripe(pruning_seed);
   if (stripe == 0)
     return true;
-  if (block_height + CRYPTONOTE_PRUNING_TIP_BLOCKS >= blockchain_height)
-    return true;
   const uint32_t log_stripes = get_pruning_log_stripes(pruning_seed);
-  const uint64_t mask = (1ul << (log_stripes ? log_stripes : CRYPTONOTE_PRUNING_LOG_STRIPES)) - 1;
-  return ((block_height / CRYPTONOTE_PRUNING_STRIPE_SIZE) & mask) + 1 == stripe;
+  uint32_t block_stripe = get_pruning_stripe(block_height, blockchain_height, log_stripes);
+  return block_stripe == 0 || block_stripe == stripe;
 }
 
 uint32_t get_pruning_stripe(uint64_t block_height, uint64_t blockchain_height, uint32_t log_stripes)
@@ -106,6 +105,11 @@ uint64_t get_next_pruned_block_height(uint64_t block_height, uint64_t blockchain
     return block_height;
   const uint32_t next_stripe = 1 + (block_pruning_seed & mask);
   return get_next_unpruned_block_height(block_height, blockchain_height, tools::make_pruning_seed(next_stripe, log_stripes));
+}
+
+uint32_t get_random_stripe()
+{
+  return 1 + crypto::rand<uint8_t>() % (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES);
 }
 
 }
