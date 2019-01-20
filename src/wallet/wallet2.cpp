@@ -4070,8 +4070,18 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
 
     // clear out some private information
     new_ptx.selected_transfers.clear();
+    new_ptx.dust = 0;
+    new_ptx.fee = 0;
+    new_ptx.dust_added_to_fee = false;
+    new_ptx.change_dts = {};
+    new_ptx.key_images.clear();
+    new_ptx.dests.clear();
+    new_ptx.multisig_sigs.clear();
+    new_ptx.construction_data = {};
     if (!disclose)
+    {
       std::get<1>(vouts.back()[out_idx + output_offset]) = crypto::null_skey;
+    }
   }
 //for (size_t k = 0; k < new_ptx.tx.vout.size(); ++k) MGINFO("after creation: tx out: " << new_ptx.tx.vout[k].amount << "/" << boost::get<cryptonote::txout_to_key>(new_ptx.tx.vout[k].target).key);
   // shuffle the array, then vouts, selecting from the array
