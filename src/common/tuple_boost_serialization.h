@@ -60,5 +60,15 @@ namespace boost
       a & std::get<3>(x);
       a & std::get<4>(x);
     }
+    template <class Archive, class T0, class T1, class T2, class T3, class T4, class T5>
+    inline void serialize(Archive &a, std::tuple<T0, T1, T2, T3, T4, T5> &x, const boost::serialization::version_type ver)
+    {
+      a & std::get<0>(x);
+      a & std::get<1>(x);
+      a & std::get<2>(x);
+      a & std::get<3>(x);
+      a & std::get<4>(x);
+      a & std::get<5>(x);
+    }
   }
 }
