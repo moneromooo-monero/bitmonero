@@ -5653,7 +5653,7 @@ bool simple_wallet::accept_loaded_multiuser_tx(const tools::wallet2::multiuser_t
     }
   }
 
-  std::string prompt_str = tr("Loaded multiuser transaction, is this okay? (Y/Yes/N/No): ");
+  std::string prompt_str = tr("Loaded multiuser transaction, is this okay? (Y/Yes/N/No)");
   return command_line::is_yes(input_line(prompt_str));
 }
 //----------------------------------------------------------------------------------------------------

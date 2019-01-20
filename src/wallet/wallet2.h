@@ -537,7 +537,7 @@ private:
       bool m_building; // if true: ignore m_ptx, add to m_setup; if false: sign m_ptx, m_setup can't change
       pending_tx m_ptx;
       std::vector<std::string> m_setup;
-      std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> m_vouts;
+      std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof, crypto::public_key>>> m_vouts;
       rct::ctkeyM m_mixRing;
 
       multiuser_tx_set(): m_building(true) {}

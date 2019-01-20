@@ -4066,7 +4066,16 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
     crypto::secret_key_to_public_key(std::get<1>(vouts.back()[out_idx + output_offset]), old_additional_tx_pub_keys[out_idx + output_offset]);
     new_ptx.tx.rct_signatures.outPk[out_idx + output_offset].mask = std::get<3>(vouts.back()[out_idx + output_offset]);
     new_ptx.tx.rct_signatures.p.bulletproofs[out_idx + output_offset] = std::get<4>(vouts.back()[out_idx + output_offset]);
-    multiuser_txs.m_vouts.push_back(vouts.back());
+
+    std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof, crypto::public_key>> v;
+    for (size_t i = 0; i < vouts.back().size(); ++i)
+    {
+      const auto &e = vouts.back()[i];
+      crypto::public_key pkey;
+      crypto::secret_key_to_public_key(std::get<1>(e), pkey);
+      v.push_back(std::make_tuple(std::get<0>(e), std::get<1>(e), std::get<2>(e), std::get<3>(e), std::get<4>(e), pkey));
+    }
+    multiuser_txs.m_vouts.push_back(v);
 
     // clear out some private information
     new_ptx.selected_transfers.clear();
@@ -4078,14 +4087,15 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
     new_ptx.dests.clear();
     new_ptx.multisig_sigs.clear();
     new_ptx.construction_data = {};
+    new_ptx.tx_key = crypto::null_skey;
     if (!disclose)
     {
-      std::get<1>(vouts.back()[out_idx + output_offset]) = crypto::null_skey;
+      for (auto &e: multiuser_txs.m_vouts.back())
+        std::get<1>(e) = crypto::null_skey;
     }
   }
-//for (size_t k = 0; k < new_ptx.tx.vout.size(); ++k) MGINFO("after creation: tx out: " << new_ptx.tx.vout[k].amount << "/" << boost::get<cryptonote::txout_to_key>(new_ptx.tx.vout[k].target).key);
+
   // shuffle the array, then vouts, selecting from the array
-#if 1
   std::vector<size_t> outs_order(new_ptx.tx.vout.size());
   for (size_t n = 0; n < outs_order.size(); ++n)
     outs_order[n] = n;
@@ -4104,13 +4114,12 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
     CHECK_AND_ASSERT_MES(multiuser_txs.m_vouts[i].size() > i, false, "Not enough m_vouts");
     new_ptx.tx.vout[i] = std::get<0>(multiuser_txs.m_vouts[i][i]);
     CHECK_AND_ASSERT_MES(old_additional_tx_pub_keys.size() > i, false, "Not enough additional tx keys");
-    crypto::secret_key_to_public_key(std::get<1>(multiuser_txs.m_vouts[i][i]), old_additional_tx_pub_keys[i]);
+    old_additional_tx_pub_keys[i] = std::get<5>(multiuser_txs.m_vouts[i][i]);
     new_ptx.additional_tx_keys[i] = std::get<1>(multiuser_txs.m_vouts[i][i]);
     new_ptx.tx.rct_signatures.ecdhInfo[i] = std::get<2>(multiuser_txs.m_vouts[i][i]);
     new_ptx.tx.rct_signatures.outPk[i].mask = std::get<3>(multiuser_txs.m_vouts[i][i]);
     new_ptx.tx.rct_signatures.p.bulletproofs[i] = std::get<4>(multiuser_txs.m_vouts[i][i]);
   }
-#endif
 
   remove_field_from_tx_extra(extra, typeid(cryptonote::tx_extra_additional_pub_keys));
   add_additional_tx_pub_keys_to_extra(extra, old_additional_tx_pub_keys);
@@ -7294,22 +7303,7 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
   const rct::multiuser_out &original_muout = private_setup.muout;
 
   hw::device &hwdev =  m_account.get_device();
-
-  const crypto::public_key actual_tx_key = cryptonote::get_tx_pub_key_from_extra(tx);
-  THROW_WALLET_EXCEPTION_IF(private_setup.tx_key != actual_tx_key, error::wallet_internal_error, "tx key is not the expected one");
   const std::vector<crypto::public_key> actual_additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(tx);
-
-  // check those tx keys match the ones in pending_tx
-  THROW_WALLET_EXCEPTION_IF(actual_additional_tx_keys.size() != mtx.m_ptx.additional_tx_keys.size(),
-      error::wallet_internal_error, "Mismatched additional tx keys");
-  crypto::public_key pk;
-  crypto::secret_key_to_public_key(mtx.m_ptx.tx_key, pk);
-  THROW_WALLET_EXCEPTION_IF(pk != actual_tx_key, error::wallet_internal_error, "Invalid tx key");
-  for (size_t i = 0; i < actual_additional_tx_keys.size(); ++i)
-  {
-    crypto::secret_key_to_public_key(mtx.m_ptx.additional_tx_keys[i], pk);
-    THROW_WALLET_EXCEPTION_IF(pk != actual_additional_tx_keys[i], error::wallet_internal_error, "Invalid additional tx key");
-  }
 
   // check our ins are present
   for (const auto &pin: private_setup.vin)
@@ -7331,7 +7325,6 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
         "One of our inputs to the original multiuser transaction was not found in the final transaction to be signed");
   }
 
-#if 1
   auto same_txout = [](const cryptonote::tx_out &out0, const cryptonote::tx_out &out1)
   {
     CHECKED_GET_SPECIFIC_VARIANT(out0.target, const txout_to_key, out0k, false);
@@ -7352,7 +7345,6 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
 //crypto::public_key pk; crypto::secret_key_to_public_key(std::get<1>(private_setup.vout[i][j]), pk);
 //MGINFO("Possible output at " << i << "/" << j << ": " << std::get<0>(private_setup.vout[i][j]).amount << "/" << boost::get<cryptonote::txout_to_key>(std::get<0>(private_setup.vout[i][j]).target).key << ", tx key " << std::get<1>(private_setup.vout[i][j]) << ", pub " << pk);
 //}
-#endif
     // for every out we generated, we check that it or one of its siblings (same out data,
     // but generated using a different index) is present in the tx
     for (size_t j = 0; j < private_setup.vout[i].size(); ++j)
