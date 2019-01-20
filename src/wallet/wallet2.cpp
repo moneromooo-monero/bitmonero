@@ -4022,8 +4022,6 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
 
   // create N output duplicates, each with a different index, so they can be shuffled
   CHECK_AND_ASSERT_MES(multiuser_txs.m_vouts.size() == old_ptx.tx.vout.size(), false, "Invalid m_vouts size");
-//MGINFO("ptx.construction_data.splitted_dsts.size(): " << ptx.construction_data.splitted_dsts.size());
-//MGINFO("ptx.tx.vout.size(): " << ptx.tx.vout.size());
   CHECK_AND_ASSERT_MES(ptx.construction_data.splitted_dsts.size() == ptx.tx.vout.size(), false, "Invalid public setup dests size");
   vouts.clear();
   for (size_t out_idx = 0; out_idx < ptx.tx.vout.size(); ++out_idx)
@@ -4035,8 +4033,6 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     crypto::secret_key original_scalar1;
     m_account.get_device().derivation_to_scalar(derivation, out_idx + output_offset, original_scalar1);
     rct::ecdhDecode(base_ecdh_info, rct::sk2rct(original_scalar1));
-//MGINFO("decoding ECDH from dest-pkey " << ptx.construction_data.splitted_dsts[out_idx].addr.m_view_public_key << ", txseckey" << new_ptx.additional_tx_keys[out_idx + output_offset]<< ": der " << derivation << ", index " << out_idx + output_offset);
-//MGINFO("ecdh amount: " << rct::h2d(base_ecdh_info.amount) << ", scalar " << original_scalar1 << ", org amount " << new_ptx.tx.rct_signatures.ecdhInfo[out_idx + output_offset].amount);
 #warning TODO decide what to do about that 16
     for (int output_index = 0; output_index < 16; ++output_index)
     {
@@ -4050,11 +4046,6 @@ rct::key outPk_mask;
 rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
       rct::Bulletproof bp = rct::bulletproof_PROVE(ptx.construction_data.splitted_dsts[out_idx].amount, base_ecdh_info.mask);
       vouts.back().push_back({vout, tx_key, ecdh_info, outPk_mask, bp});
-//crypto::key_derivation DER;
-//crypto::generate_key_derivation(ptx.construction_data.splitted_dsts[out_idx].addr.m_view_public_key, tx_key, DER);
-//crypto::secret_key scalar1;
-//m_account.get_device().derivation_to_scalar(DER, output_index, scalar1);
-//MGINFO("Created output at " << out_idx << "/" << output_index << ": " << vout.amount << "/" << boost::get<cryptonote::txout_to_key>(vout.target).key << ", tx key " << tx_key << ", der " << DER << ", addr " << get_account_address_as_str(m_nettype, ptx.construction_data.splitted_dsts[out_idx].is_subaddress, ptx.construction_data.splitted_dsts[out_idx].addr) << ", new outPk mask " << outPk_mask << ", new ecdhInfo " << ecdh_info.mask << "/" << ecdh_info.amount << ", unencrypted being " << base_ecdh_info.mask << "/" << base_ecdh_info.amount << ", scalar1 " << scalar1);
     }
     CHECK_AND_ASSERT_MES(out_idx + output_offset < new_ptx.tx.vout.size(), false, "Too many outs");
     CHECK_AND_ASSERT_MES(out_idx + output_offset < vouts.back().size(), false, "Too many outs");
@@ -7335,16 +7326,8 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
   // check our outs are present in the shuffled outs
   THROW_WALLET_EXCEPTION_IF(tx.vout.size() != actual_additional_tx_keys.size(), error::wallet_internal_error, "Wrong number of additional tx keys");
   std::vector<bool> our_outputs(tx.vout.size(), false);
-//MGINFO("Looking for our " << private_setup.vout.size() << " original outputs");
-//for (size_t k = 0; k < tx.vout.size(); ++k) MGINFO("tx out: " << tx.vout[k].amount << "/" << boost::get<cryptonote::txout_to_key>(tx.vout[k].target).key);
   for (size_t i = 0; i < private_setup.vout.size(); ++i)
   {
-//#if 1
-//for (size_t j = 0; j < private_setup.vout[i].size(); ++j)
-//{
-//crypto::public_key pk; crypto::secret_key_to_public_key(std::get<1>(private_setup.vout[i][j]), pk);
-//MGINFO("Possible output at " << i << "/" << j << ": " << std::get<0>(private_setup.vout[i][j]).amount << "/" << boost::get<cryptonote::txout_to_key>(std::get<0>(private_setup.vout[i][j]).target).key << ", tx key " << std::get<1>(private_setup.vout[i][j]) << ", pub " << pk);
-//}
     // for every out we generated, we check that it or one of its siblings (same out data,
     // but generated using a different index) is present in the tx
     for (size_t j = 0; j < private_setup.vout[i].size(); ++j)
