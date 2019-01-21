@@ -88,6 +88,8 @@ DISABLE_VS_WARNINGS(4267)
 Blockchain::Blockchain(tx_memory_pool& tx_pool) :
   m_db(), m_tx_pool(tx_pool), m_hardfork(NULL), m_timestamps_and_difficulties_height(0), m_current_block_cumul_weight_limit(0), m_current_block_cumul_weight_median(0),
   m_enforce_dns_checkpoints(false), m_max_prepare_blocks_threads(4), m_db_sync_on_blocks(true), m_db_sync_threshold(1), m_db_sync_mode(db_async), m_db_default_sync(false), m_fast_sync(true), m_show_time_stats(false), m_sync_counter(0), m_bytes_to_sync(0), m_cancel(false),
+  m_long_term_block_weights(CRYPTONOTE_LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE),
+  m_long_term_block_weights_height(0),
   m_difficulty_for_next_block_top_hash(crypto::null_hash),
   m_difficulty_for_next_block(1),
   m_btc_valid(false)
@@ -424,6 +426,9 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
     m_tx_pool.on_blockchain_dec(top_block_height, top_block_hash);
   }
 
+  if (test_options && test_options->long_term_block_weight_window)
+    m_long_term_block_weights.set_capacity(test_options->long_term_block_weight_window);
+
   update_next_cumulative_weight_limit();
   return true;
 }
@@ -570,6 +575,9 @@ block Blockchain::pop_block_from_blockchain()
 
   // make sure the hard fork object updates its current version
   m_hardfork->on_block_popped(1);
+
+  m_long_term_block_weights.pop_back();
+  m_long_term_block_weights_height--;
 
   // return transactions from popped block to the tx_pool
   size_t pruned = 0;
@@ -3604,7 +3612,8 @@ leave:
     {
       PERF_TIMER(db_add_block);
       cryptonote::blobdata bd = cryptonote::block_to_blob(bl);
-      new_height = m_db->add_block(std::make_pair(std::move(bl), std::move(bd)), block_weight, cumulative_difficulty, already_generated_coins, txs);
+      uint64_t long_term_block_weight = get_next_long_term_block_weight(block_weight);
+      new_height = m_db->add_block(std::make_pair(std::move(bl), std::move(bd)), block_weight, long_term_block_weight, cumulative_difficulty, already_generated_coins, txs);
     }
     catch (const KEY_IMAGE_EXISTS& e)
     {
@@ -3688,20 +3697,89 @@ bool Blockchain::check_blockchain_pruning()
   return m_db->check_pruning();
 }
 //------------------------------------------------------------------
+uint64_t Blockchain::get_next_long_term_block_weight(uint64_t block_weight) const
+{
+  PERF_TIMER(update_next_cumulative_weight_limit);
+
+  const uint64_t nblocks = std::min<uint64_t>(m_long_term_block_weights.capacity(), m_db->height());
+  CHECK_AND_ASSERT_MES(m_long_term_block_weights.size() == nblocks, 0,
+      "m_long_term_block_weights is not the expected size");
+
+  const uint8_t hf_version = get_current_hard_fork_version();
+  if (hf_version < HF_VERSION_LONG_TERM_BLOCK_WEIGHT)
+    return block_weight;
+
+  std::vector<uint64_t> weights(m_long_term_block_weights.begin(), m_long_term_block_weights.end());
+  weights[0] = block_weight;
+  uint64_t long_term_median = epee::misc_utils::median(weights);
+  uint64_t long_term_effective_median_block_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, long_term_median);
+
+  uint64_t short_term_constraint = long_term_effective_median_block_weight + long_term_effective_median_block_weight * 4 / 10;
+  uint64_t long_term_block_weight = std::min<uint64_t>(block_weight, short_term_constraint);
+
+  return long_term_block_weight;
+}
+//------------------------------------------------------------------
 bool Blockchain::update_next_cumulative_weight_limit()
 {
-  uint64_t full_reward_zone = get_min_block_weight(get_current_hard_fork_version());
+  PERF_TIMER(update_next_cumulative_weight_limit);
 
   LOG_PRINT_L3("Blockchain::" << __func__);
+
+  const uint8_t hf_version = get_current_hard_fork_version();
+  uint64_t full_reward_zone = get_min_block_weight(get_current_hard_fork_version());
   std::vector<size_t> weights;
-  get_last_n_blocks_weights(weights, CRYPTONOTE_REWARD_BLOCKS_WINDOW);
+  uint64_t long_term_block_weight;
+  const uint64_t db_height = m_db->height();
 
-  uint64_t median = epee::misc_utils::median(weights);
-  m_current_block_cumul_weight_median = median;
-  if(median <= full_reward_zone)
-    median = full_reward_zone;
+  // recalc, or reorg ? pop the last one(s) and recompute
+  if (db_height && db_height <= m_long_term_block_weights_height)
+  {
+    uint64_t pop = m_long_term_block_weights_height - db_height + 1;
+    while (pop--)
+      m_long_term_block_weights.pop_back();
+  }
 
-  m_current_block_cumul_weight_limit = median*2;
+  // ensure m_long_term_block_weights is filled
+  const uint64_t nblocks = std::min<uint64_t>(m_long_term_block_weights.capacity(), m_db->height());
+  while (m_long_term_block_weights.size() + 1 < nblocks)
+    m_long_term_block_weights.push_front(m_db->get_block_long_term_weight(db_height - 1 - m_long_term_block_weights.size()));
+
+  if (hf_version < HF_VERSION_LONG_TERM_BLOCK_WEIGHT)
+  {
+    get_last_n_blocks_weights(weights, CRYPTONOTE_REWARD_BLOCKS_WINDOW);
+    m_current_block_cumul_weight_median = epee::misc_utils::median(weights);
+    long_term_block_weight = weights.back();
+  }
+  else
+  {
+    const uint64_t block_weight = m_db->get_block_weight(db_height - 1);
+
+    std::vector<uint64_t> weights(m_long_term_block_weights.begin(), m_long_term_block_weights.end());
+    uint64_t long_term_median = epee::misc_utils::median(weights);
+    uint64_t long_term_effective_median_block_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, long_term_median);
+
+    uint64_t short_term_constraint = long_term_effective_median_block_weight + long_term_effective_median_block_weight * 4 / 10;
+    long_term_block_weight = std::min<uint64_t>(block_weight, short_term_constraint);
+
+    weights.clear();
+    get_last_n_blocks_weights(weights, CRYPTONOTE_REWARD_BLOCKS_WINDOW);
+
+    uint64_t short_term_median = epee::misc_utils::median(weights);
+    uint64_t effective_median_block_weight = std::min<uint64_t>(std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, short_term_median), 50 * long_term_effective_median_block_weight);
+
+    m_current_block_cumul_weight_median = effective_median_block_weight;
+  }
+
+  m_long_term_block_weights.push_back(long_term_block_weight);
+  m_long_term_block_weights_height = db_height;
+  CHECK_AND_ASSERT_MES(m_long_term_block_weights.size() == nblocks, false, "Bad m_long_term_block_weights size");
+
+  if (m_current_block_cumul_weight_median <= full_reward_zone)
+    m_current_block_cumul_weight_median = full_reward_zone;
+
+  m_current_block_cumul_weight_limit = m_current_block_cumul_weight_median * 2;
+
   return true;
 }
 //------------------------------------------------------------------

@@ -37,6 +37,7 @@
 #include <boost/multi_index/global_fun.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
+#include <boost/circular_buffer.hpp>
 #include <atomic>
 #include <functional>
 #include <unordered_map>
@@ -632,6 +633,13 @@ namespace cryptonote
     uint64_t get_current_cumulative_block_weight_limit() const;
 
     /**
+     * @brief gets the long term block weight for a new block
+     *
+     * @return the long term block weight
+     */
+    uint64_t get_next_long_term_block_weight(uint64_t block_weight) const;
+
+    /**
      * @brief gets the block weight median based on recent blocks (same window as for the limit)
      *
      * @return the median
@@ -995,7 +1003,9 @@ namespace cryptonote
      */
     void pop_blocks(uint64_t nblocks);
 
+#ifndef IN_UNIT_TESTS
   private:
+#endif
 
     // TODO: evaluate whether or not each of these typedefs are left over from blockchain_storage
     typedef std::unordered_map<crypto::hash, size_t> blocks_by_id_index;
@@ -1048,6 +1058,8 @@ namespace cryptonote
     std::vector<uint64_t> m_timestamps;
     std::vector<difficulty_type> m_difficulties;
     uint64_t m_timestamps_and_difficulties_height;
+    boost::circular_buffer<uint64_t> m_long_term_block_weights;
+    uint64_t m_long_term_block_weights_height;
 
     epee::critical_section m_difficulty_lock;
     crypto::hash m_difficulty_for_next_block_top_hash;
@@ -1383,6 +1395,7 @@ namespace cryptonote
      * @return true
      */
     bool update_next_cumulative_weight_limit();
+
     void return_tx_to_pool(std::vector<std::pair<transaction, blobdata>> &txs);
 
     /**
