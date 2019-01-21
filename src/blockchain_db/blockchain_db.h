@@ -985,6 +985,17 @@ public:
   virtual uint64_t get_block_already_generated_coins(const uint64_t& height) const = 0;
 
   /**
+   * @brief fetch a block's long term weight
+   *
+   * If the block does not exist, the subclass should throw BLOCK_DNE
+   *
+   * @param height the height requested
+   *
+   * @return the long term weight
+   */
+  virtual uint64_t get_block_long_term_weight(const uint64_t& height) const = 0;
+
+  /**
    * @brief fetch a block's hash
    *
    * The subclass should return hash of the block with the

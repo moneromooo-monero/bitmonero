@@ -37,6 +37,7 @@
 #include <boost/multi_index/global_fun.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
+#include <boost/circular_buffer.hpp>
 #include <atomic>
 #include <functional>
 #include <unordered_map>
@@ -1048,6 +1049,7 @@ namespace cryptonote
     std::vector<uint64_t> m_timestamps;
     std::vector<difficulty_type> m_difficulties;
     uint64_t m_timestamps_and_difficulties_height;
+    boost::circular_buffer<uint64_t> m_long_term_block_weights;
 
     epee::critical_section m_difficulty_lock;
     crypto::hash m_difficulty_for_next_block_top_hash;
@@ -1383,6 +1385,12 @@ namespace cryptonote
      * @return true
      */
     bool update_next_cumulative_weight_limit();
+
+    /**
+     * @brief calculate the long term block weight limit for the next block to be added
+     */
+    void update_long_term_block_weight();
+
     void return_tx_to_pool(std::vector<std::pair<transaction, blobdata>> &txs);
 
     /**

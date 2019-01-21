@@ -225,6 +225,8 @@ public:
 
   virtual uint64_t get_block_already_generated_coins(const uint64_t& height) const;
 
+  virtual uint64_t get_block_long_term_weight(const uint64_t& height) const;
+
   virtual crypto::hash get_block_hash_from_height(const uint64_t& height) const;
 
   virtual std::vector<block> get_blocks_range(const uint64_t& h1, const uint64_t& h2) const;
@@ -403,6 +405,9 @@ private:
 
   // migrate from DB version 2 to 3
   void migrate_2_3();
+
+  // migrate from DB version 3 to 4
+  void migrate_3_4();
 
   void cleanup_batch();
 

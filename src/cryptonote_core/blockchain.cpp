@@ -88,6 +88,7 @@ DISABLE_VS_WARNINGS(4267)
 Blockchain::Blockchain(tx_memory_pool& tx_pool) :
   m_db(), m_tx_pool(tx_pool), m_hardfork(NULL), m_timestamps_and_difficulties_height(0), m_current_block_cumul_weight_limit(0), m_current_block_cumul_weight_median(0),
   m_enforce_dns_checkpoints(false), m_max_prepare_blocks_threads(4), m_db_sync_on_blocks(true), m_db_sync_threshold(1), m_db_sync_mode(db_async), m_db_default_sync(false), m_fast_sync(true), m_show_time_stats(false), m_sync_counter(0), m_bytes_to_sync(0), m_cancel(false),
+  m_long_term_block_weights(CRYPTONOTE_LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE),
   m_difficulty_for_next_block_top_hash(crypto::null_hash),
   m_difficulty_for_next_block(1),
   m_btc_valid(false)
@@ -424,7 +425,13 @@ bool Blockchain::init(BlockchainDB* db, const network_type nettype, bool offline
     m_tx_pool.on_blockchain_dec(top_block_height, top_block_hash);
   }
 
-  update_next_cumulative_weight_limit();
+  const uint64_t db_height = m_db->height();
+  for (uint64_t i = 0; i < CRYPTONOTE_LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE; ++i)
+  {
+    m_long_term_block_weights.push_back(m_db->get_block_long_term_weight(db_height - CRYPTONOTE_LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE + i));
+  }
+
+  update_long_term_block_weight();
   return true;
 }
 //------------------------------------------------------------------
@@ -609,7 +616,7 @@ block Blockchain::pop_block_from_blockchain()
   m_blocks_txs_check.clear();
   m_check_txin_table.clear();
 
-  update_next_cumulative_weight_limit();
+  update_long_term_block_weight();
   uint64_t top_block_height;
   crypto::hash top_block_hash = get_tail_id(top_block_height);
   m_tx_pool.on_blockchain_dec(top_block_height, top_block_hash);
@@ -630,7 +637,7 @@ bool Blockchain::reset_and_set_genesis_block(const block& b)
 
   block_verification_context bvc = boost::value_initialized<block_verification_context>();
   add_new_block(b, bvc);
-  update_next_cumulative_weight_limit();
+  update_long_term_block_weight();
   return bvc.m_added_to_main_chain && !bvc.m_verifivation_failed;
 }
 //------------------------------------------------------------------
@@ -3632,7 +3639,7 @@ leave:
   PERF_TIMER(epilogue);
 
   // do this after updating the hard fork state since the weight limit may change due to fork
-  update_next_cumulative_weight_limit();
+  update_long_term_block_weight();
 
   MINFO("+++++ BLOCK SUCCESSFULLY ADDED" << std::endl << "id:\t" << id << std::endl << "PoW:\t" << proof_of_work << std::endl << "HEIGHT " << new_height-1 << ", difficulty:\t" << current_diffic << std::endl << "block reward: " << print_money(fee_summary + base_reward) << "(" << print_money(base_reward) << " + " << print_money(fee_summary) << "), coinbase_weight: " << coinbase_weight << ", cumulative weight: " << cumulative_block_weight << ", " << block_processing_time << "(" << target_calculating_time << "/" << longhash_calculating_time << ")ms");
   if(m_show_time_stats)
@@ -3679,6 +3686,8 @@ bool Blockchain::check_blockchain_pruning()
 //------------------------------------------------------------------
 bool Blockchain::update_next_cumulative_weight_limit()
 {
+  PERF_TIMER(update_next_cumulative_weight_limit);
+
   uint64_t full_reward_zone = get_min_block_weight(get_current_hard_fork_version());
 
   LOG_PRINT_L3("Blockchain::" << __func__);
@@ -3692,6 +3701,81 @@ bool Blockchain::update_next_cumulative_weight_limit()
 
   m_current_block_cumul_weight_limit = median*2;
   return true;
+}
+//------------------------------------------------------------------
+void Blockchain::update_long_term_block_weight()
+{
+  PERF_TIMER(update_long_term_block_weight);
+
+  LOG_PRINT_L3("Blockchain::" << __func__);
+
+  const uint8_t hf_version = get_current_hard_fork_version();
+  if (hf_version < HF_VERSION_LONG_TERM_BLOCK_WEIGHT)
+  {
+    update_next_cumulative_weight_limit();
+    return;
+  }
+
+//
+// here is the scaling proposal
+// Define: LongTermBlockWeight
+// Before fork:
+// LongTermBlockWeight = BlockWeight
+// At or after fork:
+// LongTermBlockWeight = min(BlockWeight, 1.4*LongTermEffectiveMedianBlockWeight)
+// Note: To avoid possible consensus issues over rounding the LongTermBlockWeight for a given block should be calculated to the
+//       nearest byte, and stored as a integer in the block itself. The stored LongTermBlockWeight is then used for future calculations of
+//       the LongTermEffectiveMedianBlockWeight and not recalculated each time.
+// Define:   LongTermEffectiveMedianBlockWeight
+// LongTermEffectiveMedianBlockWeight = max(300000, MedianOverPrevious100000Blocks(LongTermBlockWeight))
+// Change Definition of EffectiveMedianBlockWeight
+// From (current definition)
+// EffectiveMedianBlockWeight  = max(300000, MedianOverPrevious100Blocks(BlockWeight))
+// To (proposed definition)
+// EffectiveMedianBlockWeight  = min(max(300000, MedianOverPrevious100Blocks(BlockWeight)), 50*LongTermEffectiveMedianBlockWeight)
+// Notes:
+// 1) There are no other changes to the existing penalty formula, median calculation, fees etc.
+// 2) There is the requirement to store the LongTermBlockWeight of a block unencrypted in the block itself. This  is to avoid
+//    possible consensus issues over rounding and also to prevent the calculations from becoming unwieldy as we move away from the fork.
+// 3) When the  EffectiveMedianBlockWeight cap is reached it is still possible to mine blocks up to 2x the EffectiveMedianBlockWeight
+//    by paying the corresponding penalty.
+//
+// 3 quantities:
+//   - LongTermBlockWeight: depends on LongTermEffectiveMedianBlockWeight
+//     LongTermBlockWeight = min(BlockWeight, 1.4*LongTermEffectiveMedianBlockWeight)
+//   - LongTermEffectiveMedianBlockWeight: depends on LongTermBlockWeight
+//     LongTermEffectiveMedianBlockWeight = max(300000, MedianOverPrevious100000Blocks(LongTermBlockWeight))
+//   - EffectiveMedianBlockWeight: depends on LongTermEffectiveMedianBlockWeight
+//     EffectiveMedianBlockWeight = min(max(300000, MedianOverPrevious100Blocks(BlockWeight)), 50*LongTermEffectiveMedianBlockWeight)
+//
+// With heights:
+//
+//   - LongTermBlockWeight[i] = min(BlockWeight[i], 1.4 * LongTermEffectiveMedianBlockWeight[i])
+//   - LongTermEffectiveMedianBlockWeight[i] = max(300000, MedianOverPrevious100000Blocks(LongTermBlockWeight))
+//   - EffectiveMedianBlockWeight[i] = min(max(300000, MedianOverPrevious100Blocks(BlockWeight)), 50*LongTermEffectiveMedianBlockWeight[i])
+//
+// Ordered:
+//   - LongTermEffectiveMedianBlockWeight[i] = max(300000, MedianOverPrevious100000Blocks(LongTermBlockWeight))
+//   - LongTermBlockWeight[i] = min(BlockWeight[i], 1.4 * LongTermEffectiveMedianBlockWeight[i])
+//   - EffectiveMedianBlockWeight[i] = min(max(300000, MedianOverPrevious100Blocks(BlockWeight)), 50*LongTermEffectiveMedianBlockWeight[i])
+
+  const uint64_t block_weight = m_db->get_block_weight(m_db->height() - 1);
+
+  std::vector<uint64_t> weights(m_long_term_block_weights.begin(), m_long_term_block_weights.end());
+  uint64_t long_term_median = epee::misc_utils::median(weights);
+  uint64_t long_term_effective_median_block_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, long_term_median);
+
+  uint64_t long_term_block_weight = std::min<uint64_t>(block_weight, long_term_effective_median_block_weight + long_term_effective_median_block_weight * 4 / 10);
+
+  weights.clear();
+  get_last_n_blocks_weights(weights, CRYPTONOTE_REWARD_BLOCKS_WINDOW);
+
+  uint64_t short_term_median = epee::misc_utils::median(weights);
+  uint64_t effective_median_block_weight = std::min<uint64_t>(std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, short_term_median), 50 * long_term_effective_median_block_weight);
+
+  m_long_term_block_weights.push_back(long_term_block_weight);
+
+  m_current_block_cumul_weight_limit = effective_median_block_weight*2;
 }
 //------------------------------------------------------------------
 bool Blockchain::add_new_block(const block& bl, block_verification_context& bvc)
