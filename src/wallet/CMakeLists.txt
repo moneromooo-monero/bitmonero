@@ -37,6 +37,7 @@ set(wallet_sources
   node_rpc_proxy.cpp
   message_store.cpp
   message_transporter.cpp
+  multiuser_txs.cpp
 )
 
 set(wallet_private_headers
