@@ -3927,16 +3927,10 @@ bool wallet2::load_multiuser_tx_from_file(const std::string &filename, multiuser
 bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool disclose, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts)
 {
   const bool first = multiuser_txs.m_ptx.tx == cryptonote::transaction();
-  if (!first && !is_suitable_for_multiuser(multiuser_txs.m_ptx.tx))
-    return false;
-  if (!is_suitable_for_multiuser(ptx.tx))
-    return false;
+  CHECK_AND_ASSERT_THROW_MES(first || is_suitable_for_multiuser(multiuser_txs.m_ptx.tx), "Transaction is not suitable for multiuser");
+  CHECK_AND_ASSERT_THROW_MES(is_suitable_for_multiuser(ptx.tx), "Transaction is not suitable for multiuser");
 
-  if (!multiuser_txs.m_building)
-  {
-    MERROR("Multiuser transaction cannot be modified once signing has started");
-    return false;
-  }
+  CHECK_AND_ASSERT_THROW_MES(multiuser_txs.m_building, "Multiuser transaction cannot be modified once signing has started");
 
   // use the new tx as a base
   pending_tx new_ptx = ptx;
@@ -3945,7 +3939,7 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
   const size_t output_offset = multiuser_txs.m_ptx.tx.vout.size();
 
   // copy existing vins/vouts
-  CHECK_AND_ASSERT_MES(old_ptx.tx.vin.size() == multiuser_txs.m_mixRing.size(), false, "Invalid vin/mixRing size");
+  CHECK_AND_ASSERT_THROW_MES(old_ptx.tx.vin.size() == multiuser_txs.m_mixRing.size(), "Invalid vin/mixRing size");
   new_ptx.tx.vin = old_ptx.tx.vin;
   new_ptx.tx.vout = old_ptx.tx.vout;
   new_ptx.tx.rct_signatures.p.pseudoOuts = old_ptx.tx.rct_signatures.p.pseudoOuts;
@@ -3956,8 +3950,8 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
 
   new_ptx.tx.vout = old_ptx.tx.vout;
 
-  CHECK_AND_ASSERT_MES(ptx.tx.vin.size() == ptx.tx.rct_signatures.mixRing.size(), false, "Invalid vin/mixRing size");
-  CHECK_AND_ASSERT_MES(ptx.tx.vin.size() == ptx.tx.rct_signatures.p.pseudoOuts.size(), false, "Invalid vin/pseudoOuts size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vin.size() == ptx.tx.rct_signatures.mixRing.size(), "Invalid vin/mixRing size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vin.size() == ptx.tx.rct_signatures.p.pseudoOuts.size(), "Invalid vin/pseudoOuts size");
   for (size_t i = 0; i < ptx.tx.vin.size(); ++i)
   {
     new_ptx.tx.vin.push_back(ptx.tx.vin[i]);
@@ -3965,8 +3959,8 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     new_mixRing.push_back(ptx.tx.rct_signatures.mixRing[i]);
   }
 
-  CHECK_AND_ASSERT_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.outPk.size(), false, "Invalid vout/outPk size");
-  CHECK_AND_ASSERT_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.ecdhInfo.size(), false, "Invalid vout/ecdhInfo size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.outPk.size(), "Invalid vout/outPk size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.ecdhInfo.size(), "Invalid vout/ecdhInfo size");
   for (size_t i = 0; i < ptx.tx.vout.size(); ++i)
   {
     new_ptx.tx.vout.push_back(ptx.tx.vout[i]);
@@ -4004,25 +3998,17 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
   cryptonote::add_tx_pub_key_to_extra(extra, tx_key);
 
   std::vector<crypto::public_key> old_additional_tx_pub_keys = cryptonote::get_additional_tx_pub_keys_from_extra(old_ptx.tx);
-  if (old_additional_tx_pub_keys.size() != old_ptx.tx.vout.size())
-  {
-    MERROR("Bad number of additional tx pub keys");
-    return false;
-  }
+  CHECK_AND_ASSERT_THROW_MES(old_additional_tx_pub_keys.size() == old_ptx.tx.vout.size(), "Bad number of additional tx pub keys");
   std::vector<crypto::public_key> additional_tx_pub_keys = cryptonote::get_additional_tx_pub_keys_from_extra(ptx.tx);
-  if (additional_tx_pub_keys.size() != ptx.tx.vout.size())
-  {
-    MERROR("Bad number of additional tx pub keys");
-    return false;
-  }
+  CHECK_AND_ASSERT_THROW_MES(additional_tx_pub_keys.size() == ptx.tx.vout.size(), "Bad number of additional tx pub keys");
   std::copy(additional_tx_pub_keys.begin(), additional_tx_pub_keys.end(), std::back_inserter(old_additional_tx_pub_keys));
 
   new_ptx.additional_tx_keys = old_ptx.additional_tx_keys;
   std::copy(ptx.additional_tx_keys.begin(), ptx.additional_tx_keys.end(), std::back_inserter(new_ptx.additional_tx_keys));
 
   // create N output duplicates, each with a different index, so they can be shuffled
-  CHECK_AND_ASSERT_MES(multiuser_txs.m_vouts.size() == old_ptx.tx.vout.size(), false, "Invalid m_vouts size");
-  CHECK_AND_ASSERT_MES(ptx.construction_data.splitted_dsts.size() == ptx.tx.vout.size(), false, "Invalid public setup dests size");
+  CHECK_AND_ASSERT_THROW_MES(multiuser_txs.m_vouts.size() == old_ptx.tx.vout.size(), "Invalid m_vouts size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.construction_data.splitted_dsts.size() == ptx.tx.vout.size(), "Invalid public setup dests size");
   vouts.clear();
   for (size_t out_idx = 0; out_idx < ptx.tx.vout.size(); ++out_idx)
   {
@@ -4047,10 +4033,10 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
       rct::Bulletproof bp = rct::bulletproof_PROVE(ptx.construction_data.splitted_dsts[out_idx].amount, base_ecdh_info.mask);
       vouts.back().push_back({vout, tx_key, ecdh_info, outPk_mask, bp});
     }
-    CHECK_AND_ASSERT_MES(out_idx + output_offset < new_ptx.tx.vout.size(), false, "Too many outs");
-    CHECK_AND_ASSERT_MES(out_idx + output_offset < vouts.back().size(), false, "Too many outs");
-    CHECK_AND_ASSERT_MES(out_idx + output_offset < old_additional_tx_pub_keys.size(), false, "Too many outs");
-    CHECK_AND_ASSERT_MES(out_idx + output_offset < new_ptx.tx.rct_signatures.ecdhInfo.size(), false, "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.vout.size(), "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < vouts.back().size(), "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < old_additional_tx_pub_keys.size(), "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.rct_signatures.ecdhInfo.size(), "Too many outs");
     new_ptx.tx.vout[out_idx + output_offset] = std::get<0>(vouts.back()[out_idx + output_offset]);
     new_ptx.additional_tx_keys[out_idx + output_offset] = std::get<1>(vouts.back()[out_idx + output_offset]);
     new_ptx.tx.rct_signatures.ecdhInfo[out_idx + output_offset] = std::get<2>(vouts.back()[out_idx + output_offset]);
@@ -4098,13 +4084,13 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
     std::swap(multiuser_txs.m_vouts[i0], multiuser_txs.m_vouts[i1]);
     std::swap(new_ptx.additional_tx_keys[i0], new_ptx.additional_tx_keys[i1]);
   });
-  CHECK_AND_ASSERT_MES(multiuser_txs.m_vouts.size() == new_ptx.tx.vout.size(), false, "Invalid m_vouts size");
-  CHECK_AND_ASSERT_MES(new_ptx.additional_tx_keys.size() == new_ptx.tx.vout.size(), false, "Invalid additional_tx_keys size");
+  CHECK_AND_ASSERT_THROW_MES(multiuser_txs.m_vouts.size() == new_ptx.tx.vout.size(), "Invalid m_vouts size");
+  CHECK_AND_ASSERT_THROW_MES(new_ptx.additional_tx_keys.size() == new_ptx.tx.vout.size(), "Invalid additional_tx_keys size");
   for (size_t i = 0; i < new_ptx.tx.vout.size(); ++i)
   {
-    CHECK_AND_ASSERT_MES(multiuser_txs.m_vouts[i].size() > i, false, "Not enough m_vouts");
+    CHECK_AND_ASSERT_THROW_MES(multiuser_txs.m_vouts[i].size() > i, "Not enough m_vouts");
     new_ptx.tx.vout[i] = std::get<0>(multiuser_txs.m_vouts[i][i]);
-    CHECK_AND_ASSERT_MES(old_additional_tx_pub_keys.size() > i, false, "Not enough additional tx keys");
+    CHECK_AND_ASSERT_THROW_MES(old_additional_tx_pub_keys.size() > i, "Not enough additional tx keys");
     old_additional_tx_pub_keys[i] = std::get<5>(multiuser_txs.m_vouts[i][i]);
     new_ptx.additional_tx_keys[i] = std::get<1>(multiuser_txs.m_vouts[i][i]);
     new_ptx.tx.rct_signatures.ecdhInfo[i] = std::get<2>(multiuser_txs.m_vouts[i][i]);
