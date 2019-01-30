@@ -57,6 +57,7 @@
 #include "ringct/rctOps.h"
 #include "checkpoints/checkpoints.h"
 #include "serialization/pair.h"
+#include "serialization/flat_map.h"
 
 #include "wallet_errors.h"
 #include "common/password.h"
@@ -904,7 +905,18 @@ namespace tools
       a & m_scanned_pool_txs[1];
       if (ver < 20)
         return;
-      a & m_subaddresses;
+      if (ver < 29)
+      {
+        using pair_type = std::pair<crypto::public_key, cryptonote::subaddress_index>;
+        std::unordered_map<crypto::public_key, cryptonote::subaddress_index> subaddresses;
+        a & subaddresses;
+        std::vector<pair_type> vector;
+        vector.reserve(subaddresses.size());
+        for (const auto &e: subaddresses)
+          vector.push_back(e);
+        std::sort(vector.begin(), vector.end(), [](const pair_type &e0, const pair_type &e1){ return e0.first < e1.first; });
+        m_subaddresses.insert(boost::container::ordered_unique_range_t(), vector.begin(), vector.end());
+      }
       std::unordered_map<cryptonote::subaddress_index, crypto::public_key> dummy_subaddresses_inv;
       a & dummy_subaddresses_inv;
       a & m_subaddress_labels;
@@ -933,6 +945,9 @@ namespace tools
       if(ver < 28)
         return;
       a & m_cold_key_images;
+      if(ver < 29)
+        return;
+      a & m_subaddresses;
     }
 
     /*!
@@ -1356,7 +1371,7 @@ namespace tools
     std::unordered_map<crypto::key_image, size_t> m_key_images;
     std::unordered_map<crypto::public_key, size_t> m_pub_keys;
     cryptonote::account_public_address m_account_public_address;
-    std::unordered_map<crypto::public_key, cryptonote::subaddress_index> m_subaddresses;
+    boost::container::flat_map<crypto::public_key, cryptonote::subaddress_index> m_subaddresses;
     std::vector<std::vector<std::string>> m_subaddress_labels;
     std::unordered_map<crypto::hash, std::string> m_tx_notes;
     std::unordered_map<std::string, std::string> m_attributes;
@@ -1460,7 +1475,7 @@ namespace tools
     std::unique_ptr<wallet_device_callback> m_device_callback;
   };
 }
-BOOST_CLASS_VERSION(tools::wallet2, 28)
+BOOST_CLASS_VERSION(tools::wallet2, 29)
 BOOST_CLASS_VERSION(tools::wallet2::transfer_details, 11)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info, 1)
 BOOST_CLASS_VERSION(tools::wallet2::multisig_info::LR, 0)
@@ -1890,6 +1905,34 @@ namespace boost
       if (ver < 3)
         return;
       a & x.multisig_sigs;
+    }
+
+    template <class Archive>
+    inline typename std::enable_if<!Archive::is_loading::value, void>::type serialize(Archive &a, boost::container::flat_map<crypto::public_key, cryptonote::subaddress_index> &x, const boost::serialization::version_type ver)
+    {
+      uint32_t sz = x.size();
+      a & sz;
+      for (const auto &e: x)
+      {
+        a & e.first;
+        a & e.second;
+      }
+    }
+    template <class Archive>
+    inline typename std::enable_if<Archive::is_loading::value, void>::type serialize(Archive &a, boost::container::flat_map<crypto::public_key, cryptonote::subaddress_index> &x, const boost::serialization::version_type ver)
+    {
+      using pair_type = std::pair<crypto::public_key, cryptonote::subaddress_index>;
+      uint32_t sz;
+      a & sz;
+      std::vector<pair_type> vector;
+      vector.resize(sz);
+      for (uint64_t i = 0; i < sz; ++i)
+      {
+        a & vector[i].first;
+        a & vector[i].second;
+      }
+      std::sort(vector.begin(), vector.end(), [](const pair_type &e0, const pair_type &e1){ return e0.first < e1.first; });
+      x.insert(boost::container::ordered_unique_range_t(), vector.begin(), vector.end());
     }
   }
 }
