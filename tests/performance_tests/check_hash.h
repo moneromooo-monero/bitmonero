@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2018, The Monero Project
+// Copyright (c) 2019, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -25,37 +25,42 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
 
-#include <cstdint>
-#include <vector>
-#include <boost/multiprecision/cpp_int.hpp>
+#include "string_tools.h"
+#include "cryptonote_basic/difficulty.h"
 
-#include "crypto/hash.h"
-
-namespace cryptonote
+template<uint64_t hash_target_high, uint64_t hash_target_low, uint64_t difficulty_high, uint64_t difficulty_low>
+class test_check_hash
 {
-    typedef boost::multiprecision::uint128_t wide_difficulty_type;
+public:
+  static const size_t loop_count = 100000;
 
-    /**
-     * @brief checks if a hash fits the given difficulty
-     *
-     * The hash passes if (hash * difficulty) < 2^256.
-     * Phrased differently, if (hash * difficulty) fits without overflow into
-     * the least significant 256 bits of the 320 bit multiplication result.
-     *
-     * @param hash the hash to check
-     * @param difficulty the difficulty to check against
-     *
-     * @return true if valid, else false
-     */
-    bool check_hash_64(const crypto::hash &hash, uint64_t difficulty);
-    uint64_t next_difficulty_64(std::vector<std::uint64_t> timestamps, std::vector<uint64_t> cumulative_difficulties, size_t target_seconds);
+  bool init()
+  {
+    cryptonote::wide_difficulty_type hash_target = hash_target_high;
+    hash_target = (hash_target << 64) | hash_target_low;
+    difficulty = difficulty_high;
+    difficulty = (difficulty << 64) | difficulty_low;
+    boost::multiprecision::uint256_t hash_value =  std::numeric_limits<boost::multiprecision::uint256_t>::max() / hash_target;
+    ((uint64_t*)&hash)[0] = hash_value.convert_to<uint64_t>();
+    hash_value >>= 64;
+    ((uint64_t*)&hash)[1] = hash_value.convert_to<uint64_t>();
+    hash_value >>= 64;
+    ((uint64_t*)&hash)[2] = hash_value.convert_to<uint64_t>();
+    hash_value >>= 64;
+    ((uint64_t*)&hash)[3] = hash_value.convert_to<uint64_t>();
+    return true;
+  }
 
-    bool check_hash_128(const crypto::hash &hash, wide_difficulty_type difficulty);
-    bool check_hash(const crypto::hash &hash, wide_difficulty_type difficulty);
-    wide_difficulty_type next_difficulty(std::vector<std::uint64_t> timestamps, std::vector<wide_difficulty_type> cumulative_difficulties, size_t target_seconds);
-}
+  bool test()
+  {
+    cryptonote::check_hash_128(hash, difficulty);
+    return true;
+  }
+
+private:
+  crypto::hash hash;
+  cryptonote::wide_difficulty_type difficulty;
+};

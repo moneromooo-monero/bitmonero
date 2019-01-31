@@ -366,7 +366,7 @@ private:
   virtual void add_block( const block& blk
                 , size_t block_weight
                 , uint64_t long_term_block_weight
-                , const difficulty_type& cumulative_difficulty
+                , const wide_difficulty_type& cumulative_difficulty
                 , const uint64_t& coins_generated
                 , uint64_t num_rct_outs
                 , const crypto::hash& blk_hash
@@ -377,7 +377,7 @@ private:
    *
    * The subclass implementing this will remove the block data from the top
    * block in the chain.  The data to be removed is that which was added in
-   * BlockchainDB::add_block(const block& blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, const crypto::hash& blk_hash)
+   * BlockchainDB::add_block(const block& blk, size_t block_weight, uint64_t long_term_block_weight, const wide_difficulty_type& cumulative_difficulty, const uint64_t& coins_generated, const crypto::hash& blk_hash)
    *
    * If any of this cannot be done, the subclass should throw the corresponding
    * subclass of DB_EXCEPTION
@@ -801,7 +801,7 @@ public:
   virtual uint64_t add_block( const std::pair<block, blobdata>& blk
                             , size_t block_weight
                             , uint64_t long_term_block_weight
-                            , const difficulty_type& cumulative_difficulty
+                            , const wide_difficulty_type& cumulative_difficulty
                             , const uint64_t& coins_generated
                             , const std::vector<std::pair<transaction, blobdata>>& txs
                             );
@@ -958,7 +958,7 @@ public:
    *
    * @return the cumulative difficulty
    */
-  virtual difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const = 0;
+  virtual wide_difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const = 0;
 
   /**
    * @brief fetch a block's difficulty
@@ -972,7 +972,7 @@ public:
    *
    * @return the difficulty
    */
-  virtual difficulty_type get_block_difficulty(const uint64_t& height) const = 0;
+  virtual wide_difficulty_type get_block_difficulty(const uint64_t& height) const = 0;
 
   /**
    * @brief fetch a block's already generated coins

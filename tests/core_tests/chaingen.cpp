@@ -213,7 +213,7 @@ bool test_generator::construct_block(cryptonote::block& blk, const cryptonote::b
 bool test_generator::construct_block_manually(block& blk, const block& prev_block, const account_base& miner_acc,
                                               int actual_params/* = bf_none*/, uint8_t major_ver/* = 0*/,
                                               uint8_t minor_ver/* = 0*/, uint64_t timestamp/* = 0*/,
-                                              const crypto::hash& prev_id/* = crypto::hash()*/, const difficulty_type& diffic/* = 1*/,
+                                              const crypto::hash& prev_id/* = crypto::hash()*/, const wide_difficulty_type& diffic/* = 1*/,
                                               const transaction& miner_tx/* = transaction()*/,
                                               const std::vector<crypto::hash>& tx_hashes/* = std::vector<crypto::hash>()*/,
                                               size_t txs_weight/* = 0*/, size_t max_outs/* = 0*/, uint8_t hf_version/* = 1*/)
@@ -244,7 +244,7 @@ bool test_generator::construct_block_manually(block& blk, const block& prev_bloc
 
   //blk.tree_root_hash = get_tx_tree_hash(blk);
 
-  difficulty_type a_diffic = actual_params & bf_diffic ? diffic : get_test_difficulty();
+  wide_difficulty_type a_diffic = actual_params & bf_diffic ? diffic : get_test_difficulty();
   fill_nonce(blk, a_diffic, height);
 
   add_block(blk, txs_weight, block_weights, already_generated_coins, hf_version);
@@ -509,7 +509,7 @@ void fill_tx_sources_and_destinations(const std::vector<test_event_entry>& event
   }
 }
 
-void fill_nonce(cryptonote::block& blk, const difficulty_type& diffic, uint64_t height)
+void fill_nonce(cryptonote::block& blk, const wide_difficulty_type& diffic, uint64_t height)
 {
   blk.nonce = 0;
   while (!miner::find_nonce_for_given_block(blk, diffic, height))
