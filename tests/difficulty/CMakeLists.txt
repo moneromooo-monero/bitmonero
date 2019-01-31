@@ -42,3 +42,6 @@ target_link_libraries(difficulty-tests
 add_test(
   NAME    difficulty
   COMMAND difficulty-tests "${CMAKE_CURRENT_SOURCE_DIR}/data.txt")
+add_test(
+  NAME    wide_difficulty
+  COMMAND difficulty-tests --wide "${CMAKE_CURRENT_SOURCE_DIR}/wide_data.txt")

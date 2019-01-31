@@ -110,7 +110,7 @@ namespace cryptonote
       block   bl; //!< the block
       uint64_t height; //!< the height of the block in the blockchain
       size_t block_cumulative_weight; //!< the weight of the block
-      difficulty_type cumulative_difficulty; //!< the accumulated difficulty after that block
+      wide_difficulty_type cumulative_difficulty; //!< the accumulated difficulty after that block
       uint64_t already_generated_coins; //!< the total coins minted after that block
     };
 
@@ -138,7 +138,7 @@ namespace cryptonote
      *
      * @return true on success, false if any initialization steps fail
      */
-    bool init(BlockchainDB* db, const network_type nettype = MAINNET, bool offline = false, const cryptonote::test_options *test_options = NULL, difficulty_type fixed_difficulty = 0, const GetCheckpointsCallback& get_checkpoints = nullptr);
+    bool init(BlockchainDB* db, const network_type nettype = MAINNET, bool offline = false, const cryptonote::test_options *test_options = NULL, wide_difficulty_type fixed_difficulty = 0, const GetCheckpointsCallback& get_checkpoints = nullptr);
 
     /**
      * @brief Initialize the Blockchain state
@@ -306,7 +306,7 @@ namespace cryptonote
      *
      * @return the target
      */
-    difficulty_type get_difficulty_for_next_block();
+    wide_difficulty_type get_difficulty_for_next_block();
 
     /**
      * @brief adds a block to the blockchain
@@ -344,7 +344,7 @@ namespace cryptonote
      *
      * @return true if block template filled in successfully, else false
      */
-    bool create_block_template(block& b, const account_public_address& miner_address, difficulty_type& di, uint64_t& height, uint64_t& expected_reward, const blobdata& ex_nonce);
+    bool create_block_template(block& b, const account_public_address& miner_address, wide_difficulty_type& di, uint64_t& height, uint64_t& expected_reward, const blobdata& ex_nonce);
 
     /**
      * @brief checks if a block is known about with a given hash
@@ -653,7 +653,7 @@ namespace cryptonote
      *
      * @return the difficulty
      */
-    uint64_t block_difficulty(uint64_t i) const;
+    wide_difficulty_type block_difficulty(uint64_t i) const;
 
     /**
      * @brief gets blocks based on a list of block hashes
@@ -1056,14 +1056,14 @@ namespace cryptonote
     uint64_t m_sync_counter;
     uint64_t m_bytes_to_sync;
     std::vector<uint64_t> m_timestamps;
-    std::vector<difficulty_type> m_difficulties;
+    std::vector<wide_difficulty_type> m_difficulties;
     uint64_t m_timestamps_and_difficulties_height;
     boost::circular_buffer<uint64_t> m_long_term_block_weights;
     uint64_t m_long_term_block_weights_height;
 
     epee::critical_section m_difficulty_lock;
     crypto::hash m_difficulty_for_next_block_top_hash;
-    difficulty_type m_difficulty_for_next_block;
+    wide_difficulty_type m_difficulty_for_next_block;
 
     boost::asio::io_service m_async_service;
     boost::thread_group m_async_pool;
@@ -1083,7 +1083,7 @@ namespace cryptonote
 
     network_type m_nettype;
     bool m_offline;
-    difficulty_type m_fixed_difficulty;
+    wide_difficulty_type m_fixed_difficulty;
 
     std::atomic<bool> m_cancel;
 
@@ -1091,7 +1091,7 @@ namespace cryptonote
     block m_btc;
     account_public_address m_btc_address;
     blobdata m_btc_nonce;
-    difficulty_type m_btc_difficulty;
+    wide_difficulty_type m_btc_difficulty;
     uint64_t m_btc_pool_cookie;
     uint64_t m_btc_expected_reward;
     bool m_btc_valid;
@@ -1238,7 +1238,7 @@ namespace cryptonote
      *
      * @return the difficulty requirement
      */
-    difficulty_type get_next_difficulty_for_alternative_chain(const std::list<blocks_ext_by_hash::iterator>& alt_chain, block_extended_info& bei) const;
+    wide_difficulty_type get_next_difficulty_for_alternative_chain(const std::list<blocks_ext_by_hash::iterator>& alt_chain, block_extended_info& bei) const;
 
     /**
      * @brief sanity checks a miner transaction before validating an entire block
@@ -1452,7 +1452,7 @@ namespace cryptonote
      *
      * At some point, may be used to push an update to miners
      */
-    void cache_block_template(const block &b, const cryptonote::account_public_address &address, const blobdata &nonce, const difficulty_type &diff, uint64_t expected_reward, uint64_t pool_cookie);
+    void cache_block_template(const block &b, const cryptonote::account_public_address &address, const blobdata &nonce, const wide_difficulty_type &diff, uint64_t expected_reward, uint64_t pool_cookie);
 
     /**
      * @brief pops an entry from long term block weights

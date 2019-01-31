@@ -80,7 +80,7 @@ namespace cryptonote
   , "Run in a regression testing mode."
   , false
   };
-  const command_line::arg_descriptor<difficulty_type> arg_fixed_difficulty  = {
+  const command_line::arg_descriptor<wide_difficulty_type> arg_fixed_difficulty  = {
     "fixed-difficulty"
   , "Fixed difficulty used for testing."
   , 0
@@ -606,7 +606,7 @@ namespace cryptonote
       regtest_hard_forks,
       0
     };
-    const difficulty_type fixed_difficulty = command_line::get_arg(vm, arg_fixed_difficulty);
+    const wide_difficulty_type fixed_difficulty = command_line::get_arg(vm, arg_fixed_difficulty);
     r = m_blockchain_storage.init(db.release(), m_nettype, m_offline, regtest ? &regtest_test_options : test_options, fixed_difficulty, get_checkpoints);
 
     r = m_mempool.init(max_txpool_weight);
@@ -1239,7 +1239,7 @@ namespace cryptonote
     m_mempool.set_relayed(txs);
   }
   //-----------------------------------------------------------------------------------------------
-  bool core::get_block_template(block& b, const account_public_address& adr, difficulty_type& diffic, uint64_t& height, uint64_t& expected_reward, const blobdata& ex_nonce)
+  bool core::get_block_template(block& b, const account_public_address& adr, wide_difficulty_type& diffic, uint64_t& height, uint64_t& expected_reward, const blobdata& ex_nonce)
   {
     return m_blockchain_storage.create_block_template(b, adr, diffic, height, expected_reward, ex_nonce);
   }
@@ -1448,7 +1448,7 @@ namespace cryptonote
     return m_blockchain_storage.get_tail_id();
   }
   //-----------------------------------------------------------------------------------------------
-  difficulty_type core::get_block_cumulative_difficulty(uint64_t height) const
+  wide_difficulty_type core::get_block_cumulative_difficulty(uint64_t height) const
   {
     return m_blockchain_storage.get_db().get_block_cumulative_difficulty(height);
   }

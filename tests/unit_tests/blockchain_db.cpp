@@ -62,7 +62,7 @@ const std::vector<size_t> t_sizes =
   , 347
   };
 
-const std::vector<difficulty_type> t_diffs =
+const std::vector<wide_difficulty_type> t_diffs =
   {
     4003674
   , 4051757

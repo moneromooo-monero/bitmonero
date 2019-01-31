@@ -219,9 +219,9 @@ public:
 
   virtual size_t get_block_weight(const uint64_t& height) const;
 
-  virtual difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const;
+  virtual wide_difficulty_type get_block_cumulative_difficulty(const uint64_t& height) const;
 
-  virtual difficulty_type get_block_difficulty(const uint64_t& height) const;
+  virtual wide_difficulty_type get_block_difficulty(const uint64_t& height) const;
 
   virtual uint64_t get_block_already_generated_coins(const uint64_t& height) const;
 
@@ -295,7 +295,7 @@ public:
   virtual uint64_t add_block( const std::pair<block, blobdata>& blk
                             , size_t block_weight
                             , uint64_t long_term_block_weight
-                            , const difficulty_type& cumulative_difficulty
+                            , const wide_difficulty_type& cumulative_difficulty
                             , const uint64_t& coins_generated
                             , const std::vector<std::pair<transaction, blobdata>>& txs
                             );
@@ -345,7 +345,7 @@ private:
   virtual void add_block( const block& blk
                 , size_t block_weight
                 , uint64_t long_term_block_weight
-                , const difficulty_type& cumulative_difficulty
+                , const wide_difficulty_type& cumulative_difficulty
                 , const uint64_t& coins_generated
                 , uint64_t num_rct_outs
                 , const crypto::hash& block_hash
@@ -411,6 +411,9 @@ private:
 
   // migrate from DB version 3 to 4
   void migrate_3_4();
+
+  // migrate from DB version 4 to 5
+  void migrate_4_5();
 
   void cleanup_batch();
 
