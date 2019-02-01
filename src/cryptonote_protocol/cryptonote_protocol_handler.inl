@@ -318,9 +318,6 @@ namespace cryptonote
     context.m_remote_blockchain_height = hshd.current_height;
     context.m_pruning_seed = hshd.pruning_seed;
 #ifdef CRYPTONOTE_PRUNING_DEBUG_SPOOF_SEED
-    if (context.m_remote_address.as<epee::net_utils::ipv4_network_address>().ip()&0x20)
-    context.m_pruning_seed=0;
-    else
     context.m_pruning_seed = tools::make_pruning_seed(1 + (context.m_remote_address.as<epee::net_utils::ipv4_network_address>().ip()) % (1 << CRYPTONOTE_PRUNING_LOG_STRIPES), CRYPTONOTE_PRUNING_LOG_STRIPES);
     LOG_INFO_CC(context, "New connection posing as pruning seed " << epee::string_tools::to_string_hex(context.m_pruning_seed) << ", seed address " << &context.m_pruning_seed);
 #endif

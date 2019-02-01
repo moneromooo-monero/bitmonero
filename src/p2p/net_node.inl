@@ -1616,9 +1616,6 @@ namespace nodetool
       }
       be.last_seen += delta;
 #ifdef CRYPTONOTE_PRUNING_DEBUG_SPOOF_SEED
-      if (be.adr.as<epee::net_utils::ipv4_network_address>().ip()&0x20)
-      be.pruning_seed = 0;
-      else
       be.pruning_seed = tools::make_pruning_seed(1 + (be.adr.as<epee::net_utils::ipv4_network_address>().ip()) % (1ul << CRYPTONOTE_PRUNING_LOG_STRIPES), CRYPTONOTE_PRUNING_LOG_STRIPES);
 #endif
     }
