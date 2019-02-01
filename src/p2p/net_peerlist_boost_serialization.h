@@ -149,9 +149,6 @@ namespace boost
 #ifdef CRYPTONOTE_PRUNING_DEBUG_SPOOF_SEED
       if (!typename Archive::is_saving())
       {
-        if (pl.adr.as<epee::net_utils::ipv4_network_address>().ip()&0x20)
-        pl.pruning_seed = 0;
-        else
         pl.pruning_seed = tools::make_pruning_seed(1+pl.adr.as<epee::net_utils::ipv4_network_address>().ip() % (1<<CRYPTONOTE_PRUNING_LOG_STRIPES), CRYPTONOTE_PRUNING_LOG_STRIPES);
       }
 #endif
