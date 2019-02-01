@@ -116,7 +116,7 @@ typedef cryptonote::simple_wallet sw;
 #define LONG_PAYMENT_ID_SUPPORT_CHECK() \
   do { \
     if (!m_long_payment_id_support) { \
-      fail_msg_writer() << tr("Long payment IDs are obsolete. Use --long-payment-id-support if you really must use one."); \
+      fail_msg_writer() << tr("Long payment IDs are obsolete. Use --long-payment-id-support if you really must use one, and complain to the recipient about using an obsolete feature that may disappear in the future."); \
       return true; \
     } \
   } while(0)
