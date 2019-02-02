@@ -356,7 +356,7 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     crypto::generate_key_derivation(ptx.construction_data.splitted_dsts[out_idx].addr.m_view_public_key, new_ptx.additional_tx_keys[out_idx + output_offset], derivation);
     crypto::secret_key original_scalar1;
     m_account.get_device().derivation_to_scalar(derivation, out_idx + output_offset, original_scalar1);
-    rct::ecdhDecode(base_ecdh_info, rct::sk2rct(original_scalar1));
+    rct::ecdhDecode(base_ecdh_info, rct::sk2rct(original_scalar1), new_ptx.tx.rct_signatures.type == rct::RCTTypeBulletproof2);
 #warning TODO decide what to do about that 16
     for (int output_index = 0; output_index < 16; ++output_index)
     {
@@ -365,7 +365,7 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
       crypto::secret_key tx_key, amount_key;
       cryptonote::create_output(ptx.construction_data.splitted_dsts[out_idx], output_index, vout, tx_key, amount_key, m_account.get_device());
       rct::ecdhTuple ecdh_info = base_ecdh_info;
-      rct::ecdhEncode(ecdh_info, rct::sk2rct(amount_key));
+      rct::ecdhEncode(ecdh_info, rct::sk2rct(amount_key), new_ptx.tx.rct_signatures.type == rct::RCTTypeBulletproof2);
 rct::key outPk_mask;
 rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
       rct::Bulletproof bp = rct::bulletproof_PROVE(ptx.construction_data.splitted_dsts[out_idx].amount, base_ecdh_info.mask);
@@ -585,7 +585,7 @@ found:;
         crypto::secret_key scalar1;
         hwdev.derivation_to_scalar(found_derivation, n, scalar1);
         rct::ecdhTuple ecdh_info = tx.rct_signatures.ecdhInfo[n];
-        hwdev.ecdhDecode(ecdh_info, rct::sk2rct(scalar1));
+        hwdev.ecdhDecode(ecdh_info, rct::sk2rct(scalar1), tx.rct_signatures.type == rct::RCTTypeBulletproof2);
         const rct::key C = tx.rct_signatures.outPk[n].mask;
         rct::key Ctmp;
         THROW_WALLET_EXCEPTION_IF(sc_check(ecdh_info.mask.bytes) != 0, error::wallet_internal_error, "Bad ECDH input mask");
