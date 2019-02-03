@@ -1399,14 +1399,16 @@ namespace cryptonote
     PERF_TIMER(handle_incoming_block);
     TRY_ENTRY();
 
+    if (((size_t)-1) <= 0xffffffff && block_blob.size() >= 0x3fffffff)
+      MWARNING("This block's size is " << block_blob.size() << ", closing on the 32 bit limit");
+
     // load json & DNS checkpoints every 10min/hour respectively,
     // and verify them with respect to what blocks we already have
     CHECK_AND_ASSERT_MES(update_checkpoints(), false, "One or more checkpoints loaded from json or dns conflicted with existing checkpoints.");
 
     bvc = boost::value_initialized<block_verification_context>();
-    if(block_blob.size() > get_max_block_size())
+    if (!check_incoming_block_size(block_blob))
     {
-      LOG_PRINT_L1("WRONG BLOCK BLOB, too big size " << block_blob.size() << ", rejected");
       bvc.m_verifivation_failed = true;
       return false;
     }
@@ -1435,7 +1437,9 @@ namespace cryptonote
   // block_blob
   bool core::check_incoming_block_size(const blobdata& block_blob) const
   {
-    if(block_blob.size() > get_max_block_size())
+    // note: we assume weight is always >= size, so we check incoming size against the block
+    // weight limit, which acts as a sanity check without having to parse/weigh first
+    if(block_blob.size() > m_blockchain_storage.get_current_cumulative_block_weight_limit())
     {
       LOG_PRINT_L1("WRONG BLOCK BLOB, too big size " << block_blob.size() << ", rejected");
       return false;
