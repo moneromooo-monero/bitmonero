@@ -4930,7 +4930,7 @@ void BlockchainLMDB::migrate_3_4()
       {
         std::vector<uint64_t> weights(long_term_block_weights.begin(), long_term_block_weights.end());
         uint64_t long_term_effective_block_median_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, epee::misc_utils::median(weights));
-        long_term_block_weight = std::min<uint64_t>(bi.bi_weight, long_term_effective_block_median_weight + long_term_effective_block_median_weight * 4 / 10);
+        long_term_block_weight = std::min<uint64_t>(bi.bi_weight, long_term_effective_block_median_weight + long_term_effective_block_median_weight * 2 / 5);
       }
       else
       {
