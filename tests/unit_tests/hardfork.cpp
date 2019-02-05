@@ -34,7 +34,7 @@
 #include "blockchain_db/blockchain_db.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_basic/hardfork.h"
-#include "testdb.h"
+#include "blockchain_db/testdb.h"
 
 using namespace cryptonote;
 
@@ -44,7 +44,7 @@ using namespace cryptonote;
 namespace
 {
 
-class TestDB: public BaseTestDB {
+class TestDB: public cryptonote::BaseTestDB {
 public:
   virtual uint64_t height() const { return blocks.size(); }
   virtual void add_block( const block& blk

@@ -637,7 +637,8 @@ namespace cryptonote
      *
      * @return the long term block weight
      */
-    uint64_t get_next_long_term_block_weight(uint64_t block_weight) const;
+    //uint64_t get_next_long_term_block_weight(uint64_t block_weight) const;
+    uint64_t get_next_long_term_block_weight(uint64_t block_weight, uint64_t &ltmedian, uint64_t &lt_eff) const;
 
     /**
      * @brief gets the block weight median based on recent blocks (same window as for the limit)

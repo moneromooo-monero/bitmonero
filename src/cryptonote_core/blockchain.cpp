@@ -3618,7 +3618,9 @@ leave:
     {
       PERF_TIMER(db_add_block);
       cryptonote::blobdata bd = cryptonote::block_to_blob(bl);
-      uint64_t long_term_block_weight = get_next_long_term_block_weight(block_weight);
+      //uint64_t long_term_block_weight = get_next_long_term_block_weight(block_weight);
+      uint64_t lt_eff, ltmedian;
+      uint64_t long_term_block_weight = get_next_long_term_block_weight(block_weight, ltmedian, lt_eff);
       new_height = m_db->add_block(std::make_pair(std::move(bl), std::move(bd)), block_weight, long_term_block_weight, cumulative_difficulty, already_generated_coins, txs);
     }
     catch (const KEY_IMAGE_EXISTS& e)
@@ -3703,7 +3705,7 @@ bool Blockchain::check_blockchain_pruning()
   return m_db->check_pruning();
 }
 //------------------------------------------------------------------
-uint64_t Blockchain::get_next_long_term_block_weight(uint64_t block_weight) const
+uint64_t Blockchain::get_next_long_term_block_weight(uint64_t block_weight, uint64_t &ltmedian, uint64_t &ltembw) const
 {
   PERF_TIMER(update_next_cumulative_weight_limit);
 
@@ -3716,11 +3718,20 @@ uint64_t Blockchain::get_next_long_term_block_weight(uint64_t block_weight) cons
     return block_weight;
 
   std::vector<uint64_t> weights(m_long_term_block_weights.begin(), m_long_term_block_weights.end());
-  weights[0] = block_weight;
+//std::cout << "median: " << weights.size() << std::endl;
+//  if (weights.empty())
+//    weights.resize(1);
+//  weights[0] = block_weight;
+uint64_t db_height = m_db->height();
+weights.clear();for (int n=0;n<5000;++n) weights.push_back(m_db->get_block_long_term_weight(db_height - 1 - n));
   uint64_t long_term_median = epee::misc_utils::median(weights);
+ltmedian = long_term_median;
+//std::cout << "lt median: " << long_term_median << std::endl;
   uint64_t long_term_effective_median_block_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, long_term_median);
+ltembw = long_term_effective_median_block_weight;
+//std::cout << "LTEFF: " << long_term_effective_median_block_weight << std::endl;
 
-  uint64_t short_term_constraint = long_term_effective_median_block_weight + long_term_effective_median_block_weight * 4 / 10;
+  uint64_t short_term_constraint = long_term_effective_median_block_weight + long_term_effective_median_block_weight * 2 / 5;
   uint64_t long_term_block_weight = std::min<uint64_t>(block_weight, short_term_constraint);
 
   return long_term_block_weight;
@@ -3747,7 +3758,7 @@ bool Blockchain::update_next_cumulative_weight_limit()
   }
 
   // ensure m_long_term_block_weights is filled
-  const uint64_t nblocks = std::min<uint64_t>(m_long_term_block_weights.capacity(), m_db->height());
+  const uint64_t nblocks = std::min<uint64_t>(m_long_term_block_weights.capacity(), db_height);
   while (m_long_term_block_weights.size() + 1 < nblocks)
     m_long_term_block_weights.push_front(m_db->get_block_long_term_weight(db_height - 1 - m_long_term_block_weights.size()));
 
@@ -3762,14 +3773,19 @@ bool Blockchain::update_next_cumulative_weight_limit()
     const uint64_t block_weight = m_db->get_block_weight(db_height - 1);
 
     std::vector<uint64_t> weights(m_long_term_block_weights.begin(), m_long_term_block_weights.end());
+//weights.back() = m_db->get_block_long_term_weight(db_height - 1 - m_long_term_block_weights.size());
+weights.clear();
+for (int n=0;n<5000;++n) weights.push_back(m_db->get_block_long_term_weight(db_height - 2 - n));
     uint64_t long_term_median = epee::misc_utils::median(weights);
     uint64_t long_term_effective_median_block_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, long_term_median);
+//std::cout << "LTEFF: " << long_term_effective_median_block_weight << std::endl;
 
     uint64_t short_term_constraint = long_term_effective_median_block_weight + long_term_effective_median_block_weight * 2 / 5;
     long_term_block_weight = std::min<uint64_t>(block_weight, short_term_constraint);
 
     weights.clear();
-    get_last_n_blocks_weights(weights, CRYPTONOTE_REWARD_BLOCKS_WINDOW);
+    //get_last_n_blocks_weights(weights, CRYPTONOTE_REWARD_BLOCKS_WINDOW);
+for (int n=0;n<100;++n) weights.push_back(m_db->get_block_weight(db_height - 2 - n));
 
     uint64_t short_term_median = epee::misc_utils::median(weights);
     uint64_t effective_median_block_weight = std::min<uint64_t>(std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE_V5, short_term_median), CRYPTONOTE_SHORT_TERM_BLOCK_WEIGHT_SURGE_FACTOR * long_term_effective_median_block_weight);
@@ -3779,6 +3795,8 @@ bool Blockchain::update_next_cumulative_weight_limit()
 
   m_long_term_block_weights.push_back(long_term_block_weight);
   m_long_term_block_weights_height = db_height;
+if (m_long_term_block_weights.size() != nblocks)
+std::cout << "NOPE: " << m_long_term_block_weights.size() << ", " << nblocks << std::endl;
   CHECK_AND_ASSERT_MES(m_long_term_block_weights.size() == nblocks, false, "Bad m_long_term_block_weights size");
 
   if (m_current_block_cumul_weight_median <= full_reward_zone)

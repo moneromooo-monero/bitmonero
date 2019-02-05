@@ -32,14 +32,14 @@
 #include "cryptonote_core/blockchain.h"
 #include "cryptonote_core/tx_pool.h"
 #include "cryptonote_core/cryptonote_core.h"
-#include "testdb.h"
+#include "blockchain_db/testdb.h"
 
 #define TEST_LONG_TERM_BLOCK_WEIGHT_WINDOW 10000
 
 namespace
 {
 
-class TestDB: public BaseTestDB
+class TestDB: public cryptonote::BaseTestDB
 {
 private:
   struct block_t

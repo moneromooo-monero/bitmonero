@@ -33,9 +33,11 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "gtest/gtest.h"
 
-#include "blockchain_db/blockchain_db.h"
+#include "blockchain_db.h"
+
+namespace cryptonote
+{
 
 class BaseTestDB: public cryptonote::BlockchainDB {
 public:
@@ -147,3 +149,4 @@ public:
   virtual void prune_outputs(uint64_t amount) {}
 };
 
+}
