@@ -268,8 +268,7 @@ namespace cryptonote
     }
     boost::interprocess::ipcdetail::atomic_write32(&m_stop, 0);
     boost::interprocess::ipcdetail::atomic_write32(&m_thread_index, 0);
-    for(size_t i = 0; i != m_threads_total; i++)
-      m_threads.push_back(boost::thread(m_attrs, boost::bind(&miner::worker_thread, this)));
+    start_threads(m_attrs, true);
   }
   //-----------------------------------------------------------------------------------------------------
   void miner::init_options(boost::program_options::options_description& desc)
@@ -388,10 +387,7 @@ namespace cryptonote
     set_is_background_mining_enabled(do_background);
     set_ignore_battery(ignore_battery);
     
-    for(size_t i = 0; i != m_threads_total; i++)
-    {
-      m_threads.push_back(boost::thread(attrs, boost::bind(&miner::worker_thread, this)));
-    }
+    start_threads(attrs, true);
 
     if (threads_count == 0)
       MINFO("Mining has started, autodetecting optimal number of threads, good luck!" );
@@ -410,6 +406,31 @@ namespace cryptonote
     }
 
     return true;
+  }
+  //-----------------------------------------------------------------------------------------------------
+  void miner::start_threads(const boost::thread::attributes& attrs, bool set_affinity)
+  {
+    const auto physical = boost::thread::physical_concurrency();
+    const auto logical = boost::thread::hardware_concurrency();
+    const auto da = physical ? logical / physical : 1;
+    boost::thread::attributes local_attrs(attrs);
+    MINFO("Starting " << m_threads_total << " threads, " << logical << " logical cores, " << physical << " physical cores");
+    for(size_t i = 0; i != m_threads_total; i++)
+    {
+      m_threads.push_back(boost::thread(local_attrs, boost::bind(&miner::worker_thread, this)));
+      if (set_affinity && physical && logical)
+      {
+        auto native_handle = m_threads.back().native_handle();
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        int idx = ((i * da) % logical + i / physical) % logical;
+        CPU_SET(idx, &cpuset);
+        MINFO("Setting thread " << i << " affinity to " << idx);
+        int ret = pthread_setaffinity_np(native_handle, sizeof(cpu_set_t), &cpuset);
+        if (ret)
+          MWARNING("Failed to set thread " << i << " affinity to " << idx << ": " << strerror(ret));
+      }
+    }
   }
   //-----------------------------------------------------------------------------------------------------
   uint64_t miner::get_speed() const

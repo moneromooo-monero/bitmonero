@@ -104,6 +104,7 @@ namespace cryptonote
     bool request_block_template();
     void  merge_hr();
     void  update_autodetection();
+    void  start_threads(const boost::thread::attributes& attrs, bool set_affinity);
     
     struct miner_config
     {

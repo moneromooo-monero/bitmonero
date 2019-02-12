@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "cpuid.h"
 #include "int-util.h"
 #include "hash-ops.h"
 #include "oaes_lib.h"
@@ -330,23 +331,6 @@ union cn_slow_hash_state
 THREADV uint8_t *hp_state = NULL;
 THREADV int hp_allocated = 0;
 
-#if defined(_MSC_VER)
-#define cpuid(info,x)    __cpuidex(info,x,0)
-#else
-void cpuid(int CPUInfo[4], int InfoType)
-{
-    ASM __volatile__
-    (
-    "cpuid":
-        "=a" (CPUInfo[0]),
-        "=b" (CPUInfo[1]),
-        "=c" (CPUInfo[2]),
-        "=d" (CPUInfo[3]) :
-            "a" (InfoType), "c" (0)
-        );
-}
-#endif
-
 /**
  * @brief a = (a xor b), where a and b point to 128 bit values
  */
@@ -389,13 +373,13 @@ STATIC INLINE int force_software_aes(void)
 
 STATIC INLINE int check_aes_hw(void)
 {
-    int cpuid_results[4];
+    uint32_t cpuid_results[4];
     static int supported = -1;
 
     if(supported >= 0)
         return supported;
 
-    cpuid(cpuid_results,1);
+    cpuid(cpuid_results, 1, 0);
     return supported = cpuid_results[2] & (1 << 25);
 }
 

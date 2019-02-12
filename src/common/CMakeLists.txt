@@ -108,5 +108,11 @@ target_link_libraries(common
     ${OPENSSL_LIBRARIES}
     ${EXTRA_LIBRARIES})
 
+monero_add_library(cpuid
+  cpuid.h cpuid.c)
+target_link_libraries(cpuid
+  PRIVATE
+    ${EXTRA_LIBRARIES})
+
 #monero_install_headers(common
 #  ${common_headers})
