@@ -4463,7 +4463,7 @@ void BlockchainLMDB::migrate_3_4()
       if (!past_long_term_weight)
       {
         MDB_val kb, vb;
-        result = mdb_cursor_get(c_blocks, &k, &v, MDB_NEXT);
+        result = mdb_cursor_get(c_blocks, &kb, &vb, MDB_NEXT);
         if (result)
           throw0(DB_ERROR(lmdb_error("Failed to query m_blocks: ", result).c_str()));
         if (vb.mv_size == 0)
