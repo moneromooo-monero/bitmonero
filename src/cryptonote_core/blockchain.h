@@ -529,6 +529,7 @@ namespace cryptonote
      * The transaction's rct signatures, if any, are expanded.
      *
      * @param tx the transaction to validate
+     * @param hf_version the fork version for the consensus rules to use
      * @param pmax_used_block_height return-by-reference block height of most recent input
      * @param max_used_block_id return-by-reference block hash of most recent input
      * @param tvc returned information about tx verification
@@ -536,7 +537,7 @@ namespace cryptonote
      *
      * @return false if any input is invalid, otherwise true
      */
-    bool check_tx_inputs(transaction& tx, uint64_t& pmax_used_block_height, crypto::hash& max_used_block_id, tx_verification_context &tvc, bool kept_by_block = false);
+    bool check_tx_inputs(transaction& tx, uint8_t hf_version, uint64_t& pmax_used_block_height, crypto::hash& max_used_block_id, tx_verification_context &tvc, bool kept_by_block = false);
 
     /**
      * @brief get fee quantization mask
@@ -600,10 +601,11 @@ namespace cryptonote
      *
      * @param tx the transaction to check the outputs of
      * @param tvc returned info about tx verification
+     * @param hf_version the fork version for the consensus rules to use
      *
      * @return false if any outputs do not conform, otherwise true
      */
-    bool check_tx_outputs(const transaction& tx, tx_verification_context &tvc);
+    bool check_tx_outputs(const transaction& tx, tx_verification_context &tvc, uint8_t hf_version);
 
     /**
      * @brief gets the block weight limit based on recent blocks
@@ -1127,12 +1129,13 @@ namespace cryptonote
      * transaction.
      *
      * @param tx the transaction to validate
+     * @param hf_version the consensus rules fork version
      * @param tvc returned information about tx verification
      * @param pmax_related_block_height return-by-pointer the height of the most recent block in the input set
      *
      * @return false if any validation step fails, otherwise true
      */
-    bool check_tx_inputs(transaction& tx, tx_verification_context &tvc, uint64_t* pmax_used_block_height = NULL);
+    bool check_tx_inputs(transaction& tx, uint8_t hf_version, tx_verification_context &tvc, uint64_t* pmax_used_block_height = NULL);
 
     /**
      * @brief performs a blockchain reorganization according to the longest chain rule

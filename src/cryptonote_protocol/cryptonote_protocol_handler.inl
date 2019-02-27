@@ -354,10 +354,11 @@ namespace cryptonote
     std::vector<block_complete_entry> blocks;
     blocks.push_back(arg.b);
     m_core.prepare_handle_incoming_blocks(blocks);
+    uint64_t block_height = m_core.get_current_blockchain_height();
     for(auto tx_blob_it = arg.b.txs.begin(); tx_blob_it!=arg.b.txs.end();tx_blob_it++)
     {
       cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
-      m_core.handle_incoming_tx(*tx_blob_it, tvc, true, true, false);
+      m_core.handle_incoming_tx(*tx_blob_it, tvc, block_height, true, true, false);
       if(tvc.m_verifivation_failed)
       {
         LOG_PRINT_CCONTEXT_L1("Block verification failed: transaction verification failed, dropping connection");
@@ -517,7 +518,8 @@ namespace cryptonote
           {
             MDEBUG("Incoming tx " << tx_hash << " not in pool, adding");
             cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);                        
-            if(!m_core.handle_incoming_tx(tx_blob, tvc, true, true, false) || tvc.m_verifivation_failed)
+            uint64_t block_height = m_core.get_current_blockchain_height();
+            if(!m_core.handle_incoming_tx(tx_blob, tvc, block_height, true, true, false) || tvc.m_verifivation_failed)
             {
               LOG_PRINT_CCONTEXT_L1("Block verification failed: transaction verification failed, dropping connection");
               drop_connection(context, false, false);
@@ -776,10 +778,11 @@ namespace cryptonote
 
     std::vector<cryptonote::blobdata> newtxs;
     newtxs.reserve(arg.txs.size());
+    uint64_t block_height = m_core.get_current_blockchain_height();
     for (size_t i = 0; i < arg.txs.size(); ++i)
     {
       cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
-      m_core.handle_incoming_tx(arg.txs[i], tvc, false, true, false);
+      m_core.handle_incoming_tx(arg.txs[i], tvc, block_height, false, true, false);
       if(tvc.m_verifivation_failed)
       {
         LOG_PRINT_CCONTEXT_L1("Tx verification failed, dropping connection");
@@ -1053,6 +1056,7 @@ skip:
 
           uint64_t block_process_time_full = 0, transactions_process_time_full = 0;
           size_t num_txs = 0;
+          uint64_t block_height = start_height;
           for(const block_complete_entry& block_entry: blocks)
           {
             if (m_stopping)
@@ -1065,7 +1069,8 @@ skip:
             TIME_MEASURE_START(transactions_process_time);
             num_txs += block_entry.txs.size();
             std::vector<tx_verification_context> tvc;
-            m_core.handle_incoming_txs(block_entry.txs, tvc, true, true, false);
+            m_core.handle_incoming_txs(block_entry.txs, tvc, block_height, true, true, false);
+            ++block_height;
             if (tvc.size() != block_entry.txs.size())
             {
               LOG_ERROR_CCONTEXT("Internal error: tvc.size() != block_entry.txs.size()");
