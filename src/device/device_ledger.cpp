@@ -1422,7 +1422,7 @@ namespace hw {
 
       // add ABPkeys
       this->add_output_key_mapping(dst_entr.addr.m_view_public_key, dst_entr.addr.m_spend_public_key, dst_entr.is_subaddress, is_change,
-                                   need_additional_txkeys, output_index,
+                                   need_additional_txkeys, output_index, output_offset, always_use_additional_tx_key,
                                    amount_keys.back(), out_eph_public_key);
 
       #ifdef DEBUG_HWDEVICE
@@ -1438,7 +1438,7 @@ namespace hw {
     }
 
     bool  device_ledger::add_output_key_mapping(const crypto::public_key &Aout, const crypto::public_key &Bout, const bool is_subaddress, const bool is_change,
-                                                const bool need_additional, const size_t real_output_index, const bool always_use_additional_tx_key,
+                                                const bool need_additional, const size_t real_output_index, const size_t real_output_offset, const bool always_use_additional_tx_key,
                                                 const rct::key &amount_key,  const crypto::public_key &out_eph_public_key)  {
         key_map.add(ABPkeys(rct::pk2rct(Aout),rct::pk2rct(Bout), is_subaddress, is_change, need_additional, real_output_index, rct::pk2rct(out_eph_public_key), amount_key));
         return true;

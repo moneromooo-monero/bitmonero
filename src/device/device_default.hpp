@@ -80,7 +80,7 @@ namespace hw {
             /* ======================================================================= */
             /*                               SUB ADDRESS                               */
             /* ======================================================================= */
-            bool  derive_subaddress_public_key(const crypto::public_key &pub, const crypto::key_derivation &derivation, const std::size_t output_index,  const size_t output_offset, crypto::public_key &derived_pub) override;
+            bool  derive_subaddress_public_key(const crypto::public_key &pub, const crypto::key_derivation &derivation, const std::size_t output_index,  crypto::public_key &derived_pub) override;
             crypto::public_key  get_subaddress_spend_public_key(const cryptonote::account_keys& keys, const cryptonote::subaddress_index& index) override;
             std::vector<crypto::public_key>  get_subaddress_spend_public_keys(const cryptonote::account_keys &keys, uint32_t account, uint32_t begin, uint32_t end) override;
             cryptonote::account_public_address  get_subaddress(const cryptonote::account_keys& keys, const cryptonote::subaddress_index &index) override;
@@ -121,7 +121,7 @@ namespace hw {
             bool  ecdhDecode(rct::ecdhTuple & masked, const rct::key & sharedSec, bool short_amount) override;
 
             bool  generate_output_ephemeral_keys(const size_t tx_version, const cryptonote::account_keys &sender_account_keys, const crypto::public_key &txkey_pub,  const crypto::secret_key &tx_key,
-                                                 const cryptonote::tx_destination_entry &dst_entr, const boost::optional<cryptonote::account_public_address> &change_addr, const size_t output_index,
+                                                 const cryptonote::tx_destination_entry &dst_entr, const boost::optional<cryptonote::account_public_address> &change_addr, const size_t output_index, const size_t output_offset, const bool always_use_additional_tx_key,
                                                  const bool &need_additional_txkeys, const std::vector<crypto::secret_key> &additional_tx_keys,
                                                  std::vector<crypto::public_key> &additional_tx_public_keys,
                                                  std::vector<rct::key> &amount_keys,
