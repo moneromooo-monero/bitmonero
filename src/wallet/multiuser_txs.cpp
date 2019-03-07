@@ -373,8 +373,11 @@ rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
     }
     CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.vout.size(), "Too many outs");
     CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < vouts.back().size(), "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.additional_tx_keys.size(), "Too many outs");
     CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < old_additional_tx_pub_keys.size(), "Too many outs");
     CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.rct_signatures.ecdhInfo.size(), "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.rct_signatures.outPk.size(), "Too many outs");
+    CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.rct_signatures.p.bulletproofs.size(), "Too many outs");
     new_ptx.tx.vout[out_idx + output_offset] = std::get<0>(vouts.back()[out_idx + output_offset]);
     new_ptx.additional_tx_keys[out_idx + output_offset] = std::get<1>(vouts.back()[out_idx + output_offset]);
     new_ptx.tx.rct_signatures.ecdhInfo[out_idx + output_offset] = std::get<2>(vouts.back()[out_idx + output_offset]);
