@@ -547,12 +547,13 @@ namespace rct {
         return result;
     }
 
-    static mgSig dummyMG(size_t inputs, size_t ring_size)
+    static mgSig dummyMGSimple(size_t inputs, size_t ring_size)
     {
         mgSig s;
-        s.ss.resize(ring_size, keyV(inputs + 1, rct::zero()));
+        s.ss.resize(ring_size, keyV(2, rct::zero()));
         s.cc = rct::zero();
         s.II.resize(inputs + 1, rct::zero());
+
         return s;
     }
 
@@ -900,7 +901,7 @@ namespace rct {
           if (owned[i])
             rv.p.MGs[i] = proveRctMGSimple(full_message, rv.mixRing[i], inSk[i], a[i], pseudoOuts[i], kLRki ? &(*kLRki)[i]: NULL, msout ? &msout->c[i] : NULL, index[i], hwdev);
           else
-            rv.p.MGs[i] = dummyMG(inamounts.size(), rv.mixRing[0].size());
+            rv.p.MGs[i] = dummyMGSimple(inamounts.size(), rv.mixRing[0].size());
         }
         return rv;
     }
