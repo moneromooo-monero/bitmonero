@@ -153,7 +153,7 @@ bool gen_multiuser_tx_validation_base::generate_with(std::vector<test_event_entr
   rct::multiuser_out muout;
   std::vector<crypto::secret_key> additional_tx_secret_keys;
   auto sources_copy = sources;
-  r = construct_tx_and_get_tx_key(miner_account[0].get_keys(), subaddresses[0], sources, destinations, boost::none, std::vector<uint8_t>(), tx, 0, tx_key, additional_tx_secret_keys, true, {rct::RangeProofBulletproof, 0}, NULL, &muout);
+  r = construct_tx_and_get_tx_key(miner_account[0].get_keys(), subaddresses[0], sources, destinations, boost::none, std::vector<uint8_t>(), tx, 0, tx_key, additional_tx_secret_keys, true, {rct::RangeProofBulletproof, 1}, NULL, &muout);
   CHECK_AND_ASSERT_MES(r, false, "failed to construct transaction");
 
   // work out the permutation done on sources
@@ -175,8 +175,15 @@ bool gen_multiuser_tx_validation_base::generate_with(std::vector<test_event_entr
   crypto::key_derivation derivation;
   r = crypto::generate_key_derivation(tx_pub_key2, miner_account[0].get_keys().m_view_secret_key, derivation);
   CHECK_AND_ASSERT_MES(r, false, "Failed to generate derivation");
-  uint64_t n_outs = 0, amount = 0;
   std::vector<crypto::key_derivation> additional_derivations;
+  const std::vector<crypto::public_key> additional_tx_pub_keys2 = get_additional_tx_pub_keys_from_extra(tx);
+  for (const crypto::public_key &pkey: additional_tx_pub_keys2)
+  {
+    additional_derivations.resize(additional_derivations.size() + 1);
+    r = crypto::generate_key_derivation(pkey, miner_account[0].get_keys().m_view_secret_key, additional_derivations.back());
+    CHECK_AND_ASSERT_MES(r, false, "Failed to generate derivation");
+  }
+  uint64_t n_outs = 0, amount = 0;
   for (size_t n = 0; n < tx.vout.size(); ++n)
   {
     CHECK_AND_ASSERT_MES(typeid(txout_to_key) == tx.vout[n].target.type(), false, "Unexpected tx out type");
