@@ -154,6 +154,7 @@ int main(int argc, char* argv[])
     {
       std::cout << "No fields were found in tx_extra" << std::endl;
     }
+    std::cout << "TXID: " << cryptonote::get_transaction_hash(tx) << std::endl;
   }
   else if (((full = cryptonote::parse_tx_extra(std::vector<uint8_t>(blob.begin(), blob.end()), fields)) || true) && !fields.empty())
   {

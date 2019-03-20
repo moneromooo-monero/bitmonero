@@ -50,6 +50,8 @@ using namespace epee;
 
 using namespace crypto;
 
+static const crypto::hash empty_hash = { (char)0xc5, (char)0xd2, (char)0x46, (char)0x01, (char)0x86, (char)0xf7, (char)0x23, (char)0x3c, (char)0x92, (char)0x7e, (char)0x7d, (char)0xb2, (char)0xdc, (char)0xc7, (char)0x03, (char)0xc0, (char)0xe5, (char)0x00, (char)0xb6, (char)0x53, (char)0xca, (char) 0x82, (char)0x27, (char)0x3b, (char)0x7b, (char)0xfa, (char)0xd8, (char)0x04, (char)0x5d, (char)0x85, (char)0xa4, (char)0x70 };
+
 static const uint64_t valid_decomposed_outputs[] = {
   (uint64_t)1, (uint64_t)2, (uint64_t)3, (uint64_t)4, (uint64_t)5, (uint64_t)6, (uint64_t)7, (uint64_t)8, (uint64_t)9, // 1 piconero
   (uint64_t)10, (uint64_t)20, (uint64_t)30, (uint64_t)40, (uint64_t)50, (uint64_t)60, (uint64_t)70, (uint64_t)80, (uint64_t)90,
@@ -982,7 +984,6 @@ namespace cryptonote
   {
     if (t.version == 1)
       return false;
-    static const crypto::hash empty_hash = { (char)0x70, (char)0xa4, (char)0x85, (char)0x5d, (char)0x04, (char)0xd8, (char)0xfa, (char)0x7b, (char)0x3b, (char)0x27, (char)0x82, (char)0xca, (char)0x53, (char)0xb6, (char)0x00, (char)0xe5, (char)0xc0, (char)0x03, (char)0xc7, (char)0xdc, (char)0xb2, (char)0x7d, (char)0x7e, (char)0x92, (char)0x3c, (char)0x23, (char)0xf7, (char)0x86, (char)0x01, (char)0x46, (char)0xd2, (char)0xc5 };
     const unsigned int unprunable_size = t.unprunable_size;
     if (blob && unprunable_size)
     {
@@ -1070,6 +1071,18 @@ namespace cryptonote
     const unsigned int unprunable_size = t.unprunable_size;
     const unsigned int prefix_size = t.prefix_size;
 
+if (!(prefix_size <= unprunable_size && unprunable_size <= blob.size()))
+{
+MGINFO(&t << ": Inconsistent transaction prefix, unprunable and blob sizes:");
+MGINFO("" << prefix_size << " " << unprunable_size << " " << blob.size());
+//      me:  84                    85                        85
+// woodser:  85                    86                        85
+MGINFO(&t << ": blob: " << epee::string_tools::buff_to_hex_nodelimer(blob));
+MGINFO(&t << ": Tx: " << obj_to_json_str((transaction&)t));
+//try { throw 0; } catch(...) {}
+//*(int*)-1 = 0;
+}
+
     // base rct
     CHECK_AND_ASSERT_MES(prefix_size <= unprunable_size && unprunable_size <= blob.size(), false, "Inconsistent transaction prefix, unprunable and blob sizes");
     cryptonote::get_blob_hash(epee::span<const char>(blob.data() + prefix_size, unprunable_size - prefix_size), hashes[1]);
@@ -1077,7 +1090,7 @@ namespace cryptonote
     // prunable rct
     if (t.rct_signatures.type == rct::RCTTypeNull)
     {
-      hashes[2] = crypto::null_hash;
+      hashes[2] = empty_hash;
     }
     else
     {

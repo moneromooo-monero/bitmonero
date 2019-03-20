@@ -143,7 +143,9 @@ namespace cryptonote
   bool t_serializable_object_to_blob(const t_object& to, blobdata& b_blob)
   {
     std::stringstream ss;
+    MDEBUG("serializating " << typeid(to).name() << " at " << &to << " in ss fl " << ss.good() << " " << ss.eof() << " " << ss.fail() << " " << ss.bad() << ", pos " << ss.tellp());
     binary_archive<true> ba(ss);
+    MDEBUG("serializating " << typeid(to).name() << " at " << &to << " in ss fl " << ss.good() << " " << ss.eof() << " " << ss.fail() << " " << ss.bad() << ss.tellp());
     bool r = ::serialization::serialize(ba, const_cast<t_object&>(to));
     b_blob = ss.str();
     return r;

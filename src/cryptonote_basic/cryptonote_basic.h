@@ -155,6 +155,19 @@ namespace cryptonote
   template<typename T> static inline unsigned int getpos(T &ar) { return 0; }
   template<> inline unsigned int getpos(binary_archive<true> &ar) { return ar.stream().tellp(); }
   template<> inline unsigned int getpos(binary_archive<false> &ar) { return ar.stream().tellg(); }
+  template<typename T> static inline std::string getfl(T &ar) { return ""; }
+  template<> inline std::string getfl(binary_archive<false> &ar) {
+    auto &s = ar.stream();
+    std::stringstream ss;
+    ss << "(fl " << s.good() << " " << s.eof() << " " << s.fail() << " " << s.bad() << ")";
+    return ss.str();
+  }
+  template<> inline std::string getfl(binary_archive<true> &ar) {
+    auto &s = ar.stream();
+    std::stringstream ss;
+    ss << "(fl " << s.good() << " " << s.eof() << " " << s.fail() << " " << s.bad() << ")";
+    return ss.str();
+  }
 
   class transaction_prefix
   {
@@ -231,16 +244,23 @@ namespace cryptonote
       }
 
       const unsigned int start_pos = getpos(ar);
+MGINFO(this << " start_pos: " << start_pos << " " << getfl(ar));
 
       FIELDS(*static_cast<transaction_prefix *>(this))
 
       if (std::is_same<Archive<W>, binary_archive<W>>())
+      {
         prefix_size = getpos(ar) - start_pos;
+MGINFO(this << " prefix_size: " << prefix_size);
+      }
 
       if (version == 1)
       {
         if (std::is_same<Archive<W>, binary_archive<W>>())
+        {
           unprunable_size = getpos(ar) - start_pos;
+MGINFO(this << " unprunable_size: " << prefix_size);
+        }
 
         ar.tag("signatures");
         ar.begin_array();
@@ -282,7 +302,10 @@ namespace cryptonote
           ar.end_object();
 
           if (std::is_same<Archive<W>, binary_archive<W>>())
+          {
             unprunable_size = getpos(ar) - start_pos;
+MGINFO(this << " unprunable_size: " << prefix_size);
+          }
 
           if (!pruned && rct_signatures.type != rct::RCTTypeNull)
           {
@@ -350,6 +373,7 @@ namespace cryptonote
     pruned = false;
     unprunable_size = 0;
     prefix_size = 0;
+MGINFO("tx init: " << this);
   }
 
   inline
