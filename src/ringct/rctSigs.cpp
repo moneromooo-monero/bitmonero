@@ -44,6 +44,10 @@ using namespace std;
 
 #define CHECK_AND_ASSERT_MES_L1(expr, ret, message) {if(!(expr)) {MCERROR("verify", message); return ret;}}
 
+std::string debug_test_invalid_tx;
+#define TEST_INVALID_TX(tag, code) \
+  do if (debug_test_invalid_tx == tag) { code; } while(0)
+
 namespace
 {
     rct::Bulletproof make_dummy_bulletproof(const std::vector<uint64_t> &outamounts, rct::keyV &C, rct::keyV &masks)
@@ -806,6 +810,7 @@ namespace rct {
                 {
                     const epee::span<const key> keys{&amount_keys[0], amount_keys.size()};
                     rv.p.bulletproofs.push_back(proveRangeBulletproof(C, masks, outamounts, keys, hwdev));
+                    TEST_INVALID_TX("bad-bp", {rv.p.bulletproofs.back().t.bytes[3]^=1;});
                     #ifdef DBG
                     CHECK_AND_ASSERT_THROW_MES(verBulletproof(rv.p.bulletproofs.back()), "verBulletproof failed on newly created proof");
                     #endif
@@ -835,6 +840,7 @@ namespace rct {
                 {
                     const epee::span<const key> keys{&amount_keys[amounts_proved], batch_size};
                     rv.p.bulletproofs.push_back(proveRangeBulletproof(C, masks, batch_amounts, keys, hwdev));
+                    TEST_INVALID_TX("bad-bp", {rv.p.bulletproofs.back().t.bytes[3]^=1;});
                 #ifdef DBG
                     CHECK_AND_ASSERT_THROW_MES(verBulletproof(rv.p.bulletproofs.back()), "verBulletproof failed on newly created proof");
                 #endif
@@ -875,6 +881,7 @@ namespace rct {
             genC(pseudoOuts[i], a[i], inamounts[i]);
         }
         sc_sub(a[i].bytes, sumout.bytes, sumpouts.bytes);
+        TEST_INVALID_TX("bad-pseudo-out", {sc_sub(a[i].bytes, a[i].bytes, rct::identity().bytes);});
         genC(pseudoOuts[i], a[i], inamounts[i]);
         DP(pseudoOuts[i]);
 

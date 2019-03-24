@@ -49,7 +49,7 @@ class Wallet(object):
             destinations.append({'amount':transfer_amounts[i],'address':addresses[i]})
         return destinations
 
-    def transfer(self, destinations, account_index = 0, subaddr_indices = [], priority = 0, ring_size = 0, unlock_time = 0, payment_id = '', get_tx_key = True, do_not_relay = False, get_tx_hex = False, get_tx_metadata = False):
+    def transfer(self, destinations, account_index = 0, subaddr_indices = [], priority = 0, ring_size = 0, unlock_time = 0, payment_id = '', get_tx_key = True, do_not_relay = False, get_tx_hex = False, get_tx_metadata = False, debug_invalid = ''):
         transfer = {
             'method': 'transfer',
             'params': {
@@ -64,6 +64,7 @@ class Wallet(object):
                 'do_not_relay' : do_not_relay,
                 'get_tx_hex' : get_tx_hex,
                 'get_tx_metadata' : get_tx_metadata,
+                'debug_invalid' : debug_invalid,
             },
             'jsonrpc': '2.0', 
             'id': '0'    

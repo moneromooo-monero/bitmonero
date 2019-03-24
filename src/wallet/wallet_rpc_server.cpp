@@ -59,6 +59,8 @@ using namespace epee;
 
 #define DEFAULT_AUTO_REFRESH_PERIOD 20 // seconds
 
+extern std::string debug_test_invalid_tx;
+
 namespace
 {
   const command_line::arg_descriptor<std::string, true> arg_rpc_bind_port = {"rpc-bind-port", "Sets bind port for server"};
@@ -939,7 +941,9 @@ namespace tools
     {
       uint64_t mixin = m_wallet->adjust_mixin(req.ring_size ? req.ring_size - 1 : 0);
       uint32_t priority = m_wallet->adjust_priority(req.priority);
+      debug_test_invalid_tx = req.debug_invalid;
       std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices);
+      debug_test_invalid_tx = "";
 
       if (ptx_vector.empty())
       {
@@ -1000,6 +1004,7 @@ namespace tools
     }
     catch (const std::exception& e)
     {
+      debug_test_invalid_tx = "";
       handle_rpc_exception(std::current_exception(), er, WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR);
       return false;
     }

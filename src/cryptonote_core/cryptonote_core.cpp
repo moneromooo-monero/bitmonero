@@ -66,6 +66,10 @@ DISABLE_VS_WARNINGS(4355)
 // basically at least how many bytes the block itself serializes to without the miner tx
 #define BLOCK_SIZE_SANITY_LEEWAY 100
 
+extern std::string debug_test_invalid_tx;
+#define TEST_INVALID_TX(code) \
+  do if (!debug_test_invalid_tx.empty()) { code; } while(0)
+
 namespace cryptonote
 {
   const command_line::arg_descriptor<bool, false> arg_testnet_on  = {
@@ -757,6 +761,7 @@ namespace cryptonote
     }
     //std::cout << "!"<< tx.vin.size() << std::endl;
 
+#if 0
     bad_semantics_txes_lock.lock();
     for (int idx = 0; idx < 2; ++idx)
     {
@@ -769,6 +774,7 @@ namespace cryptonote
       }
     }
     bad_semantics_txes_lock.unlock();
+#endif
 
     uint8_t version = m_blockchain_storage.get_current_hard_fork_version();
     const size_t max_tx_version = version == 1 ? 1 : 2;
