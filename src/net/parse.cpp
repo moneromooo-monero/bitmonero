@@ -53,6 +53,21 @@ namespace net
                 return make_error_code(net::error::invalid_port);
         }
 
+        const boost::string_ref::size_type slash = address.find_first_of('/');
+        if (slash != boost::string_ref::npos)
+        {
+          std::uint32_t ip = 0;
+          if (epee::string_tools::get_ip_int32_from_string(ip, std::string{address.data(), slash}))
+          {
+            uint32_t mask;
+            if (!epee::string_tools::get_xtype_from_string(mask, std::string{address.substr(slash + 1)}))
+                return make_error_code(net::error::invalid_mask);
+            if (mask > 32)
+                return make_error_code(net::error::invalid_mask);
+            return {epee::net_utils::ipv4_network_subnet{ip, (uint8_t)mask}};
+          }
+        }
+
         std::uint32_t ip = 0;
         if (epee::string_tools::get_ip_int32_from_string(ip, std::string{host}))
             return {epee::net_utils::ipv4_network_address{ip, port}};

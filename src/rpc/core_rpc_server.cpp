@@ -1788,6 +1788,35 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_banned(const COMMAND_RPC_BANNED::request& req, COMMAND_RPC_BANNED::response& res, epee::json_rpc::error& error_resp, const connection_context *ctx)
+  {
+    PERF_TIMER(on_banned);
+
+    auto na_parsed = net::get_network_address(req.address, 0);
+    if (!na_parsed)
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_WRONG_PARAM;
+      error_resp.message = "Unsupported host type";
+      return false;
+    }
+    epee::net_utils::network_address na = std::move(*na_parsed);
+
+    time_t seconds;
+    if (m_p2p.is_host_blocked(na, &seconds))
+    {
+      res.banned = true;
+      res.seconds = seconds;
+    }
+    else
+    {
+      res.banned = false;
+      res.seconds = 0;
+    }
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_set_bans(const COMMAND_RPC_SETBANS::request& req, COMMAND_RPC_SETBANS::response& res, epee::json_rpc::error& error_resp, const connection_context *ctx)
   {
     PERF_TIMER(on_set_bans);

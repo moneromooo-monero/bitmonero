@@ -155,18 +155,34 @@ namespace nodetool
   }
   //-----------------------------------------------------------------------------------
   template<class t_payload_net_handler>
-  bool node_server<t_payload_net_handler>::is_remote_host_allowed(const epee::net_utils::network_address &address)
+  bool node_server<t_payload_net_handler>::is_remote_host_allowed(const epee::net_utils::network_address &address, time_t *t)
   {
     CRITICAL_REGION_LOCAL(m_blocked_hosts_lock);
-    auto it = m_blocked_hosts.find(address);
-    if(it == m_blocked_hosts.end())
-      return true;
-    if(time(nullptr) >= it->second)
+
+    // manually loop since we have to check for subnets
+    const time_t now = time(nullptr);
+    std::map<epee::net_utils::network_address, time_t>::iterator it;
+    for (it = m_blocked_hosts.begin(); it != m_blocked_hosts.end(); )
     {
-      m_blocked_hosts.erase(it);
-      MCLOG_CYAN(el::Level::Info, "global", "Host " << address.host_str() << " unblocked.");
-      return true;
+      if(now >= it->second)
+      {
+        it = m_blocked_hosts.erase(it);
+        MCLOG_CYAN(el::Level::Info, "global", "Host " << address.host_str() << " unblocked.");
+        continue;
+      }
+      if (it->first == address)
+        break;
+      if (it->first.get_type_id() == epee::net_utils::address_type::ipv4subnet && address.get_type_id() == epee::net_utils::address_type::ipv4)
+      {
+        if (it->first.template as<epee::net_utils::ipv4_network_subnet>().matches(address.template as<epee::net_utils::ipv4_network_address>()))
+          break;
+      }
+      ++it;
     }
+    if (it == m_blocked_hosts.end())
+      return true;
+    if (t)
+      *t = it->second - now;
     return false;
   }
   //-----------------------------------------------------------------------------------

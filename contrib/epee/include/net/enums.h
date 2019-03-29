@@ -42,7 +42,8 @@ namespace net_utils
 		ipv4 = 1,
 		ipv6 = 2,
 		i2p = 3,
-		tor = 4
+		tor = 4,
+		ipv4subnet = 5,
 	};
 
 	enum class zone : std::uint8_t
