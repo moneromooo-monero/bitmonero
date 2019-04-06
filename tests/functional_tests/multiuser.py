@@ -50,34 +50,48 @@ class MultiuserTest():
     ]
 
     def run_test(self):
-        assert len(seeds) == len(addresses)
+        assert len(self.seeds) == len(self.addresses)
         self.create()
         self.mine()
 
     def create(self):
         print 'Creating wallets'
-        self.wallet = [None] * len(seeds)
-        for i in range(len(seeds)):
+        self.wallet = [None] * len(self.seeds)
+        for i in range(len(self.seeds)):
             self.wallet[i] = Wallet(idx = i)
             # close the wallet if any, will throw if none is loaded
             try: self.wallet[i].close_wallet()
             except: pass
-            res = self.wallet[i].restore_deterministic_wallet(seed = seeds[i])
-            res = res.get_address()
-            assert res.address == addresses[i]
+            res = self.wallet[i].restore_deterministic_wallet(seed = self.seeds[i])
+            res = self.wallet[i].get_address()
+            assert res.address == self.addresses[i]
 
     def mine(self):
         print("Mining some blocks")
         daemon = Daemon()
 
-        for i in range(len(seeds)):
-            daemon.generateblocks(addresses[i], 5)
+        for i in range(len(self.addresses)):
+            daemon.generateblocks(self.addresses[i], 5)
             for i in range(len(self.wallet)):
                 self.wallet[i].refresh()
-        daemon.generateblocks(addresses[0], 65)
+        daemon.generateblocks(self.addresses[0], 65)
 
     def simple_transaction(self):
-        pass
+        dst = {'address': '46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', amount: 1000000000000}
+        res = self.wallet[0].transfer_multiuser([dst])
+        assert len(res.multiuser_data) > 0
+        multiuser_data = res.multiuser_data
+        res = self.wallet[1].transfer_multiuser([dst], multiuser_data = multiuser_data)
+        assert len(res.multiuser_data) > 0
+        multiuser_data = res.multiuser_data
+        res = self.wallet[1].sign_multiuser(multiuser_data)
+        assert len(res.multiuser_data) > 0
+        multiuser_data = res.multiuser_data
+        res = self.wallet[0].sign_multiuser(multiuser_data)
+        assert len(res.multiuser_data) > 0
+        multiuser_data = res.multiuser_data
+        res = self.wallet[0].submit_multiuser(multiuser_data)
+        assert len(res.tx_hash) == 64
 
 
 if __name__ == '__main__':

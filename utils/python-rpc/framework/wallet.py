@@ -124,6 +124,28 @@ class Wallet(object):
         }
         return self.rpc.send_json_rpc_request(transfer_multiuser)
 
+    def sign_multiuser(self, multiuser_data):
+        sign_multiuser = {
+            'method': 'sign_multiuser',
+            'params': {
+                'multiuser_data' : multiuser_data,
+            },
+            'jsonrpc': '2.0',
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(sign_multiuser)
+
+    def submit_multiuser(self, multiuser_data):
+        submit_multiuser = {
+            'method': 'submit_multiuser',
+            'params': {
+                'multiuser_data' : multiuser_data,
+            },
+            'jsonrpc': '2.0',
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(submit_multiuser)
+
     def get_bulk_payments(self, payment_ids = [], min_block_height = 0):
         get_bulk_payments = {
             'method': 'get_bulk_payments',

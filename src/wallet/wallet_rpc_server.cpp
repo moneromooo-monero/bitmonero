@@ -4167,6 +4167,100 @@ namespace tools
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_sign_multiuser(const wallet_rpc::COMMAND_RPC_SIGN_MULTIUSER::request& req, wallet_rpc::COMMAND_RPC_SIGN_MULTIUSER::response& res, epee::json_rpc::error& er, const connection_context *ctx)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_restricted)
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+    if (m_wallet->multisig())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_NOT_MULTISIG;
+      er.message = "Command unavailable for multisig wallets";
+      return false;
+    }
+
+    tools::wallet2::multiuser_tx_set multiuser_txs;
+    if (!m_wallet->load_multiuser_tx(req.multiuser_data, multiuser_txs, [](const tools::wallet2::multiuser_tx_set &txs) { return true; }))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
+      er.message = "Failed to parse multiuser data";
+      return false;
+    }
+    try
+    {
+      if (!m_wallet->sign_multiuser_tx(multiuser_txs))
+      {
+        er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_CREATION;
+        er.message = "Failed to sign multiuser data";
+        return false;
+      }
+    }
+    catch (const std::exception &e)
+    {
+      er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_CREATION;
+      er.message = "Failed to sign multiuser data";
+      return false;
+    }
+    std::string multiuser_data = m_wallet->save_multiuser_tx(multiuser_txs);
+    if (multiuser_data.empty())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_CREATION;
+      er.message = "Failed to save multiuser data";
+      return false;
+    }
+    res.multiuser_data = std::move(multiuser_data);
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_submit_multiuser(const wallet_rpc::COMMAND_RPC_SUBMIT_MULTIUSER::request& req, wallet_rpc::COMMAND_RPC_SUBMIT_MULTIUSER::response& res, epee::json_rpc::error& er, const connection_context *ctx)
+  {
+    if (!m_wallet) return not_open(er);
+    if (m_restricted)
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+    if (m_wallet->multisig())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_NOT_MULTISIG;
+      er.message = "Command unavailable for multisig wallets";
+      return false;
+    }
+
+    tools::wallet2::multiuser_tx_set multiuser_txs;
+    if (!m_wallet->load_multiuser_tx(req.multiuser_data, multiuser_txs, [](const tools::wallet2::multiuser_tx_set &txs) { return true; }))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
+      er.message = "Failed to parse multiuser data";
+      return false;
+    }
+    if (multiuser_txs.m_ptx.tx.vout.size() < 2)
+    {
+      er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
+      er.message = "Transaction has fewer than 2 outputs";
+      return false;
+    }
+
+    try
+    {
+      tools::wallet2::pending_tx &ptx = multiuser_txs.m_ptx;
+      m_wallet->commit_tx(ptx);
+    }
+    catch (const std::exception &e)
+    {
+      er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_SUBMIT;
+      er.message = "Failed to submit multiuser data";
+      return false;
+    }
+    res.tx_hash = epee::string_tools::pod_to_hex(cryptonote::get_transaction_hash(multiuser_txs.m_ptx.tx));
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   bool wallet_rpc_server::on_validate_address(const wallet_rpc::COMMAND_RPC_VALIDATE_ADDRESS::request& req, wallet_rpc::COMMAND_RPC_VALIDATE_ADDRESS::response& res, epee::json_rpc::error& er, const connection_context *ctx)
   {
     cryptonote::address_parse_info info;
