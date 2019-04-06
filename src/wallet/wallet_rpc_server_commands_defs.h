@@ -499,6 +499,53 @@ namespace wallet_rpc
     typedef epee::misc_utils::struct_init<response_t> response;
   };
 
+  struct COMMAND_RPC_TRANSFER_MULTIUSER
+  {
+    struct request_t
+    {
+      std::list<transfer_destination> destinations;
+      uint32_t account_index;
+      std::set<uint32_t> subaddr_indices;
+      uint32_t priority;
+      uint64_t ring_size;
+      uint64_t unlock_time;
+      std::string payment_id;
+      bool get_tx_key;
+      std::string multiuser_data;
+      bool disclose;
+      std::list<transfer_destination> other_destinations;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(destinations)
+        KV_SERIALIZE(account_index)
+        KV_SERIALIZE(subaddr_indices)
+        KV_SERIALIZE(priority)
+        KV_SERIALIZE_OPT(ring_size, (uint64_t)0)
+        KV_SERIALIZE(unlock_time)
+        KV_SERIALIZE(payment_id)
+        KV_SERIALIZE(get_tx_key)
+        KV_SERIALIZE(multiuser_data)
+        KV_SERIALIZE_OPT(disclose, false)
+        KV_SERIALIZE(other_destinations)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<request_t> request;
+
+    struct response_t
+    {
+      std::string tx_hash;
+      std::string tx_key;
+      std::string multiuser_data;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(tx_hash)
+        KV_SERIALIZE(tx_key)
+        KV_SERIALIZE(multiuser_data)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<response_t> response;
+  };
+
   struct COMMAND_RPC_TRANSFER_SPLIT
   {
     struct request_t

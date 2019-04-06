@@ -914,6 +914,7 @@ private:
     bool save_multiuser_setup(const multiuser_private_setup &private_setup, const multiuser_public_setup &public_setup, std::string &data) const;
     bool save_multiuser_tx_to_file(const multiuser_tx_set &multiuser_txs, const std::string &filename);
     bool load_multiuser_setup(std::string data, multiuser_private_setup &private_setup, multiuser_public_setup &public_setup, bool &ours) const;
+    bool pre_merge_multiuser(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<cryptonote::tx_destination_entry> &other_dsts, const rct::multiuser_out &muout, bool disclose);
     bool merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool disclose, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts);
     std::string save_multiuser_tx(const multiuser_tx_set &txs);
     bool load_multiuser_tx(const std::string &data, multiuser_tx_set &txs, std::function<bool(const multiuser_tx_set&)> accept_func = NULL);

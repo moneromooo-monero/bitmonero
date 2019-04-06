@@ -1011,6 +1011,95 @@ namespace tools
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool wallet_rpc_server::on_transfer_multiuser(const wallet_rpc::COMMAND_RPC_TRANSFER_MULTIUSER::request& req, wallet_rpc::COMMAND_RPC_TRANSFER_MULTIUSER::response& res, epee::json_rpc::error& er, const connection_context *ctx)
+  {
+    std::vector<cryptonote::tx_destination_entry> dsts;
+    std::vector<cryptonote::tx_destination_entry> other_dsts;
+    std::vector<uint8_t> extra, dummy_extra;
+    wallet2::multiuser_tx_set multiuser_txs;
+    rct::multiuser_out muout;
+    boost::optional<crypto::secret_key> tx_key;
+
+    LOG_PRINT_L3("on_transfer_multiuser starts");
+    if (!m_wallet) return not_open(er);
+    if (m_restricted)
+    {
+      er.code = WALLET_RPC_ERROR_CODE_DENIED;
+      er.message = "Command unavailable in restricted mode.";
+      return false;
+    }
+    if (m_wallet->multisig())
+    {
+      er.code = WALLET_RPC_ERROR_CODE_NOT_MULTISIG;
+      er.message = "Command unavailable for multisig wallets";
+      return false;
+    }
+
+    // validate the transfer requested and populate dsts & extra
+    if (!validate_transfer(req.destinations, req.payment_id, dsts, extra, true, er))
+      return false;
+    if (!validate_transfer(req.other_destinations, "", other_dsts, dummy_extra, false, er))
+      return false;
+
+    if (!req.multiuser_data.empty())
+    {
+      if (!m_wallet->load_multiuser_tx(req.multiuser_data, multiuser_txs, [](const wallet2::multiuser_tx_set&) { return true; }))
+      {
+        er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
+        er.message = "Failed to parse multiuser data";
+        return false;
+      }
+      tx_key = multiuser_txs.m_ptx.tx_key;
+      muout.output_offset = multiuser_txs.m_ptx.tx.vout.size();
+    }
+
+    try
+    {
+      uint64_t mixin = m_wallet->adjust_mixin(req.ring_size ? req.ring_size - 1 : 0);
+      uint32_t priority = m_wallet->adjust_priority(req.priority);
+      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, tx_key, &muout);
+
+      if (ptx_vector.empty())
+      {
+        er.code = WALLET_RPC_ERROR_CODE_TX_NOT_POSSIBLE;
+        er.message = "No transaction created";
+        return false;
+      }
+
+      // reject proposed transactions if there are more than one, multiuser txes can only be a single tx
+      if (ptx_vector.size() != 1)
+      {
+        er.code = WALLET_RPC_ERROR_CODE_TX_TOO_LARGE;
+        er.message = "Transaction would be too large. A multiuser transfer must consist of a single transaction";
+        return false;
+      }
+
+      const wallet2::pending_tx &ptx = ptx_vector.front();
+
+      if (!m_wallet->pre_merge_multiuser(multiuser_txs, ptx, dsts, other_dsts, muout, req.disclose))
+      {
+        er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_CREATION;
+        er.message = "Failed to merge multiuser transaction";
+        return false;
+      }
+
+      if (req.get_tx_key)
+      {
+        epee::wipeable_string s = epee::to_hex::wipeable_string(ptx.tx_key);
+        for (const crypto::secret_key& additional_tx_key : ptx.additional_tx_keys)
+          s += epee::to_hex::wipeable_string(additional_tx_key);
+        res.tx_key = std::string(s.data(), s.size());
+      }
+      res.multiuser_data = m_wallet->save_multiuser_tx(multiuser_txs);
+    }
+    catch (const std::exception& e)
+    {
+      handle_rpc_exception(std::current_exception(), er, WALLET_RPC_ERROR_CODE_GENERIC_TRANSFER_ERROR);
+      return false;
+    }
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   bool wallet_rpc_server::on_transfer_split(const wallet_rpc::COMMAND_RPC_TRANSFER_SPLIT::request& req, wallet_rpc::COMMAND_RPC_TRANSFER_SPLIT::response& res, epee::json_rpc::error& er, const connection_context *ctx)
   {
 
