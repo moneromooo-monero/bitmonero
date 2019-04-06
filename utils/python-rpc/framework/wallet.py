@@ -103,6 +103,27 @@ class Wallet(object):
         }
         return self.rpc.send_json_rpc_request(get_transfer_by_txid)
 
+    def transfer_multiuser(self, destinations, account_index = 0, subaddr_indices = [], priority = 0, ring_size = 0, unlock_time = 0, payment_id = '', get_tx_key = True, multiuser_data = "", disclose = False, other_destinations = []):
+        transfer_multiuser = {
+            'method': 'transfer_multiuser',
+            'params': {
+                'destinations': destinations,
+                'account_index': account_index,
+                'subaddr_indices': subaddr_indices,
+                'priority': priority,
+                'ring_size' : ring_size,
+                'unlock_time' : unlock_time,
+                'payment_id' : payment_id,
+                'get_tx_key' : get_tx_key,
+                'multiuser_data' : multiuser_data,
+                'disclose' : disclose,
+                'other_destinations' : other_destinations,
+            },
+            'jsonrpc': '2.0',
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(transfer_multiuser)
+
     def get_bulk_payments(self, payment_ids = [], min_block_height = 0):
         get_bulk_payments = {
             'method': 'get_bulk_payments',

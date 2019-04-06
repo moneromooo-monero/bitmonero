@@ -262,6 +262,42 @@ bool wallet2::load_multiuser_tx_from_file(const std::string &filename, multiuser
   return load_multiuser_tx(s, txs, accept_func);
 }
 //----------------------------------------------------------------------------------------------------
+bool wallet2::pre_merge_multiuser(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<cryptonote::tx_destination_entry> &other_dsts, const rct::multiuser_out &muout, bool disclose)
+{
+  tools::wallet2::multiuser_private_setup private_setup;
+  tools::wallet2::multiuser_public_setup public_setup;
+
+  private_setup.vin = ptx.tx.vin;
+  private_setup.muout = muout;
+  private_setup.tx_key = cryptonote::get_tx_pub_key_from_extra(ptx.tx);
+  private_setup.additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(ptx.tx);
+
+  if (disclose)
+  {
+    for (const cryptonote::tx_destination_entry &dst: dsts)
+      public_setup.dests.push_back(dst);
+  }
+  public_setup.conditions = other_dsts;
+  public_setup.unlock_time = ptx.tx.unlock_time;
+
+  if (!merge_multiuser_tx(multiuser_txs, ptx, disclose, private_setup.vout))
+  {
+    MERROR("Failed to merge multiuser transactions");
+    return false;
+  }
+
+  std::string data;
+  if (!save_multiuser_setup(private_setup, public_setup, data))
+  {
+    MERROR("Failed to save multiuser setup");
+    return false;
+  }
+
+  multiuser_txs.m_setup.push_back(data);
+
+  return true;
+}
+//----------------------------------------------------------------------------------------------------
 bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool disclose, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts)
 {
   const bool first = multiuser_txs.m_ptx.tx == cryptonote::transaction();
