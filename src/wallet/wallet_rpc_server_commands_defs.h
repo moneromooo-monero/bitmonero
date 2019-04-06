@@ -2453,6 +2453,52 @@ namespace wallet_rpc
     typedef epee::misc_utils::struct_init<response_t> response;
   };
 
+  struct COMMAND_RPC_SIGN_MULTIUSER
+  {
+    struct request_t
+    {
+      std::string multiuser_data;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(multiuser_data)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<request_t> request;
+
+    struct response_t
+    {
+      std::string multiuser_data;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(multiuser_data)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<response_t> response;
+  };
+
+  struct COMMAND_RPC_SUBMIT_MULTIUSER
+  {
+    struct request_t
+    {
+      std::string multiuser_data;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(multiuser_data)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<request_t> request;
+
+    struct response_t
+    {
+      std::string tx_hash;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(tx_hash)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<response_t> response;
+  };
+
   struct COMMAND_RPC_GET_VERSION
   {
     struct request_t
