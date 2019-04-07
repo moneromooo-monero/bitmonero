@@ -92,7 +92,35 @@ class MultiuserTest():
         multiuser_data = res.multiuser_data
         res = self.wallet[0].submit_multiuser(multiuser_data)
         assert len(res.tx_hash) == 64
+        txid = res.tx_hash
 
+        res = daemon.get_transactions([txid])
+        assert len(res.txs) == 1
+        assert not 'missed_tx' in res or len(res.missed_tx) == 0
+        tx = res.txs[0]
+        assert tx.tx_hash == txid
+        assert tx.in_pool == True
+        daemon.generateblocks('46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', 1)
+        res = daemon.get_transactions([txid])
+        assert len(res.txs) == 1
+        assert not 'missed_tx' in res or len(res.missed_tx) == 0
+        tx = res.txs[0]
+        assert tx.tx_hash == txid
+        assert tx.in_pool == False
+
+        # TODO
+        self.wallet[0].refresh()
+        self.wallet[1].refresh()
+
+
+class Guard:
+    def __enter__(self):
+        for i in range(3):
+            Wallet(idx = i).auto_refresh(False)
+    def __exit__(self, exc_type, exc_value, traceback):
+        for i in range(3):
+            Wallet(idx = i).auto_refresh(True)
 
 if __name__ == '__main__':
-    MultiuserTest().run_test()
+    with Guard() as guard:
+        MultiuserTest().run_test()
