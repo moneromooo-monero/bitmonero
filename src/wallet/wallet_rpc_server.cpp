@@ -1068,7 +1068,7 @@ namespace tools
 
       const wallet2::pending_tx &ptx = ptx_vector.front();
 
-      if (!m_wallet->pre_merge_multiuser(multiuser_txs, ptx, dsts, other_dsts, muout, req.disclose))
+      if (!m_wallet->merge_multiuser(multiuser_txs, ptx, dsts, other_dsts, muout, req.disclose))
       {
         er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_CREATION;
         er.message = "Failed to merge multiuser transaction";

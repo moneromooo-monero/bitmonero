@@ -34,6 +34,7 @@
 #include "include_base_utils.h"
 #include "cryptonote_config.h"
 #include "wallet2.h"
+#include "cryptonote_basic/cryptonote_basic.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "misc_language.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
@@ -264,7 +265,7 @@ bool wallet2::load_multiuser_tx_from_file(const std::string &filename, multiuser
   return load_multiuser_tx(s, txs, accept_func);
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::pre_merge_multiuser(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<cryptonote::tx_destination_entry> &other_dsts, const rct::multiuser_out &muout, bool disclose)
+bool wallet2::merge_multiuser(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<cryptonote::tx_destination_entry> &other_dsts, const rct::multiuser_out &muout, bool disclose)
 {
   tools::wallet2::multiuser_private_setup private_setup;
   tools::wallet2::multiuser_public_setup public_setup;
@@ -277,7 +278,8 @@ bool wallet2::pre_merge_multiuser(multiuser_tx_set &multiuser_txs, const pending
   if (disclose)
   {
     for (const cryptonote::tx_destination_entry &dst: dsts)
-      public_setup.dests.push_back(dst);
+      if (dst.operator!=(ptx.change_dts))
+        public_setup.dests.push_back(dst);
   }
   public_setup.conditions = other_dsts;
   public_setup.unlock_time = ptx.tx.unlock_time;
@@ -443,7 +445,8 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     new_ptx.multisig_sigs.clear();
     new_ptx.construction_data = {};
     new_ptx.tx_key = crypto::null_skey;
-    if (!disclose)
+    const bool is_change = ptx.construction_data.splitted_dsts[out_idx] == ptx.change_dts;
+    if (!disclose || is_change)
     {
       for (auto &e: multiuser_txs.m_vouts.back())
         std::get<1>(e) = crypto::null_skey;

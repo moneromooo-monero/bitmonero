@@ -6114,7 +6114,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
 
       const tools::wallet2::pending_tx &ptx = ptx_vector[0];
 
-      if (!m_wallet->pre_merge_multiuser(multiuser_txs, ptx, dsts, multiuser_other_dsts, muout, multiuser_disclose))
+      if (!m_wallet->merge_multiuser(multiuser_txs, ptx, dsts, multiuser_other_dsts, muout, multiuser_disclose))
       {
         fail_msg_writer() << tr("Failed to merge multiuser transaction");
         return false;
