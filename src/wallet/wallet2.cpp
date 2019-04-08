@@ -8444,7 +8444,9 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   if (m_multisig)
   {
     auto ignore = ignore_sets.empty() ? std::unordered_set<crypto::public_key>() : ignore_sets.front();
-    multisig_sigs.push_back({tx.rct_signatures, ignore, used_L, std::unordered_set<crypto::public_key>(), msout});
+    THROW_WALLET_EXCEPTION_IF(sources.front().outputs.empty(), error::wallet_internal_error, "Empty outputs vector");
+    size_t mixin = sources.front().outputs.size() - 1;
+    multisig_sigs.push_back({tx.vin.size(), tx.vout.size(), mixin, tx.rct_signatures, ignore, used_L, std::unordered_set<crypto::public_key>(), msout});
 
     if (m_multisig_threshold < m_multisig_signers.size())
     {
@@ -8471,7 +8473,9 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
         THROW_WALLET_EXCEPTION_IF(!r, error::tx_not_constructed, sources, splitted_dsts, unlock_time, m_nettype);
         THROW_WALLET_EXCEPTION_IF(upper_transaction_weight_limit <= get_transaction_weight(tx), error::tx_too_big, tx, upper_transaction_weight_limit);
         THROW_WALLET_EXCEPTION_IF(cryptonote::get_transaction_prefix_hash(ms_tx) != prefix_hash, error::wallet_internal_error, "Multisig txes do not share prefix");
-        multisig_sigs.push_back({ms_tx.rct_signatures, ignore_sets[ignore_index], new_used_L, std::unordered_set<crypto::public_key>(), msout});
+        THROW_WALLET_EXCEPTION_IF(sources_copy_copy.front().outputs.empty(), error::wallet_internal_error, "Multisig txes do not share prefix");
+        size_t mixin = sources_copy_copy.front().outputs.size() - 1;
+        multisig_sigs.push_back({ms_tx.vin.size(), ms_tx.vout.size(), mixin, ms_tx.rct_signatures, ignore_sets[ignore_index], new_used_L, std::unordered_set<crypto::public_key>(), msout});
 
         ms_tx.rct_signatures = tx.rct_signatures;
         THROW_WALLET_EXCEPTION_IF(cryptonote::get_transaction_hash(ms_tx) != cryptonote::get_transaction_hash(tx), error::wallet_internal_error, "Multisig txes differ by more than the signatures");

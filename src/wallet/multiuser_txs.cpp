@@ -205,6 +205,8 @@ std::string wallet2::save_multiuser_tx(const multiuser_tx_set &txs)
   {
     return "";
   }
+  std::string s = cryptonote::obj_to_json_str((multiuser_tx_set&)txs);
+  MGINFO("Saved multiuser_tx_set: " << s);
   return MULTIUSER_TX_PREFIX + oss.str();
 }
 //----------------------------------------------------------------------------------------------------

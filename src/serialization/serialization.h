@@ -72,6 +72,8 @@ struct is_basic_type { typedef boost::false_type type; };
 
 template<typename F, typename S>
 struct is_basic_type<std::pair<F,S>> { typedef boost::true_type type; };
+template<typename T0, typename T1, typename T2, typename T3, typename T4, typename T5>
+struct is_basic_type<std::tuple<T0, T1, T2, T3, T4, T5>> { typedef boost::true_type type; };
 template<>
 struct is_basic_type<std::string> { typedef boost::true_type type; };
 
