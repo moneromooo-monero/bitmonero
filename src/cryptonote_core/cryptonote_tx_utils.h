@@ -95,6 +95,16 @@ namespace cryptonote
     tx_destination_entry(uint64_t a, const account_public_address &ad, bool is_subaddress) : amount(a), addr(ad), is_subaddress(is_subaddress), is_integrated(false) { }
     tx_destination_entry(const std::string &o, uint64_t a, const account_public_address &ad, bool is_subaddress) : original(o), amount(a), addr(ad), is_subaddress(is_subaddress), is_integrated(false) { }
 
+    bool operator==(const tx_destination_entry &other) const {
+      if (original != other.original) return false;
+      if (amount != other.amount) return false;
+      if (addr != other.addr) return false;
+      if (is_subaddress != other.is_subaddress) return false;
+      if (is_integrated != other.is_integrated) return false;
+      return true;
+    }
+    bool operator!=(const tx_destination_entry &other) const { return !operator==(other); }
+
     BEGIN_SERIALIZE_OBJECT()
       FIELD(original)
       VARINT_FIELD(amount)
