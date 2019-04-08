@@ -58,6 +58,8 @@
 #include "ringct/rctOps.h"
 #include "checkpoints/checkpoints.h"
 #include "serialization/pair.h"
+#include "serialization/set.h"
+#include "serialization/tuple.h"
 
 #include "wallet_errors.h"
 #include "common/password.h"
@@ -435,11 +437,32 @@ private:
 
     struct multisig_sig
     {
+      size_t inputs, outputs, mixin;
       rct::rctSig sigs;
       std::unordered_set<crypto::public_key> ignore;
       std::unordered_set<rct::key> used_L;
       std::unordered_set<crypto::public_key> signing_keys;
       rct::multisig_out msout;
+
+      BEGIN_SERIALIZE_OBJECT()
+        VARINT_FIELD(inputs)
+        VARINT_FIELD(outputs)
+        VARINT_FIELD(mixin)
+        ar.begin_object();
+        bool r = sigs.serialize_rctsig_base(ar, inputs, outputs);
+        if (!r || !ar.stream().good()) return false;
+        ar.end_object();
+        ar.tag("rctsig_prunable");
+        ar.begin_object();
+        r = sigs.p.serialize_rctsig_prunable(ar, sigs.type, inputs, outputs, mixin);
+        if (!r || !ar.stream().good()) return false;
+        ar.end_object();
+
+        FIELD(ignore)
+        FIELD(used_L)
+        FIELD(signing_keys)
+        FIELD(msout)
+      END_SERIALIZE()
     };
 
     struct multiuser_private_setup
@@ -1624,7 +1647,7 @@ BOOST_CLASS_VERSION(tools::wallet2::unsigned_tx_set, 0)
 BOOST_CLASS_VERSION(tools::wallet2::signed_tx_set, 1)
 BOOST_CLASS_VERSION(tools::wallet2::tx_construction_data, 4)
 BOOST_CLASS_VERSION(tools::wallet2::pending_tx, 3)
-BOOST_CLASS_VERSION(tools::wallet2::multisig_sig, 0)
+BOOST_CLASS_VERSION(tools::wallet2::multisig_sig, 1)
 BOOST_CLASS_VERSION(tools::wallet2::multiuser_private_setup, 0)
 BOOST_CLASS_VERSION(tools::wallet2::multiuser_public_setup, 0)
 BOOST_CLASS_VERSION(tools::wallet2::multiuser_tx_set, 0)
@@ -2061,6 +2084,12 @@ namespace boost
     template <class Archive>
     inline void serialize(Archive &a, tools::wallet2::multisig_sig &x, const boost::serialization::version_type ver)
     {
+      if (!(ver < 1))
+      {
+        a & x.inputs;
+        a & x.outputs;
+        a & x.mixin;
+      }
       a & x.sigs;
       a & x.ignore;
       a & x.used_L;
