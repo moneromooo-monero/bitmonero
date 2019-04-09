@@ -1251,7 +1251,7 @@ namespace rct {
     }
 
     bool signMultiuser(rctSig &rv, const ctkeyV &inSk, const std::vector<bool> &owned, const multiuser_out &muout, hw::device &hwdev) {
-        CHECK_AND_ASSERT_MES(rv.type == RCTTypeSimple || rv.type == RCTTypeBulletproof, false, "unsupported rct type");
+        CHECK_AND_ASSERT_MES(rv.type == RCTTypeSimple || rv.type == RCTTypeBulletproof || rv.type == RCTTypeBulletproof2, false, "unsupported rct type");
         CHECK_AND_ASSERT_MES(owned.size() == inSk.size(), false, "Mismatched owned/inSk size");
         CHECK_AND_ASSERT_MES(owned.size() == rv.p.MGs.size(), false, "Mismatched owned/MGs size");
         CHECK_AND_ASSERT_MES(owned.size() == rv.mixRing.size(), false, "Mismatched owned/mixRing size");
