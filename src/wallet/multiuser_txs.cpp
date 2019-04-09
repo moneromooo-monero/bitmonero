@@ -207,7 +207,7 @@ std::string wallet2::save_multiuser_tx(const multiuser_tx_set &txs)
     return "";
   }
   std::string s = cryptonote::obj_to_json_str((multiuser_tx_set&)txs);
-  MGINFO("Saved multiuser_tx_set: " << s);
+  MDEBUG("Saved multiuser_tx_set: " << s);
   return MULTIUSER_TX_PREFIX + oss.str();
 }
 //----------------------------------------------------------------------------------------------------
@@ -406,7 +406,7 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
       rct::ecdhTuple ecdh_info = base_ecdh_info;
       rct::ecdhEncode(ecdh_info, rct::sk2rct(amount_key), new_ptx.tx.rct_signatures.type == rct::RCTTypeBulletproof2);
       rct::key outPk_mask;
-      rct::addKeys2(outPk_mask, base_ecdh_info.mask, base_ecdh_info.amount, rct::H);
+      rct::addKeys2(outPk_mask, rct::genCommitmentMask(rct::sk2rct(amount_key)), base_ecdh_info.amount, rct::H);
       rct::Bulletproof bp = rct::bulletproof_PROVE(ptx.construction_data.splitted_dsts[out_idx].amount, base_ecdh_info.mask);
       vouts.back().push_back({vout, tx_key, ecdh_info, outPk_mask, bp});
     }
@@ -576,6 +576,7 @@ found:;
   }
 
   // check claimed destinations are what they claim to be
+  std::vector<bool> output_used(tx.vout.size(), false);
   std::unordered_map<cryptonote::account_public_address, uint64_t> third_party_payments;
   for (const auto &setup: mtx.m_setup)
   {
@@ -586,7 +587,6 @@ found:;
     if (ours)
       continue;
 
-    std::vector<bool> output_used(tx.vout.size(), false);
     for (const auto &dest: pub.dests)
     {
       uint64_t received = 0;
@@ -635,17 +635,22 @@ found:;
         THROW_WALLET_EXCEPTION_IF(sc_check(ecdh_info.amount.bytes) != 0, error::wallet_internal_error, "Bad ECDH input amount");
         rct::addKeys2(Ctmp, ecdh_info.mask, ecdh_info.amount, rct::H);
         if (rct::equalKeys(C, Ctmp))
-          received += rct::h2d(ecdh_info.amount);
+        {
+          const uint64_t r = rct::h2d(ecdh_info.amount);
+          THROW_WALLET_EXCEPTION_IF(received > std::numeric_limits<uint64_t>::max() - r,
+              error::wallet_internal_error, "Amount overflow");
+          received += r;
+        }
 
-        THROW_WALLET_EXCEPTION_IF(third_party_payments[dest.addr] > std::numeric_limits<uint64_t>::max() - received,
-            error::wallet_internal_error, "Amount overflow");
-
-        third_party_payments[dest.addr] += received;
         output_used[n] = true;
       }
 
       THROW_WALLET_EXCEPTION_IF(received < dest.amount, error::wallet_internal_error,
           "Transaction pays less than claimed (claims " + cryptonote::print_money(dest.amount) + ", pays " + cryptonote::print_money(received));
+
+      THROW_WALLET_EXCEPTION_IF(third_party_payments[dest.addr] > std::numeric_limits<uint64_t>::max() - received,
+          error::wallet_internal_error, "Amount overflow");
+      third_party_payments[dest.addr] += received;
     }
   }
 

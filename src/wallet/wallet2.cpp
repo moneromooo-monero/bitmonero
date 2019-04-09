@@ -9672,7 +9672,10 @@ skip_tx:
     ptx_vector.push_back(tx.ptx);
   }
 
-  THROW_WALLET_EXCEPTION_IF(!sanity_check(ptx_vector, original_dsts), error::wallet_internal_error, "Created transaction(s) failed sanity check");
+  if (!muout)
+  {
+    THROW_WALLET_EXCEPTION_IF(!sanity_check(ptx_vector, original_dsts), error::wallet_internal_error, "Created transaction(s) failed sanity check");
+  }
 
   // if we made it this far, we're OK to actually send the transactions
   return ptx_vector;
