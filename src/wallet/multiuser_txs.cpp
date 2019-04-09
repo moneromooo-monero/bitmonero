@@ -304,11 +304,27 @@ bool wallet2::merge_multiuser(multiuser_tx_set &multiuser_txs, const pending_tx 
 //----------------------------------------------------------------------------------------------------
 bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_tx &ptx, bool disclose, std::vector<std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>> &vouts)
 {
+  hw::device &hwdev =  m_account.get_device();
+
   const bool first = multiuser_txs.m_ptx.tx == cryptonote::transaction();
   CHECK_AND_ASSERT_THROW_MES(first || is_suitable_for_multiuser(multiuser_txs.m_ptx.tx), "Transaction is not suitable for multiuser");
   CHECK_AND_ASSERT_THROW_MES(is_suitable_for_multiuser(ptx.tx), "Transaction is not suitable for multiuser");
 
   CHECK_AND_ASSERT_THROW_MES(multiuser_txs.m_building, "Multiuser transaction cannot be modified once signing has started");
+
+MGINFO("new tx (first " << first << "):");
+MGINFO(ptx.tx.rct_signatures.p.pseudoOuts.size() << " pseudoOuts:");
+for (const auto &p: ptx.tx.rct_signatures.p.pseudoOuts) MGINFO("  " << p);
+rct::key sumPseudoOuts = rct::addKeys(ptx.tx.rct_signatures.p.pseudoOuts);
+MGINFO(ptx.tx.rct_signatures.outPk.size() << " outPk masks:");
+for (const auto &p: ptx.tx.rct_signatures.outPk) MGINFO("  " << p.mask);
+rct::key sumOutPk = rct::identity();
+for (const auto &p: ptx.tx.rct_signatures.outPk) rct::addKeys(sumOutPk, sumOutPk, p.mask);
+MGINFO("sum(pseudoOuts): " << sumPseudoOuts);
+MGINFO("sum(outPk): " << sumOutPk);
+MGINFO("H*fee: " << rct::scalarmultH(rct::d2h(ptx.tx.rct_signatures.txnFee)) << ", fee as " << cryptonote::print_money(ptx.tx.rct_signatures.txnFee));
+MGINFO("sum(outPk) + fee: " << rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(ptx.tx.rct_signatures.txnFee))));
+MGINFO("equal: " << (rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(ptx.tx.rct_signatures.txnFee))) == sumPseudoOuts));
 
   // use the new tx as a base
   pending_tx new_ptx = ptx;
@@ -396,19 +412,22 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     crypto::key_derivation derivation;
     crypto::generate_key_derivation(ptx.construction_data.splitted_dsts[out_idx].addr.m_view_public_key, new_ptx.additional_tx_keys[out_idx + output_offset], derivation);
     crypto::secret_key original_scalar1;
-    m_account.get_device().derivation_to_scalar(derivation, out_idx + output_offset, original_scalar1);
+    hwdev.derivation_to_scalar(derivation, out_idx + output_offset, original_scalar1);
     rct::ecdhDecode(base_ecdh_info, rct::sk2rct(original_scalar1), new_ptx.tx.rct_signatures.type == rct::RCTTypeBulletproof2);
+MGINFO("vout " << out_idx << ": mask " << base_ecdh_info.mask << ", amount " << base_ecdh_info.amount );
     for (int output_index = 0; output_index < BULLETPROOF_MAX_OUTPUTS; ++output_index)
     {
       cryptonote::tx_out vout;
       crypto::secret_key tx_key, amount_key;
-      cryptonote::create_output(ptx.construction_data.splitted_dsts[out_idx], output_index, vout, tx_key, amount_key, m_account.get_device());
+      cryptonote::create_output(ptx.construction_data.splitted_dsts[out_idx], output_index, vout, tx_key, amount_key, hwdev);
       rct::ecdhTuple ecdh_info = base_ecdh_info;
+MGINFO("scalar1 for index " << output_index << ": " << amount_key);
       rct::ecdhEncode(ecdh_info, rct::sk2rct(amount_key), new_ptx.tx.rct_signatures.type == rct::RCTTypeBulletproof2);
-      rct::key outPk_mask;
-      rct::addKeys2(outPk_mask, rct::genCommitmentMask(rct::sk2rct(amount_key)), base_ecdh_info.amount, rct::H);
-      rct::Bulletproof bp = rct::bulletproof_PROVE(ptx.construction_data.splitted_dsts[out_idx].amount, base_ecdh_info.mask);
-      vouts.back().push_back({vout, tx_key, ecdh_info, outPk_mask, bp});
+      //rct::key outPk_mask;
+rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
+      //rct::addKeys2(outPk_mask, rct::genCommitmentMask(rct::sk2rct(amount_key)), base_ecdh_info.amount, rct::H);
+      rct::Bulletproof bp = rct::bulletproof_PROVE(ptx.construction_data.splitted_dsts[out_idx].amount, bp_mask);
+      vouts.back().push_back({vout, tx_key, ecdh_info, rct::scalarmult8(bp.V[0]), bp});
     }
     CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < new_ptx.tx.vout.size(), "Too many outs");
     CHECK_AND_ASSERT_THROW_MES(out_idx + output_offset < vouts.back().size(), "Too many outs");
@@ -453,6 +472,9 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     }
   }
 
+#warning reenable
+#warning pseudoOuts too ?
+#if 0
   // shuffle the array, then vouts, selecting from the array
   std::vector<size_t> outs_order(new_ptx.tx.vout.size());
   for (size_t n = 0; n < outs_order.size(); ++n)
@@ -478,6 +500,7 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
     new_ptx.tx.rct_signatures.outPk[i].mask = std::get<3>(multiuser_txs.m_vouts[i][i]);
     new_ptx.tx.rct_signatures.p.bulletproofs[i] = std::get<4>(multiuser_txs.m_vouts[i][i]);
   }
+#endif
 
   cryptonote::remove_field_from_tx_extra(extra, typeid(cryptonote::tx_extra_additional_pub_keys));
   cryptonote::add_additional_tx_pub_keys_to_extra(extra, old_additional_tx_pub_keys);
@@ -492,6 +515,21 @@ bool wallet2::merge_multiuser_tx(multiuser_tx_set &multiuser_txs, const pending_
   MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.rct_signatures.p.pseudoOuts.size() << " pseudoOuts");
   MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.rct_signatures.outPk.size() << " outPks");
   MDEBUG("new ptx has " << multiuser_txs.m_ptx.tx.rct_signatures.ecdhInfo.size() << " ecdhInfos");
+
+MGINFO("merged tx (first " << first << "):");
+MGINFO(multiuser_txs.m_ptx.tx.rct_signatures.p.pseudoOuts.size() << " pseudoOuts:");
+for (const auto &p: multiuser_txs.m_ptx.tx.rct_signatures.p.pseudoOuts) MGINFO("  " << p);
+sumPseudoOuts = rct::addKeys(multiuser_txs.m_ptx.tx.rct_signatures.p.pseudoOuts);
+MGINFO(multiuser_txs.m_ptx.tx.rct_signatures.outPk.size() << " outPk masks:");
+for (const auto &p: multiuser_txs.m_ptx.tx.rct_signatures.outPk) MGINFO("  " << p.mask);
+sumOutPk = rct::identity();
+for (const auto &p: multiuser_txs.m_ptx.tx.rct_signatures.outPk) rct::addKeys(sumOutPk, sumOutPk, p.mask);
+MGINFO("sum(pseudoOuts): " << sumPseudoOuts);
+MGINFO("sum(outPk): " << sumOutPk);
+MGINFO("H*fee: " << rct::scalarmultH(rct::d2h(multiuser_txs.m_ptx.tx.rct_signatures.txnFee)) << ", fee as " << cryptonote::print_money(multiuser_txs.m_ptx.tx.rct_signatures.txnFee));
+MGINFO("sum(outPk) + fee: " << rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(multiuser_txs.m_ptx.tx.rct_signatures.txnFee))));
+MGINFO("equal: " << (rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(multiuser_txs.m_ptx.tx.rct_signatures.txnFee))) == sumPseudoOuts));
+
 
   return true;
 }
@@ -517,6 +555,20 @@ bool wallet2::sign_multiuser_tx(multiuser_tx_set &mtx)
   }
   THROW_WALLET_EXCEPTION_IF(!found, error::wallet_internal_error, "original multiuser private setup not found");
   const rct::multiuser_out &original_muout = private_setup.muout;
+
+MGINFO("signing tx:");
+MGINFO(tx.rct_signatures.p.pseudoOuts.size() << " pseudoOuts:");
+for (const auto &p: tx.rct_signatures.p.pseudoOuts) MGINFO("  " << p);
+rct::key sumPseudoOuts = rct::addKeys(tx.rct_signatures.p.pseudoOuts);
+MGINFO(tx.rct_signatures.outPk.size() << " outPk masks:");
+for (const auto &p: tx.rct_signatures.outPk) MGINFO("  " << p.mask);
+rct::key sumOutPk = rct::identity();
+for (const auto &p: tx.rct_signatures.outPk) rct::addKeys(sumOutPk, sumOutPk, p.mask);
+MGINFO("sum(pseudoOuts): " << sumPseudoOuts);
+MGINFO("sum(outPk): " << sumOutPk);
+MGINFO("H*fee: " << rct::scalarmultH(rct::d2h(tx.rct_signatures.txnFee)) << ", fee as " << cryptonote::print_money(tx.rct_signatures.txnFee));
+MGINFO("sum(outPk) + fee: " << rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(tx.rct_signatures.txnFee))));
+MGINFO("equal: " << (rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(tx.rct_signatures.txnFee))) == sumPseudoOuts));
 
   hw::device &hwdev =  m_account.get_device();
   const std::vector<crypto::public_key> actual_additional_tx_keys = cryptonote::get_additional_tx_pub_keys_from_extra(tx);
@@ -634,6 +686,11 @@ found:;
         THROW_WALLET_EXCEPTION_IF(sc_check(ecdh_info.mask.bytes) != 0, error::wallet_internal_error, "Bad ECDH input mask");
         THROW_WALLET_EXCEPTION_IF(sc_check(ecdh_info.amount.bytes) != 0, error::wallet_internal_error, "Bad ECDH input amount");
         rct::addKeys2(Ctmp, ecdh_info.mask, ecdh_info.amount, rct::H);
+MGINFO("Found at " << n << ", scalar " << scalar1 << ", equal: " << rct::equalKeys(C, Ctmp));
+MGINFO("C: " << C);
+MGINFO("Ctmp: " << Ctmp);
+MGINFO("ecdh mask: " << ecdh_info.mask);
+MGINFO("ecdh amount: " << ecdh_info.amount);
         if (rct::equalKeys(C, Ctmp))
         {
           const uint64_t r = rct::h2d(ecdh_info.amount);
