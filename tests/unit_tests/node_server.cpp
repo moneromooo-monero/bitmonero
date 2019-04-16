@@ -93,6 +93,7 @@ public:
   bool has_block_weights(uint64_t height, uint64_t nblocks) const { return false; }
   bool get_txpool_complement(const std::vector<crypto::hash> &hashes, std::vector<cryptonote::blobdata> &txes) { return false; }
   bool get_pool_transaction_hashes(std::vector<crypto::hash>& txs, bool include_unrelayed_txes = true) const { return false; }
+  float get_blockchain_height_plausibility(uint64_t height) { return 0.0f; }
   void stop() {}
 };
 
