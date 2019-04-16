@@ -87,6 +87,7 @@ public:
   bool pad_transactions() { return false; }
   uint32_t get_blockchain_pruning_seed() const { return 0; }
   bool prune_blockchain(uint32_t pruning_seed = 0) { return true; }
+  float get_blockchain_height_plausibility(uint64_t height) { return 0.0f; }
   void stop() {}
 };
 

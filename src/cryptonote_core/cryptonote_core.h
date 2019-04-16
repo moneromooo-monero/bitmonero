@@ -825,6 +825,15 @@ namespace cryptonote
       */
      bool check_blockchain_pruning();
 
+     /**
+      * @brief checks how likely a given blockchain height is at the current time
+      *
+      * @param height the height to check
+      *
+      * @return a 0-1 probabiity
+      */
+     float get_blockchain_height_plausibility(uint64_t height) const;
+
    private:
 
      /**
