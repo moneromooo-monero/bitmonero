@@ -40,6 +40,7 @@ N = 100
 
 class RejectSpeedTest():
     def run_test(self):
+        self.reset()
         self.mine()
         self.create()
         self.test_speed('noop', '', self.test_noop, N)
@@ -50,6 +51,12 @@ class RejectSpeedTest():
         self.test_speed('bad pseudo out', 'bad-pseudo-out', self.test_send, N)
         self.test_speed('bad mg', 'bad-mg', self.test_send, N)
         self.test_speed('bad bp', 'bad-bp', self.test_send, N)
+
+    def reset(self):
+        print 'Resetting blockchain'
+        daemon = Daemon()
+        daemon.pop_blocks(1000)
+        daemon.flush_txpool()
 
     def mine(self):
         print('Mining blocks')
