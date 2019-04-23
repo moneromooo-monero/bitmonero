@@ -217,6 +217,14 @@ namespace cryptonote
     crypto::hash get_block_id_by_height(uint64_t height) const;
 
     /**
+     * @brief setup seed hash for epoch of given height
+     *
+     * @param block the block to be hashed
+     * @param height the height of the block
+     */
+    void setup_seedhash(const block& b, const uint64_t height) const;
+
+    /**
      * @brief gets the block with a given hash
      *
      * @param h the hash to look for

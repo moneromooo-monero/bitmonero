@@ -202,6 +202,13 @@ namespace cryptonote
      virtual bool handle_block_found(block& b, block_verification_context &bvc);
 
      /**
+      * @brief same as get_block_id_by_height
+      *
+      * placed here for use by miner
+      */
+     virtual crypto::hash get_block_id(const uint64_t height);
+
+     /**
       * @copydoc Blockchain::create_block_template
       *
       * @note see Blockchain::create_block_template
