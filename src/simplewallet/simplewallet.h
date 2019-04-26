@@ -143,6 +143,7 @@ namespace cryptonote
     bool set_segregation_height(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_ignore_fractional_outputs(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_track_uses(const std::vector<std::string> &args = std::vector<std::string>());
+    bool set_default_change_address(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_setup_background_mining(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_device_name(const std::vector<std::string> &args = std::vector<std::string>());
     bool help(const std::vector<std::string> &args = std::vector<std::string>());

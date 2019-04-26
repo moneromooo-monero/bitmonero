@@ -2798,6 +2798,31 @@ bool simple_wallet::set_setup_background_mining(const std::vector<std::string> &
   return true;
 }
 
+bool simple_wallet::set_default_change_address(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
+{
+  const auto pwd_container = get_and_verify_password();
+  if (pwd_container)
+  {
+    if (args[1] == "default")
+    {
+      m_wallet->reset_default_change_address();
+    }
+    else
+    {
+      cryptonote::address_parse_info info;
+      bool valid = cryptonote::get_account_address_from_str(info, m_wallet->nettype(), args[1]);
+      if (!valid)
+      {
+        fail_msg_writer() << tr("Invalid address");
+        return true;
+      }
+      m_wallet->default_change_address({info.address, info.is_subaddress});
+    }
+    m_wallet->rewrite(m_wallet_file, pwd_container->password());
+  }
+  return true;
+}
+
 bool simple_wallet::set_device_name(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   const auto pwd_container = get_and_verify_password();
@@ -3012,7 +3037,9 @@ simple_wallet::simple_wallet()
                                   "  Set the lookahead sizes for the subaddress hash table.\n "
                                   "  Set this if you are not sure whether you will spend on a key reusing Monero fork later.\n "
                                   "segregation-height <n>\n "
-                                  "  Set to the height of a key reusing fork you want to use, 0 to use default."));
+                                  "  Set to the height of a key reusing fork you want to use, 0 to use default.\n"
+                                  "default-change-address <n>\n"
+                                  "  Either an address to use for any change, or the word \"default\" to default to the sending account."));
   m_cmd_binder.set_handler("encrypted_seed",
                            boost::bind(&simple_wallet::encrypted_seed, this, _1),
                            tr("Display the encrypted Electrum-style mnemonic seed."));
@@ -3380,6 +3407,8 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     success_msg_writer() << "segregation-height = " << m_wallet->segregation_height();
     success_msg_writer() << "ignore-fractional-outputs = " << m_wallet->ignore_fractional_outputs();
     success_msg_writer() << "track-uses = " << m_wallet->track_uses();
+    const boost::optional<std::pair<cryptonote::account_public_address, bool>> &dca = m_wallet->get_default_change_address();
+    success_msg_writer() << "default-change-address = " << (dca ? cryptonote::get_account_address_as_str(m_wallet->nettype(), dca->second, dca->first): std::string(""));
     success_msg_writer() << "setup-background-mining = " << setup_background_mining_string + tr(" (set this to support the network and to get a chance to receive new monero)");
     success_msg_writer() << "device_name = " << m_wallet->device_name();
     return true;
@@ -3438,6 +3467,7 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     CHECK_SIMPLE_VARIABLE("segregation-height", set_segregation_height, tr("unsigned integer"));
     CHECK_SIMPLE_VARIABLE("ignore-fractional-outputs", set_ignore_fractional_outputs, tr("0 or 1"));
     CHECK_SIMPLE_VARIABLE("track-uses", set_track_uses, tr("0 or 1"));
+    CHECK_SIMPLE_VARIABLE("default-change-address", set_default_change_address, tr("an address or \"default\" to default to the sending account"));
     CHECK_SIMPLE_VARIABLE("setup-background-mining", set_setup_background_mining, tr("1/yes or 0/no"));
     CHECK_SIMPLE_VARIABLE("device-name", set_device_name, tr("<device_name[:device_spec]>"));
   }

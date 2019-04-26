@@ -1060,6 +1060,10 @@ private:
     void track_uses(bool value) { m_track_uses = value; }
     BackgroundMiningSetupType setup_background_mining() const { return m_setup_background_mining; }
     void setup_background_mining(BackgroundMiningSetupType value) { m_setup_background_mining = value; }
+    const boost::optional<std::pair<cryptonote::account_public_address, bool>> &get_default_change_address() const { return m_default_change_address; }
+    void default_change_address(const std::pair<cryptonote::account_public_address, bool> &address) { m_default_change_address = address; }
+    void reset_default_change_address() { m_default_change_address = boost::none; }
+    void default_change_address(const std::string &address);
     const std::string & device_name() const { return m_device_name; }
     void device_name(const std::string & device_name) { m_device_name = device_name; }
     const std::string & device_derivation_path() const { return m_device_derivation_path; }
@@ -1515,6 +1519,7 @@ private:
     bool m_ignore_fractional_outputs;
     bool m_track_uses;
     BackgroundMiningSetupType m_setup_background_mining;
+    boost::optional<std::pair<cryptonote::account_public_address, bool>> m_default_change_address;
     bool m_is_initialized;
     NodeRPCProxy m_node_rpc_proxy;
     std::unordered_set<crypto::hash> m_scanned_pool_txs[2];

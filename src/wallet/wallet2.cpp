@@ -1115,6 +1115,7 @@ wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended):
   m_ignore_fractional_outputs(true),
   m_track_uses(false),
   m_setup_background_mining(BackgroundMiningMaybe),
+  m_default_change_address(boost::none),
   m_is_initialized(false),
   m_kdf_rounds(kdf_rounds),
   is_old_file_format(false),
@@ -3649,6 +3650,10 @@ bool wallet2::store_keys(const std::string& keys_file_name, const epee::wipeable
   value2.SetInt(m_setup_background_mining);
   json.AddMember("setup_background_mining", value2, json.GetAllocator());
 
+  const std::string dca = m_default_change_address ? cryptonote::get_account_address_as_str(m_nettype, m_default_change_address->second, m_default_change_address->first) : std::string("");
+  value.SetString(dca.c_str(), dca.size());
+  json.AddMember("default_change_address", value, json.GetAllocator());
+
   value2.SetUint(m_subaddress_lookahead_major);
   json.AddMember("subaddress_lookahead_major", value2, json.GetAllocator());
 
@@ -3801,6 +3806,7 @@ bool wallet2::load_keys(const std::string& keys_file_name, const epee::wipeable_
     m_ignore_fractional_outputs = true;
     m_track_uses = false;
     m_setup_background_mining = BackgroundMiningMaybe;
+    m_default_change_address = boost::none;
     m_subaddress_lookahead_major = SUBADDRESS_LOOKAHEAD_MAJOR;
     m_subaddress_lookahead_minor = SUBADDRESS_LOOKAHEAD_MINOR;
     m_original_keys_available = false;
@@ -3957,6 +3963,19 @@ bool wallet2::load_keys(const std::string& keys_file_name, const epee::wipeable_
     m_track_uses = field_track_uses;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, setup_background_mining, BackgroundMiningSetupType, Int, false, BackgroundMiningMaybe);
     m_setup_background_mining = field_setup_background_mining;
+    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, default_change_address, std::string, String, false, std::string());
+    m_default_change_address = boost::none;
+    if (!field_default_change_address.empty())
+    {
+      cryptonote::address_parse_info info;
+      bool valid = cryptonote::get_account_address_from_str(info, m_nettype, field_default_change_address);
+      if (!valid)
+      {
+        MERROR("Invalid change address");
+        return false;
+      }
+      m_default_change_address = std::make_pair(info.address, info.is_subaddress);
+    }
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, subaddress_lookahead_major, uint32_t, Uint, false, SUBADDRESS_LOOKAHEAD_MAJOR);
     m_subaddress_lookahead_major = field_subaddress_lookahead_major;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, subaddress_lookahead_minor, uint32_t, Uint, false, SUBADDRESS_LOOKAHEAD_MINOR);
@@ -8176,7 +8195,13 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   cryptonote::tx_destination_entry change_dts = AUTO_VAL_INIT(change_dts);
   if (needed_money < found_money)
   {
-    change_dts.addr = get_subaddress({subaddr_account, 0});
+    if (m_default_change_address)
+    {
+      change_dts.addr = m_default_change_address->first;
+      change_dts.is_subaddress = m_default_change_address->second;
+    }
+    else
+      change_dts.addr = get_subaddress({subaddr_account, 0});
     change_dts.amount = found_money - needed_money;
   }
 
@@ -8419,8 +8444,16 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   }
   else
   {
-    change_dts.addr = get_subaddress({subaddr_account, 0});
-    change_dts.is_subaddress = subaddr_account != 0;
+    if (m_default_change_address)
+    {
+      change_dts.addr = m_default_change_address->first;
+      change_dts.is_subaddress = m_default_change_address->second;
+    }
+    else
+    {
+      change_dts.addr = get_subaddress({subaddr_account, 0});
+      change_dts.is_subaddress = subaddr_account != 0;
+    }
     splitted_dsts.push_back(change_dts);
   }
 
@@ -9701,8 +9734,8 @@ bool wallet2::sanity_check(const std::vector<wallet2::pending_tx> &ptx_vector, s
   {
     if (ptx.change_dts.amount == 0)
       continue;
-    THROW_WALLET_EXCEPTION_IF(m_subaddresses.find(ptx.change_dts.addr.m_spend_public_key) == m_subaddresses.end(),
-         error::wallet_internal_error, "Change address is not ours");
+    THROW_WALLET_EXCEPTION_IF(m_subaddresses.find(ptx.change_dts.addr.m_spend_public_key) == m_subaddresses.end() && !m_default_change_address,
+         error::wallet_internal_error, "Change address is not ours and the default change address is unset");
     required[ptx.change_dts.addr].first += ptx.change_dts.amount;
     required[ptx.change_dts.addr].second = ptx.change_dts.is_subaddress;
   }
@@ -13265,6 +13298,14 @@ void wallet2::on_configuration_changed(const std::vector<std::pair<std::string, 
   }
   if (changed)
     rewrite(m_keys_file, pwd_container.password());
+}
+//----------------------------------------------------------------------------------------------------
+void wallet2::default_change_address(const std::string &address)
+{
+  cryptonote::address_parse_info info;
+  bool valid = cryptonote::get_account_address_from_str(info, m_nettype, address);
+  THROW_WALLET_EXCEPTION_IF(!valid, error::wallet_internal_error, "Invalid address");
+  m_default_change_address = std::make_pair(info.address, info.is_subaddress);
 }
 //----------------------------------------------------------------------------------------------------
 }
