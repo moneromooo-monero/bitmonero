@@ -452,22 +452,29 @@ rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
       v.push_back(std::make_tuple(std::get<0>(e), std::get<1>(e), std::get<2>(e), std::get<3>(e), std::get<4>(e), pkey));
     }
     multiuser_txs.m_vouts.push_back(v);
-
-    const bool is_change = ptx.construction_data.splitted_dsts[out_idx] == ptx.change_dts;
-    if (!disclose || is_change)
-    {
-      for (auto &e: multiuser_txs.m_vouts.back())
-        std::get<1>(e) = crypto::null_skey;
-    }
   }
 #else
   MGINFO("Adding " << ptx.tx.vout.size() << " outs to existing " << vouts.size());
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.additional_tx_keys.size(), "Bad additional_tx_keys size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.ecdhInfo.size(), "Bad ecdhInfo size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.outPk.size(), "Bad outPk size");
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.tx.rct_signatures.p.bulletproofs.size(), "Bad bulletproofs size");
   for (size_t i = 0; i < ptx.tx.vout.size(); ++i)
   {
     const auto &out = ptx.tx.vout[i];
     const cryptonote::txout_to_key &otk = boost::get<cryptonote::txout_to_key>(out.target);
     MGINFO("adding vout, amount " << cryptonote::print_money(out.amount) << ", key " << otk.key);
     vouts.push_back(std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>(BULLETPROOF_MAX_OUTPUTS, {out, ptx.additional_tx_keys[i], ptx.tx.rct_signatures.ecdhInfo[i], ptx.tx.rct_signatures.outPk[i].mask, ptx.tx.rct_signatures.p.bulletproofs[i]}));
+
+    std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof, crypto::public_key>> v;
+    for (size_t i = 0; i < vouts.back().size(); ++i)
+    {
+      const auto &e = vouts.back()[i];
+      crypto::public_key pkey;
+      crypto::secret_key_to_public_key(std::get<1>(e), pkey);
+      v.push_back(std::make_tuple(std::get<0>(e), std::get<1>(e), std::get<2>(e), std::get<3>(e), std::get<4>(e), pkey));
+    }
+    multiuser_txs.m_vouts.push_back(v);
   }
 #warning TODO
 #endif
@@ -483,6 +490,16 @@ rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
   new_ptx.multisig_sigs.clear();
   new_ptx.construction_data = {};
   new_ptx.tx_key = crypto::null_skey;
+  CHECK_AND_ASSERT_THROW_MES(ptx.tx.vout.size() == ptx.construction_data.splitted_dsts.size(), "Mismatched vout/splitted_dsts sizes");
+  for (size_t out_idx = 0; out_idx < ptx.tx.vout.size(); ++out_idx)
+  {
+    const bool is_change = ptx.construction_data.splitted_dsts[out_idx] == ptx.change_dts;
+    if (!disclose || is_change)
+    {
+      for (auto &e: multiuser_txs.m_vouts.back())
+        std::get<1>(e) = crypto::null_skey;
+    }
+  }
 
 #warning reenable
 #warning pseudoOuts too ?

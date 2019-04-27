@@ -56,8 +56,10 @@ class MultiuserTest():
         self.reset()
         self.create()
         self.mine()
-        self.simple_mad_transaction(2)
-        self.simple_mad_transaction(3)
+        self.simple_Nx1_transaction(2, True)
+        self.simple_Nx1_transaction(3, True)
+        self.simple_Nx1_transaction(2, False)
+        self.simple_Nx1_transaction(3, False)
 
     def reset(self):
         print 'Resetting blockchain'
@@ -87,8 +89,8 @@ class MultiuserTest():
                 self.wallet[i].refresh()
         daemon.generateblocks(self.addresses[0], 65)
 
-    def simple_mad_transaction(self, n_senders):
-        print('Testing simple %u sender multiuser tx' % n_senders)
+    def simple_Nx1_transaction(self, n_senders, disclose):
+        print('Testing simple %s %u sender multiuser tx' % ('disclosed' if disclose else 'withheld', n_senders))
         daemon = Daemon()
         balances = [None] * (n_senders + 1)
         fees = [None] * n_senders
@@ -101,7 +103,7 @@ class MultiuserTest():
         other_dst = {'address': self.addresses[n_senders], 'amount': 1000000000000 * (n_senders - 1)}
         multiuser_data = ""
         for i in range(n_senders):
-            res = self.wallet[i].transfer_multiuser([dst], other_destinations = [other_dst], multiuser_data = multiuser_data, disclose = True)
+            res = self.wallet[i].transfer_multiuser([dst], other_destinations = [other_dst] if disclose else [], multiuser_data = multiuser_data, disclose = disclose)
             assert len(res.multiuser_data) > 0
             assert res.fee > 0
             fees[i] = res.fee
