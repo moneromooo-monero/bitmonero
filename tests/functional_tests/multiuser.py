@@ -51,8 +51,15 @@ class MultiuserTest():
 
     def run_test(self):
         assert len(self.seeds) == len(self.addresses)
+        self.reset()
         self.create()
         self.mine()
+
+    def reset(self):
+        print 'Resetting blockchain'
+        daemon = Daemon()
+        daemon.pop_blocks(1000)
+        daemon.flush_txpool()
 
     def create(self):
         print 'Creating wallets'
@@ -77,12 +84,23 @@ class MultiuserTest():
         daemon.generateblocks(self.addresses[0], 65)
 
     def simple_transaction(self):
+        balances = [None, None, None]
+        fees = [None, None]
+        for i in range(len(balances)):
+            self.wallet[i].refresh()
+            res = self.wallet[i].get_balance()
+            balances[i] = res.balance
+
         dst = {'address': '46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', amount: 1000000000000}
         res = self.wallet[0].transfer_multiuser([dst])
         assert len(res.multiuser_data) > 0
+        assert res.fee > 0
+        fees[0] = res.fee
         multiuser_data = res.multiuser_data
         res = self.wallet[1].transfer_multiuser([dst], multiuser_data = multiuser_data)
         assert len(res.multiuser_data) > 0
+        assert res.fee > 0
+        fees[1] = res.fee
         multiuser_data = res.multiuser_data
         res = self.wallet[1].sign_multiuser(multiuser_data)
         assert len(res.multiuser_data) > 0
@@ -108,9 +126,13 @@ class MultiuserTest():
         assert tx.tx_hash == txid
         assert tx.in_pool == False
 
-        # TODO
-        self.wallet[0].refresh()
-        self.wallet[1].refresh()
+        for i in range(2):
+            self.wallet[i].refresh()
+            res = self.wallet[i].get_balance()
+            assert res.balance == balances[i] - 1000000000000 - fees[i]
+        self.wallet[2].refresh()
+        res = self.wallet[2].get_balance()
+        assert res.balance == balances[2] + 2 * 1000000000000
 
 
 class Guard:
