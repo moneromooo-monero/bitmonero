@@ -56,8 +56,10 @@ class MultiuserTest():
         self.reset()
         self.create()
         self.mine()
+        self.simple_Nx1_transaction(1, True)
         self.simple_Nx1_transaction(2, True)
         self.simple_Nx1_transaction(3, True)
+        self.simple_Nx1_transaction(1, False)
         self.simple_Nx1_transaction(2, False)
         self.simple_Nx1_transaction(3, False)
 
