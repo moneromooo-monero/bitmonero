@@ -400,6 +400,7 @@ MGINFO("equal: " << (rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(ptx.tx.rct
   new_ptx.additional_tx_keys = old_ptx.additional_tx_keys;
   std::copy(ptx.additional_tx_keys.begin(), ptx.additional_tx_keys.end(), std::back_inserter(new_ptx.additional_tx_keys));
 
+#if 0
   // create N output duplicates, each with a different index, so they can be shuffled
   CHECK_AND_ASSERT_THROW_MES(multiuser_txs.m_vouts.size() == old_ptx.tx.vout.size(), "Invalid m_vouts size");
   CHECK_AND_ASSERT_THROW_MES(ptx.construction_data.splitted_dsts.size() == ptx.tx.vout.size(), "Invalid public setup dests size");
@@ -471,6 +472,7 @@ rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
         std::get<1>(e) = crypto::null_skey;
     }
   }
+#endif
 
 #warning reenable
 #warning pseudoOuts too ?
