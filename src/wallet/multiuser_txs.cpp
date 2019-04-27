@@ -206,8 +206,7 @@ std::string wallet2::save_multiuser_tx(const multiuser_tx_set &txs)
   {
     return "";
   }
-  std::string s = cryptonote::obj_to_json_str((multiuser_tx_set&)txs);
-  MDEBUG("Saved multiuser_tx_set: " << s);
+  MDEBUG("Saved multiuser_tx_set: " << cryptonote::obj_to_json_str((multiuser_tx_set&)txs));
   return MULTIUSER_TX_PREFIX + oss.str();
 }
 //----------------------------------------------------------------------------------------------------
@@ -454,17 +453,6 @@ rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
     }
     multiuser_txs.m_vouts.push_back(v);
 
-    // clear out some private information
-    new_ptx.selected_transfers.clear();
-    new_ptx.dust = 0;
-    new_ptx.fee = 0;
-    new_ptx.dust_added_to_fee = false;
-    new_ptx.change_dts = {};
-    new_ptx.key_images.clear();
-    new_ptx.dests.clear();
-    new_ptx.multisig_sigs.clear();
-    new_ptx.construction_data = {};
-    new_ptx.tx_key = crypto::null_skey;
     const bool is_change = ptx.construction_data.splitted_dsts[out_idx] == ptx.change_dts;
     if (!disclose || is_change)
     {
@@ -473,6 +461,18 @@ rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
     }
   }
 #endif
+
+  // clear out some private information
+  new_ptx.selected_transfers.clear();
+  new_ptx.dust = 0;
+  new_ptx.fee = 0;
+  new_ptx.dust_added_to_fee = false;
+  new_ptx.change_dts = {};
+  new_ptx.key_images.clear();
+  new_ptx.dests.clear();
+  new_ptx.multisig_sigs.clear();
+  new_ptx.construction_data = {};
+  new_ptx.tx_key = crypto::null_skey;
 
 #warning reenable
 #warning pseudoOuts too ?

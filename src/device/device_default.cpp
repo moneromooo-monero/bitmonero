@@ -297,6 +297,7 @@ namespace hw {
             cryptonote::keypair additional_txkey;
             if (need_additional_txkeys)
             {
+                CHECK_AND_ASSERT_MES(output_index < additional_tx_keys.size(), false, "Output index out of range");
                 additional_txkey.sec = additional_tx_keys[output_index];
                 if (dst_entr.is_subaddress)
                     additional_txkey.pub = rct::rct2pk(rct::scalarmultKey(rct::pk2rct(dst_entr.addr.m_spend_public_key), rct::sk2rct(additional_txkey.sec)));

@@ -152,6 +152,7 @@ namespace tools
         MAP_JON_RPC_WE("sign_multisig",      on_sign_multisig,      wallet_rpc::COMMAND_RPC_SIGN_MULTISIG)
         MAP_JON_RPC_WE("submit_multisig",    on_submit_multisig,    wallet_rpc::COMMAND_RPC_SUBMIT_MULTISIG)
         MAP_JON_RPC_WE("sign_multiuser",     on_sign_multiuser,     wallet_rpc::COMMAND_RPC_SIGN_MULTIUSER)
+        MAP_JON_RPC_WE("submit_multiuser",   on_submit_multiuser,   wallet_rpc::COMMAND_RPC_SUBMIT_MULTIUSER)
         MAP_JON_RPC_WE("validate_address",   on_validate_address,   wallet_rpc::COMMAND_RPC_VALIDATE_ADDRESS)
         MAP_JON_RPC_WE("set_daemon",         on_set_daemon,         wallet_rpc::COMMAND_RPC_SET_DAEMON)
         MAP_JON_RPC_WE("set_log_level",      on_set_log_level,      wallet_rpc::COMMAND_RPC_SET_LOG_LEVEL)

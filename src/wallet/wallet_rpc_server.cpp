@@ -1035,7 +1035,14 @@ namespace tools
 
     if (!req.multiuser_data.empty())
     {
-      if (!m_wallet->load_multiuser_tx(req.multiuser_data, multiuser_txs, [](const wallet2::multiuser_tx_set&) { return true; }))
+      std::string multiuser_data;
+      if (!epee::string_tools::parse_hexstr_to_binbuff(req.multiuser_data, multiuser_data))
+      {
+        er.code = WALLET_RPC_ERROR_CODE_BAD_HEX;
+        er.message = "Failed to parse hex.";
+        return false;
+      }
+      if (!m_wallet->load_multiuser_tx(multiuser_data, multiuser_txs, [](const wallet2::multiuser_tx_set&) { return true; }))
       {
         er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
         er.message = "Failed to parse multiuser data";
@@ -1043,6 +1050,10 @@ namespace tools
       }
       tx_key = multiuser_txs.m_ptx.tx_key;
       muout.output_offset = multiuser_txs.m_ptx.tx.vout.size();
+    }
+    else
+    {
+      muout.output_offset = 0;
     }
 
     try
@@ -1082,7 +1093,7 @@ namespace tools
           s += epee::to_hex::wipeable_string(additional_tx_key);
         res.tx_key = std::string(s.data(), s.size());
       }
-      res.multiuser_data = m_wallet->save_multiuser_tx(multiuser_txs);
+      res.multiuser_data = epee::string_tools::buff_to_hex_nodelimer(m_wallet->save_multiuser_tx(multiuser_txs));
       res.fee = ptx.fee;
     }
     catch (const std::exception& e)
@@ -4176,8 +4187,15 @@ namespace tools
       return false;
     }
 
+    std::string multiuser_data;
+    if (!epee::string_tools::parse_hexstr_to_binbuff(req.multiuser_data, multiuser_data))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_BAD_HEX;
+      er.message = "Failed to parse hex.";
+      return false;
+    }
     tools::wallet2::multiuser_tx_set multiuser_txs;
-    if (!m_wallet->load_multiuser_tx(req.multiuser_data, multiuser_txs, [](const tools::wallet2::multiuser_tx_set &txs) { return true; }))
+    if (!m_wallet->load_multiuser_tx(multiuser_data, multiuser_txs, [](const tools::wallet2::multiuser_tx_set &txs) { return true; }))
     {
       er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
       er.message = "Failed to parse multiuser data";
@@ -4198,7 +4216,7 @@ namespace tools
       er.message = "Failed to sign multiuser data";
       return false;
     }
-    std::string multiuser_data = m_wallet->save_multiuser_tx(multiuser_txs);
+    multiuser_data = epee::string_tools::buff_to_hex_nodelimer(m_wallet->save_multiuser_tx(multiuser_txs));
     if (multiuser_data.empty())
     {
       er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_CREATION;
@@ -4225,8 +4243,15 @@ namespace tools
       return false;
     }
 
+    std::string multiuser_data;
+    if (!epee::string_tools::parse_hexstr_to_binbuff(req.multiuser_data, multiuser_data))
+    {
+      er.code = WALLET_RPC_ERROR_CODE_BAD_HEX;
+      er.message = "Failed to parse hex.";
+      return false;
+    }
     tools::wallet2::multiuser_tx_set multiuser_txs;
-    if (!m_wallet->load_multiuser_tx(req.multiuser_data, multiuser_txs, [](const tools::wallet2::multiuser_tx_set &txs) { return true; }))
+    if (!m_wallet->load_multiuser_tx(multiuser_data, multiuser_txs, [](const tools::wallet2::multiuser_tx_set &txs) { return true; }))
     {
       er.code = WALLET_RPC_ERROR_CODE_BAD_MULTIUSER_DATA;
       er.message = "Failed to parse multiuser data";
