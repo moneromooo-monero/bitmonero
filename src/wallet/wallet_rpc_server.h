@@ -90,7 +90,6 @@ namespace tools
         MAP_JON_RPC_WE("sign_transfer",      on_sign_transfer,      wallet_rpc::COMMAND_RPC_SIGN_TRANSFER)
         MAP_JON_RPC_WE("submit_transfer",    on_submit_transfer,    wallet_rpc::COMMAND_RPC_SUBMIT_TRANSFER)
         MAP_JON_RPC_WE("describe_transfer",  on_describe_transfer,  wallet_rpc::COMMAND_RPC_DESCRIBE_TRANSFER)
-        MAP_JON_RPC_WE("submit_transfer",    on_submit_transfer,    wallet_rpc::COMMAND_RPC_SUBMIT_TRANSFER)
         MAP_JON_RPC_WE("sweep_dust",         on_sweep_dust,         wallet_rpc::COMMAND_RPC_SWEEP_DUST)
         MAP_JON_RPC_WE("sweep_unmixable",    on_sweep_dust,         wallet_rpc::COMMAND_RPC_SWEEP_DUST)
         MAP_JON_RPC_WE("sweep_all",          on_sweep_all,          wallet_rpc::COMMAND_RPC_SWEEP_ALL)
