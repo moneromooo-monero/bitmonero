@@ -54,6 +54,7 @@ class MultiuserTest():
         self.reset()
         self.create()
         self.mine()
+        self.simple_transaction()
 
     def reset(self):
         print 'Resetting blockchain'
@@ -84,6 +85,8 @@ class MultiuserTest():
         daemon.generateblocks(self.addresses[0], 65)
 
     def simple_transaction(self):
+        print('Testing simple multiuser tx')
+        daemon = Daemon()
         balances = [None, None, None]
         fees = [None, None]
         for i in range(len(balances)):
@@ -91,7 +94,7 @@ class MultiuserTest():
             res = self.wallet[i].get_balance()
             balances[i] = res.balance
 
-        dst = {'address': '46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', amount: 1000000000000}
+        dst = {'address': '46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', 'amount': 1000000000000}
         res = self.wallet[0].transfer_multiuser([dst])
         assert len(res.multiuser_data) > 0
         assert res.fee > 0
@@ -118,7 +121,7 @@ class MultiuserTest():
         tx = res.txs[0]
         assert tx.tx_hash == txid
         assert tx.in_pool == True
-        daemon.generateblocks('46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', 1)
+        daemon.generateblocks('42jSRGmmKN96V2j3B8X2DbiNThBXW1tSi1rW1uwkqbyURenq3eC3yosNm8HEMdHuWwKMFGzMUB3RCTvcTaW9kHpdRPP7p5y', 1)
         res = daemon.get_transactions([txid])
         assert len(res.txs) == 1
         assert not 'missed_tx' in res or len(res.missed_tx) == 0
@@ -129,6 +132,7 @@ class MultiuserTest():
         for i in range(2):
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
+            print 'New balance ' + str(res.balance) + ', old balance ' + str(balances[i]) + ', fee ' + str(fees[i])
             assert res.balance == balances[i] - 1000000000000 - fees[i]
         self.wallet[2].refresh()
         res = self.wallet[2].get_balance()
