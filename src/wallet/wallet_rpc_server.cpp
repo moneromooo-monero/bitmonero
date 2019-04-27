@@ -1083,6 +1083,7 @@ namespace tools
         res.tx_key = std::string(s.data(), s.size());
       }
       res.multiuser_data = m_wallet->save_multiuser_tx(multiuser_txs);
+      res.fee = ptx.fee;
     }
     catch (const std::exception& e)
     {

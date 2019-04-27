@@ -536,11 +536,13 @@ namespace wallet_rpc
       std::string tx_hash;
       std::string tx_key;
       std::string multiuser_data;
+      uint64_t fee;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(tx_hash)
         KV_SERIALIZE(tx_key)
         KV_SERIALIZE(multiuser_data)
+        KV_SERIALIZE(fee)
       END_KV_SERIALIZE_MAP()
     };
     typedef epee::misc_utils::struct_init<response_t> response;
