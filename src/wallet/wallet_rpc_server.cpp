@@ -1103,6 +1103,7 @@ namespace tools
       }
       res.multiuser_data = epee::string_tools::buff_to_hex_nodelimer(m_wallet->save_multiuser_tx(multiuser_txs));
       res.fee = ptx.fee;
+      m_wallet->set_spent(ptx);
     }
     catch (const std::exception& e)
     {
