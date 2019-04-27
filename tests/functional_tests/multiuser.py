@@ -41,12 +41,14 @@ class MultiuserTest():
         'velvet lymph giddy number token physics poetry unquoted nibs useful sabotage limits benches lifestyle eden nitrogen anvil fewest avoid batch vials washing fences goat unquoted',
         'peeled mixture ionic radar utopia puddle buying illness nuns gadget river spout cavernous bounced paradise drunk looking cottage jump tequila melting went winter adjust spout',
         'dilute gutter certain antics pamphlet macro enjoy left slid guarded bogeys upload nineteen bomb jubilee enhanced irritate turnip eggs swung jukebox loudly reduce sedan slid',
+        'hatchet pouch shuffled enlist anvil cause hive rockets technical error feline axis aloof adept utensils mechanic eternal giving splendid rounded looking waist today tuesday enlist',
     ]
 
     addresses = [
         '42ey1afDFnn4886T7196doS9GPMzexD9gXpsZJDwVjeRVdFCSoHnv7KPbBeGpzJBzHRCAs9UxqeoyFQMYbqSWYTfJJQAWDm',
         '44Kbx4sJ7JDRDV5aAhLJzQCjDz2ViLRduE3ijDZu3osWKBjMGkV1XPk4pfDUMqt1Aiezvephdqm6YD19GKFD9ZcXVUTp6BW',
         '46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK',
+        '48GZWo5CHguRqCyZkF8kpJDgV13ou9WA5dyy522ZQhqLXhAsz17AF526rzmctYVKDw8QbnxJ8fRgdUVdupsGTg9YUUBFLKj',
     ]
 
     def run_test(self):
@@ -54,7 +56,8 @@ class MultiuserTest():
         self.reset()
         self.create()
         self.mine()
-        self.simple_transaction()
+        self.simple_transaction(2)
+        self.simple_transaction(3)
 
     def reset(self):
         print 'Resetting blockchain'
@@ -84,33 +87,30 @@ class MultiuserTest():
                 self.wallet[i].refresh()
         daemon.generateblocks(self.addresses[0], 65)
 
-    def simple_transaction(self):
-        print('Testing simple multiuser tx')
+    def simple_transaction(self, n_senders):
+        print('Testing simple %u sender multiuser tx' % n_senders)
         daemon = Daemon()
-        balances = [None, None, None]
-        fees = [None, None]
-        for i in range(len(balances)):
+        balances = [None] * (n_senders + 1)
+        fees = [None] * n_senders
+        for i in range(n_senders + 1):
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
             balances[i] = res.balance
 
-        dst = {'address': '46r4nYSevkfBUMhuykdK3gQ98XDqDTYW1hNLaXNvjpsJaSbNtdXh1sKMsdVgqkaihChAzEy29zEDPMR3NHQvGoZCLGwTerK', 'amount': 1000000000000}
-        res = self.wallet[0].transfer_multiuser([dst])
-        assert len(res.multiuser_data) > 0
-        assert res.fee > 0
-        fees[0] = res.fee
-        multiuser_data = res.multiuser_data
-        res = self.wallet[1].transfer_multiuser([dst], multiuser_data = multiuser_data)
-        assert len(res.multiuser_data) > 0
-        assert res.fee > 0
-        fees[1] = res.fee
-        multiuser_data = res.multiuser_data
-        res = self.wallet[1].sign_multiuser(multiuser_data)
-        assert len(res.multiuser_data) > 0
-        multiuser_data = res.multiuser_data
-        res = self.wallet[0].sign_multiuser(multiuser_data)
-        assert len(res.multiuser_data) > 0
-        multiuser_data = res.multiuser_data
+        dst = {'address': self.addresses[n_senders], 'amount': 1000000000000}
+        multiuser_data = ""
+        for i in range(n_senders):
+            res = self.wallet[i].transfer_multiuser([dst], multiuser_data = multiuser_data)
+            assert len(res.multiuser_data) > 0
+            assert res.fee > 0
+            fees[i] = res.fee
+            multiuser_data = res.multiuser_data
+
+        for i in range(n_senders):
+            res = self.wallet[i].sign_multiuser(multiuser_data)
+            assert len(res.multiuser_data) > 0
+            multiuser_data = res.multiuser_data
+
         res = self.wallet[0].submit_multiuser(multiuser_data)
         assert len(res.tx_hash) == 64
         txid = res.tx_hash
@@ -129,14 +129,13 @@ class MultiuserTest():
         assert tx.tx_hash == txid
         assert tx.in_pool == False
 
-        for i in range(2):
+        for i in range(n_senders):
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
-            print 'New balance ' + str(res.balance) + ', old balance ' + str(balances[i]) + ', fee ' + str(fees[i])
             assert res.balance == balances[i] - 1000000000000 - fees[i]
-        self.wallet[2].refresh()
-        res = self.wallet[2].get_balance()
-        assert res.balance == balances[2] + 2 * 1000000000000
+        self.wallet[n_senders].refresh()
+        res = self.wallet[n_senders].get_balance()
+        assert res.balance == balances[n_senders] + n_senders * 1000000000000
 
 
 class Guard:
