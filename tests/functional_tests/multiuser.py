@@ -56,12 +56,12 @@ class MultiuserTest():
         self.reset()
         self.create()
         self.mine()
-        self.simple_Nx1_transaction(1, True)
-        self.simple_Nx1_transaction(2, True)
-        self.simple_Nx1_transaction(3, True)
-        self.simple_Nx1_transaction(1, False)
-        self.simple_Nx1_transaction(2, False)
-        self.simple_Nx1_transaction(3, False)
+        self.simple_Nx1_transaction([0], 1, True)
+        self.simple_Nx1_transaction([0, 1], 2, True)
+        self.simple_Nx1_transaction([0, 1, 2], 3, True)
+        self.simple_Nx1_transaction([0], 1, False)
+        self.simple_Nx1_transaction([0, 1], 2, False)
+        self.simple_Nx1_transaction([0, 1, 2], 3, False)
 
     def reset(self):
         print 'Resetting blockchain'
@@ -91,27 +91,29 @@ class MultiuserTest():
                 self.wallet[i].refresh()
         daemon.generateblocks(self.addresses[0], 65)
 
-    def simple_Nx1_transaction(self, n_senders, disclose):
-        print('Testing simple %s %u sender multiuser tx' % ('disclosed' if disclose else 'withheld', n_senders))
+    def simple_Nx1_transaction(self, senders, receiver, disclose):
+        print('Testing simple %s %u sender multiuser tx' % ('disclosed' if disclose else 'withheld', len(senders)))
         daemon = Daemon()
-        balances = [None] * (n_senders + 1)
-        fees = [None] * n_senders
-        for i in range(n_senders + 1):
+        balances = [None] * len(senders)
+        fees = [None] * len(senders)
+        for i in senders:
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
             balances[i] = res.balance
+        res = self.wallet[receiver].get_balance()
+        receiver_balance = res.balance
 
-        dst = {'address': self.addresses[n_senders], 'amount': 1000000000000}
-        other_dst = {'address': self.addresses[n_senders], 'amount': 1000000000000 * (n_senders - 1)}
+        dst = {'address': self.addresses[receiver], 'amount': 1000000000000}
+        other_dst = {'address': self.addresses[receiver], 'amount': 1000000000000 * (len(senders) - 1)}
         multiuser_data = ""
-        for i in range(n_senders):
+        for i in senders:
             res = self.wallet[i].transfer_multiuser([dst], other_destinations = [other_dst] if disclose else [], multiuser_data = multiuser_data, disclose = disclose)
             assert len(res.multiuser_data) > 0
             assert res.fee > 0
             fees[i] = res.fee
             multiuser_data = res.multiuser_data
 
-        for i in range(n_senders):
+        for i in senders:
             res = self.wallet[i].sign_multiuser(multiuser_data)
             assert len(res.multiuser_data) > 0
             multiuser_data = res.multiuser_data
@@ -134,13 +136,13 @@ class MultiuserTest():
         assert tx.tx_hash == txid
         assert tx.in_pool == False
 
-        for i in range(n_senders):
+        for i in senders:
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
             assert res.balance == balances[i] - 1000000000000 - fees[i]
-        self.wallet[n_senders].refresh()
-        res = self.wallet[n_senders].get_balance()
-        assert res.balance == balances[n_senders] + n_senders * 1000000000000
+        self.wallet[receiver].refresh()
+        res = self.wallet[receiver].get_balance()
+        assert res.balance == receiver_balance + len(senders) * 1000000000000
 
 
 class Guard:
