@@ -460,6 +460,16 @@ rct::key bp_mask = hwdev.genCommitmentMask(rct::sk2rct(amount_key)); // outSk
         std::get<1>(e) = crypto::null_skey;
     }
   }
+#else
+  MGINFO("Adding " << ptx.tx.vout.size() << " outs to existing " << vouts.size());
+  for (size_t i = 0; i < ptx.tx.vout.size(); ++i)
+  {
+    const auto &out = ptx.tx.vout[i];
+    const cryptonote::txout_to_key &otk = boost::get<cryptonote::txout_to_key>(out.target);
+    MGINFO("adding vout, amount " << cryptonote::print_money(out.amount) << ", key " << otk.key);
+    vouts.push_back(std::vector<std::tuple<cryptonote::tx_out, crypto::secret_key, rct::ecdhTuple, rct::key, rct::Bulletproof>>(BULLETPROOF_MAX_OUTPUTS, {out, ptx.additional_tx_keys[i], ptx.tx.rct_signatures.ecdhInfo[i], ptx.tx.rct_signatures.outPk[i].mask, ptx.tx.rct_signatures.p.bulletproofs[i]}));
+  }
+#warning TODO
 #endif
 
   // clear out some private information
@@ -605,6 +615,13 @@ MGINFO("equal: " << (rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(tx.rct_sig
   // check our outs are present in the shuffled outs
   THROW_WALLET_EXCEPTION_IF(tx.vout.size() != actual_additional_tx_keys.size(), error::wallet_internal_error, "Wrong number of additional tx keys");
   std::vector<bool> our_outputs(tx.vout.size(), false);
+MGINFO("private setup: " << private_setup.vout.size());
+for (const auto &x: private_setup.vout)
+{
+    const auto &out = std::get<0>(x[0]);
+    const cryptonote::txout_to_key &otk = boost::get<cryptonote::txout_to_key>(out.target);
+    MGINFO("  amount " << cryptonote::print_money(out.amount) << ", key " << otk.key);
+}
   for (size_t i = 0; i < private_setup.vout.size(); ++i)
   {
     // for every out we generated, we check that it or one of its siblings (same out data,
@@ -629,9 +646,12 @@ MGINFO("equal: " << (rct::addKeys(sumOutPk, rct::scalarmultH(rct::d2h(tx.rct_sig
 found:;
   }
 
+MGINFO("our outputs (private setup size " << private_setup.vout.size() << "):");
+for (auto x: our_outputs) MGINFO("  " << x);
+
   // check claimed destinations are what they claim to be
   std::vector<bool> output_used(tx.vout.size(), false);
-  std::unordered_map<cryptonote::account_public_address, uint64_t> third_party_payments;
+  std::unordered_map<std::string, uint64_t> third_party_payments;
   for (const auto &setup: mtx.m_setup)
   {
     multiuser_private_setup prv;
@@ -649,6 +669,7 @@ found:;
           error::wallet_internal_error, "Failed to generate key derivation from supplied parameters");
       std::vector<crypto::key_derivation> additional_derivations;
       additional_derivations.resize(mtx.m_ptx.additional_tx_keys.size());
+      MINFO("Checking whether " << cryptonote::get_account_address_as_str(m_nettype, dest.is_subaddress, dest.addr) << " is paid at least " << cryptonote::print_money(dest.amount));
       for (size_t i = 0; i < mtx.m_ptx.additional_tx_keys.size(); ++i)
         THROW_WALLET_EXCEPTION_IF(!crypto::generate_key_derivation(dest.addr.m_view_public_key, mtx.m_ptx.additional_tx_keys[i], additional_derivations[i]),
           error::wallet_internal_error, "Failed to generate key derivation from supplied parameters");
@@ -696,6 +717,7 @@ MGINFO("ecdh amount: " << ecdh_info.amount);
         if (rct::equalKeys(C, Ctmp))
         {
           const uint64_t r = rct::h2d(ecdh_info.amount);
+MGINFO("-> r " << cryptonote::print_money(r));
           THROW_WALLET_EXCEPTION_IF(received > std::numeric_limits<uint64_t>::max() - r,
               error::wallet_internal_error, "Amount overflow");
           received += r;
@@ -704,20 +726,20 @@ MGINFO("ecdh amount: " << ecdh_info.amount);
         output_used[n] = true;
       }
 
-      THROW_WALLET_EXCEPTION_IF(received < dest.amount, error::wallet_internal_error,
-          "Transaction pays less than claimed (claims " + cryptonote::print_money(dest.amount) + ", pays " + cryptonote::print_money(received));
-
-      THROW_WALLET_EXCEPTION_IF(third_party_payments[dest.addr] > std::numeric_limits<uint64_t>::max() - received,
+      const std::string address = cryptonote::get_account_address_as_str(m_nettype, dest.is_subaddress, dest.addr);
+      THROW_WALLET_EXCEPTION_IF(third_party_payments[address] > std::numeric_limits<uint64_t>::max() - received,
           error::wallet_internal_error, "Amount overflow");
-      third_party_payments[dest.addr] += received;
+      third_party_payments[address] += received;
     }
   }
 
   // check conditions
   for (const auto &cond: public_setup.conditions)
   {
-    THROW_WALLET_EXCEPTION_IF(third_party_payments[cond.addr] < cond.amount, error::wallet_internal_error,
-        "Third parties did not pay at least " + cryptonote::print_money(cond.amount) + " to " + cryptonote::get_account_address_as_str(m_nettype, cond.is_subaddress, cond.addr) + ", only " + cryptonote::print_money(third_party_payments[cond.addr]));
+    const std::string address = cryptonote::get_account_address_as_str(m_nettype, cond.is_subaddress, cond.addr);
+    MINFO("Checking that " << address << " is paid at least " << cryptonote::print_money(cond.amount) << ", actually paid at least " << cryptonote::print_money(third_party_payments[address]));
+    THROW_WALLET_EXCEPTION_IF(third_party_payments[address] < cond.amount, error::wallet_internal_error,
+        "Third parties did not pay at least " + cryptonote::print_money(cond.amount) + " to " + address + ", only " + cryptonote::print_money(third_party_payments[address]));
   }
 
   const size_t n_inputs = tx.vin.size();
