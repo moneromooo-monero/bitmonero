@@ -9716,7 +9716,11 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   const bool use_rct = use_fork_rules(4, 0);
   const bool bulletproof = use_fork_rules(get_bulletproof_fork(), 0);
   const rct::RCTConfig rct_config {
+#ifdef ALLOW_SINGLE_BULLETPROOFS
     bulletproof ? rct::RangeProofPaddedBulletproof : rct::RangeProofBorromean,
+#else
+    bulletproof ? (muout ? rct::RangeProofBulletproof : rct::RangeProofPaddedBulletproof) : rct::RangeProofBorromean,
+#endif
     bulletproof ? (use_fork_rules(HF_VERSION_SMALLER_BP, -10) ? 2 : 1) : 0
   };
 
