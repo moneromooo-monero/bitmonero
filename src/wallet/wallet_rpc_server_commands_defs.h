@@ -506,6 +506,8 @@ namespace wallet_rpc
       std::list<transfer_destination> destinations;
       uint32_t account_index;
       std::set<uint32_t> subaddr_indices;
+      std::string key_image;
+      std::string address;
       uint32_t priority;
       uint64_t ring_size;
       uint64_t unlock_time;
@@ -519,6 +521,8 @@ namespace wallet_rpc
         KV_SERIALIZE(destinations)
         KV_SERIALIZE(account_index)
         KV_SERIALIZE(subaddr_indices)
+        KV_SERIALIZE(key_image)
+        KV_SERIALIZE(address)
         KV_SERIALIZE(priority)
         KV_SERIALIZE_OPT(ring_size, (uint64_t)0)
         KV_SERIALIZE(unlock_time)
