@@ -816,6 +816,11 @@ MGINFO("-> r " << cryptonote::print_money(r));
   THROW_WALLET_EXCEPTION_IF(mtx.m_ptx.tx.unlock_time != public_setup.unlock_time, error::wallet_internal_error,
       "The transaction has an unlock_time which differs from our own");
 
+  std::vector<cryptonote::tx_extra_field> tx_extra_fields;
+  std::vector<uint8_t> unparsed;
+  THROW_WALLET_EXCEPTION_IF(!cryptonote::parse_tx_extra(mtx.m_ptx.tx.extra, tx_extra_fields, &unparsed) || !unparsed.empty(),
+      error::wallet_internal_error, "The transaction extra field could not be parsed");
+
   mtx.m_building = false;
   rv.message = rct::hash2rct(cryptonote::get_transaction_prefix_hash(tx));
   rv.mixRing = mtx.m_mixRing;
