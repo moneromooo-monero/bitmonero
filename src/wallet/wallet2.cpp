@@ -6061,6 +6061,14 @@ crypto::hash wallet2::get_payment_id(const pending_tx &ptx) const
 }
 
 //----------------------------------------------------------------------------------------------------
+void wallet2::set_spent(const pending_tx &ptx)
+{
+  for(size_t idx: ptx.selected_transfers)
+  {
+    set_spent(idx, 0);
+  }
+}
+//----------------------------------------------------------------------------------------------------
 // take a pending tx and actually send it to the daemon
 void wallet2::commit_tx(pending_tx& ptx)
 {
@@ -6123,10 +6131,7 @@ void wallet2::commit_tx(pending_tx& ptx)
 
   LOG_PRINT_L2("transaction " << txid << " generated ok and sent to daemon, key_images: [" << ptx.key_images << "]");
 
-  for(size_t idx: ptx.selected_transfers)
-  {
-    set_spent(idx, 0);
-  }
+  set_spent(ptx);
 
   // tx generated, get rid of used k values
   for (size_t idx: ptx.selected_transfers)
