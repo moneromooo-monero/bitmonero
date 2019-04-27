@@ -1035,9 +1035,32 @@ namespace tools
       return false;
     }
 
+    // we can call wither with key image (and optional address), or without, these are incompatible for now
+    if (!req.key_image.empty())
+    {
+      if (!req.destinations.empty())
+      {
+        er.code = WALLET_RPC_ERROR_CODE_MULTIUSER_INCOMPATIBLE;
+        er.message = "When key image and address are supplied, destinations should be empty";
+        return false;
+      }
+    }
+
     // validate the transfer requested and populate dsts & extra
-    if (!validate_transfer(req.destinations, req.payment_id, dsts, extra, true, er))
-      return false;
+    if (!req.key_image.empty())
+    {
+      std::list<wallet_rpc::transfer_destination> destination;
+      destination.push_back(wallet_rpc::transfer_destination());
+      destination.back().amount = 0;
+      destination.back().address = req.address;
+      if (!validate_transfer(destination, "", dsts, extra, true, er))
+        return false;
+    }
+    else
+    {
+      if (!validate_transfer(req.destinations, req.payment_id, dsts, extra, true, er))
+        return false;
+    }
     if (!validate_transfer(req.other_destinations, "", other_dsts, dummy_extra, false, er))
       return false;
 
@@ -1068,7 +1091,21 @@ namespace tools
     {
       uint64_t mixin = m_wallet->adjust_mixin(req.ring_size ? req.ring_size - 1 : 0);
       uint32_t priority = m_wallet->adjust_priority(req.priority);
-      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, tx_key, &muout);
+      std::vector<wallet2::pending_tx> ptx_vector;
+
+      if (!req.key_image.empty())
+      {
+        crypto::key_image ki;
+        if (!epee::string_tools::hex_to_pod(req.key_image, ki))
+        {
+          er.code = WALLET_RPC_ERROR_CODE_WRONG_KEY_IMAGE;
+          er.message = "failed to parse key image";
+          return false;
+        }
+        ptx_vector = m_wallet->create_transactions_single(ki, dsts[0].addr, dsts[0].is_subaddress, 1, mixin, req.unlock_time, priority, extra, tx_key, &muout);
+      }
+      else
+        ptx_vector = m_wallet->create_transactions_2(dsts, mixin, req.unlock_time, priority, extra, req.account_index, req.subaddr_indices, tx_key, &muout);
 
       if (ptx_vector.empty())
       {
@@ -1602,7 +1639,7 @@ namespace tools
     {
       uint64_t mixin = m_wallet->adjust_mixin(req.ring_size ? req.ring_size - 1 : 0);
       uint32_t priority = m_wallet->adjust_priority(req.priority);
-      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_single(ki, dsts[0].addr, dsts[0].is_subaddress, req.outputs, mixin, req.unlock_time, priority, extra);
+      std::vector<wallet2::pending_tx> ptx_vector = m_wallet->create_transactions_single(ki, dsts[0].addr, dsts[0].is_subaddress, req.outputs, mixin, req.unlock_time, priority, extra, boost::none, NULL);
 
       if (ptx_vector.empty())
       {

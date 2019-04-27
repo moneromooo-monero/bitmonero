@@ -56,12 +56,13 @@ class MultiuserTest():
         self.reset()
         self.create()
         self.mine()
-        self.simple_Nx1_transaction([0], 1, True)
-        self.simple_Nx1_transaction([0, 1], 2, True)
-        self.simple_Nx1_transaction([0, 1, 2], 3, True)
-        self.simple_Nx1_transaction([0], 1, False)
-        self.simple_Nx1_transaction([0, 1], 2, False)
-        self.simple_Nx1_transaction([0, 1, 2], 3, False)
+        for disclose in [True, False]:
+            # we don't run the 1 user case for use_key_image since this will get us just one output (no change),
+            # which is forbidden in general
+            self.simple_Nx1_transaction([0], 1, False, disclose)
+            for use_key_image in [False, True]:
+                self.simple_Nx1_transaction([0, 1], 2, use_key_image, disclose)
+                self.simple_Nx1_transaction([0, 1, 2], 3, use_key_image, disclose)
 
     def reset(self):
         print 'Resetting blockchain'
@@ -86,16 +87,17 @@ class MultiuserTest():
         daemon = Daemon()
 
         for i in range(len(self.addresses)):
-            daemon.generateblocks(self.addresses[i], 5)
+            daemon.generateblocks(self.addresses[i], 10)
             for i in range(len(self.wallet)):
                 self.wallet[i].refresh()
-        daemon.generateblocks(self.addresses[0], 65)
+        daemon.generateblocks(self.addresses[0], 60)
 
-    def simple_Nx1_transaction(self, senders, receiver, disclose):
-        print('Testing simple %s %u sender multiuser tx' % ('disclosed' if disclose else 'withheld', len(senders)))
+    def simple_Nx1_transaction(self, senders, receiver, use_key_image, disclose):
+        print('Testing simple %s %u sender multiuser %s tx' % ('disclosed' if disclose else 'withheld', len(senders), 'key image based' if use_key_image else 'amount based'))
         daemon = Daemon()
         balances = [None] * len(senders)
         fees = [None] * len(senders)
+        amounts = [None] * len(senders)
         for i in senders:
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
@@ -107,7 +109,20 @@ class MultiuserTest():
         other_dst = {'address': self.addresses[receiver], 'amount': 1000000000000 * (len(senders) - 1)}
         multiuser_data = ""
         for i in senders:
-            res = self.wallet[i].transfer_multiuser([dst], other_destinations = [other_dst] if disclose else [], multiuser_data = multiuser_data, disclose = disclose)
+            if use_key_image:
+                res = self.wallet[i].incoming_transfers(transfer_type = 'available')
+                assert len(res.transfers) > 0
+                td = res.transfers[0]
+                assert not td.spent
+                assert not td.frozen
+                assert td.unlocked
+                assert td.amount > 0
+                ki = td.key_image
+                amounts[i] = td.amount
+                res = self.wallet[i].transfer_multiuser(key_image = ki, address = self.addresses[receiver], other_destinations = [other_dst] if disclose else [], multiuser_data = multiuser_data, disclose = disclose)
+            else:
+                res = self.wallet[i].transfer_multiuser(destinations = [dst], other_destinations = [other_dst] if disclose else [], multiuser_data = multiuser_data, disclose = disclose)
+                amounts[i] = 1000000000000
             assert len(res.multiuser_data) > 0
             assert res.fee > 0
             fees[i] = res.fee
@@ -139,10 +154,10 @@ class MultiuserTest():
         for i in senders:
             self.wallet[i].refresh()
             res = self.wallet[i].get_balance()
-            assert res.balance == balances[i] - 1000000000000 - fees[i]
+            assert res.balance == balances[i] - amounts[i] - (0 if use_key_image else fees[i])
         self.wallet[receiver].refresh()
         res = self.wallet[receiver].get_balance()
-        assert res.balance == receiver_balance + len(senders) * 1000000000000
+        assert res.balance == receiver_balance + sum(amounts) - (sum(fees) if use_key_image else 0)
 
 
 class Guard:
