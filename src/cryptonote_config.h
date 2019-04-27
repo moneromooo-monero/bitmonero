@@ -161,6 +161,8 @@
 #define CRYPTONOTE_PRUNING_TIP_BLOCKS           5500 // the smaller, the more space saved
 //#define CRYPTONOTE_PRUNING_DEBUG_SPOOF_SEED
 
+#define ALLOW_SINGLE_BULLETPROOFS
+
 // New constants are intended to go here
 namespace config
 {

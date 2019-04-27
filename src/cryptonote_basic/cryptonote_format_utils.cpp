@@ -148,6 +148,27 @@ namespace cryptonote
         const bool bulletproof = rct::is_rct_bulletproof(rv.type);
         if (bulletproof)
         {
+#ifdef ALLOW_SINGLE_BULLETPROOFS
+          bool allone = true;
+          for (const rct::Bulletproof &proof: rv.p.bulletproofs)
+            if (proof.L.size() != 6)
+              allone = false;
+          if (allone)
+          {
+            const size_t n_amounts = tx.vout.size();
+            if (rv.p.bulletproofs.size() != n_amounts)
+            {
+              LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs size in tx " << get_transaction_hash(tx));
+              return false;
+            }
+            for (size_t i = 0; i < rv.p.bulletproofs.size(); ++i)
+            {
+              rv.p.bulletproofs[i].V.resize(1);
+              rv.p.bulletproofs[i].V[0] = rct::scalarmultKey(rv.outPk[i].mask, rct::INV_EIGHT);
+            }
+            goto done;
+          }
+#endif
           if (rv.p.bulletproofs.size() != 1)
           {
             LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs size in tx " << get_transaction_hash(tx));
@@ -170,6 +191,7 @@ namespace cryptonote
           for (size_t i = 0; i < n_amounts; ++i)
             rv.p.bulletproofs[0].V[i] = rct::scalarmultKey(rv.outPk[i].mask, rct::INV_EIGHT);
         }
+done:;
       }
     }
     return true;
@@ -395,6 +417,14 @@ namespace cryptonote
     const size_t n_outputs = tx.vout.size();
     if (n_outputs <= 2)
       return blob_size;
+#ifdef ALLOW_SINGLE_BULLETPROOFS
+    bool allone = true;
+    for (const rct::Bulletproof &proof: rv.p.bulletproofs)
+      if (proof.L.size() != 6)
+        allone = false;
+    if (allone)
+      return blob_size;
+#endif
     const uint64_t bp_base = 368;
     const size_t n_padded_outputs = rct::n_bulletproof_max_amounts(rv.p.bulletproofs);
     size_t nlr = 0;

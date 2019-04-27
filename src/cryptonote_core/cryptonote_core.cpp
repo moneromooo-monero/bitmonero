@@ -801,6 +801,14 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------
   static bool is_canonical_bulletproof_layout(const std::vector<rct::Bulletproof> &proofs)
   {
+#ifdef ALLOW_SINGLE_BULLETPROOFS
+    bool allone = true;
+    for (const rct::Bulletproof &proof: proofs)
+      if (proof.V.size() != 1)
+        allone = false;
+    if (allone)
+      return true;
+#endif
     if (proofs.size() != 1)
       return false;
     const size_t sz = proofs[0].V.size();
