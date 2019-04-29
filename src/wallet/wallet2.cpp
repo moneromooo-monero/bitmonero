@@ -3577,6 +3577,8 @@ bool wallet2::refresh(bool trusted_daemon, uint64_t & blocks_fetched, bool& rece
 //----------------------------------------------------------------------------------------------------
 bool wallet2::get_rct_distribution(uint64_t &start_height, std::vector<uint64_t> &distribution)
 {
+  PERF_TIMER(get_rct_distribution);
+
   uint32_t rpc_version;
   boost::optional<std::string> result = m_node_rpc_proxy.get_rpc_version(rpc_version);
   // no error
@@ -8113,6 +8115,7 @@ std::pair<std::set<uint64_t>, size_t> outs_unique(const std::vector<std::vector<
 
 void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count, bool rct)
 {
+  PERF_TIMER(get_outs);
   std::vector<uint64_t> rct_offsets;
   for (size_t attempts = 3; attempts > 0; --attempts)
   {
@@ -8140,6 +8143,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
 
 void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count, std::vector<uint64_t> &rct_offsets)
 {
+  PERF_TIMER(get_outs);
   LOG_PRINT_L2("fake_outputs_count: " << fake_outputs_count);
   outs.clear();
 
@@ -8187,6 +8191,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
         req_t.amounts.push_back(m_transfers[idx].is_rct() ? 0 : m_transfers[idx].amount());
     if (!req_t.amounts.empty())
     {
+      PERF_TIMER(get_output_histogram);
       std::sort(req_t.amounts.begin(), req_t.amounts.end());
       auto end = std::unique(req_t.amounts.begin(), req_t.amounts.end());
       req_t.amounts.resize(std::distance(req_t.amounts.begin(), end));
@@ -8207,6 +8212,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
     std::unordered_map<uint64_t, std::pair<uint64_t, uint64_t>> segregation_limit;
     if (is_after_segregation_fork && (m_segregate_pre_fork_outputs || m_key_reuse_mitigation2))
     {
+      PERF_TIMER(get_output_distribution);
       cryptonote::COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::request req_t = AUTO_VAL_INIT(req_t);
       cryptonote::COMMAND_RPC_GET_OUTPUT_DISTRIBUTION::response resp_t = AUTO_VAL_INIT(resp_t);
       for(size_t idx: selected_transfers)
@@ -8263,6 +8269,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
     COMMAND_RPC_GET_OUTPUTS_BIN::request req = AUTO_VAL_INIT(req);
     COMMAND_RPC_GET_OUTPUTS_BIN::response daemon_resp = AUTO_VAL_INIT(daemon_resp);
 
+    PERF_TIMER_START(pick_gamma);
     std::unique_ptr<gamma_picker> gamma;
     if (has_rct_distribution)
       gamma.reset(new gamma_picker(rct_offsets));
@@ -8559,6 +8566,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
       std::sort(req.outputs.begin() + start, req.outputs.end(),
           [](const get_outputs_out &a, const get_outputs_out &b) { return a.index < b.index; });
     }
+    PERF_TIMER_STOP(pick_gamma);
 
     if (ELPP->vRegistry()->allowed(el::Level::Debug, MONERO_DEFAULT_LOG_CATEGORY))
     {
@@ -8571,6 +8579,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
     }
 
     // get the keys for those
+    PERF_TIMER_START(get_outs_bin);
     req.get_txid = false;
 
     {
@@ -8584,6 +8593,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
         std::to_string(daemon_resp.outs.size()) + ", expected " +  std::to_string(req.outputs.size()));
       check_rpc_cost("/get_outs.bin", daemon_resp.credits, pre_call_credits, daemon_resp.outs.size() * COST_PER_OUT);
     }
+    PERF_TIMER_STOP(get_outs_bin);
 
     std::unordered_map<uint64_t, uint64_t> scanty_outs;
     size_t base = 0;
@@ -8705,6 +8715,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
   }
 
   // save those outs in the ringdb for reuse
+  PERF_TIMER_START(save_ringdb);
   for (size_t i = 0; i < selected_transfers.size(); ++i)
   {
     const size_t idx = selected_transfers[i];
@@ -8717,6 +8728,7 @@ void wallet2::get_outs(std::vector<std::vector<tools::wallet2::get_outs_entry>> 
     if (!set_ring(td.m_key_image, ring, false))
       MERROR("Failed to set ring for " << td.m_key_image);
   }
+  PERF_TIMER_STOP(save_ringdb);
 }
 
 template<typename T>
@@ -8724,6 +8736,8 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
   std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
   uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, T destination_split_strategy, const tx_dust_policy& dust_policy, cryptonote::transaction& tx, pending_tx &ptx)
 {
+  PERF_TIMER(transfer_selected);
+
   using namespace cryptonote;
   // throw if attempting a transaction with no destinations
   THROW_WALLET_EXCEPTION_IF(dsts.empty(), error::zero_destination);
@@ -8892,6 +8906,8 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
   uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t>& extra, cryptonote::transaction& tx, pending_tx &ptx, const rct::RCTConfig &rct_config)
 {
+  PERF_TIMER(transfer_selected_rct);
+
   using namespace cryptonote;
   // throw if attempting a transaction with no destinations
   THROW_WALLET_EXCEPTION_IF(dsts.empty(), error::zero_destination);
@@ -9051,6 +9067,8 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   {
     if (splitted_dsts.size() == 1)
     {
+      PERF_TIMER(generate_dummy_change_address);
+
       // If the change is 0, send it to a random address, to avoid confusing
       // the sender with a 0 amount output. We send a 0 amount in order to avoid
       // letting the destination be able to work out which of the inputs is the
@@ -9186,6 +9204,8 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
 
 std::vector<size_t> wallet2::pick_preferred_rct_inputs(uint64_t needed_money, uint32_t subaddr_account, const std::set<uint32_t> &subaddr_indices)
 {
+  PERF_TIMER(pick_preferred_rct_inputs);
+
   std::vector<size_t> picks;
   float current_output_relatdness = 1.0f;
 
@@ -9800,6 +9820,8 @@ bool wallet2::light_wallet_key_image_is_ours(const crypto::key_image& key_image,
 // usable balance.
 std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryptonote::tx_destination_entry> dsts, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices)
 {
+  PERF_TIMER(create_transactions_2);
+
   //ensure device is let in NONE mode in any case
   hw::device &hwdev = m_account.get_device();
   boost::unique_lock<hw::device> hwdev_lock (hwdev);
@@ -10349,6 +10371,8 @@ skip_tx:
 
 bool wallet2::sanity_check(const std::vector<wallet2::pending_tx> &ptx_vector, std::vector<cryptonote::tx_destination_entry> dsts) const
 {
+  PERF_TIMER(sanity_check);
+
   MDEBUG("sanity_check: " << ptx_vector.size() << " txes, " << dsts.size() << " destinations");
 
   hw::device &hwdev = m_account.get_device();
@@ -10416,6 +10440,8 @@ bool wallet2::sanity_check(const std::vector<wallet2::pending_tx> &ptx_vector, s
 
 std::vector<wallet2::pending_tx> wallet2::create_transactions_all(uint64_t below, const cryptonote::account_public_address &address, bool is_subaddress, const size_t outputs, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra, uint32_t subaddr_account, std::set<uint32_t> subaddr_indices)
 {
+  PERF_TIMER(create_transactions_all);
+
   std::vector<size_t> unused_transfers_indices;
   std::vector<size_t> unused_dust_indices;
   const bool use_rct = use_fork_rules(4, 0);
@@ -10487,6 +10513,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_all(uint64_t below
 
 std::vector<wallet2::pending_tx> wallet2::create_transactions_single(const crypto::key_image &ki, const cryptonote::account_public_address &address, bool is_subaddress, const size_t outputs, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra)
 {
+  PERF_TIMER(create_transactions_single);
+
   std::vector<size_t> unused_transfers_indices;
   std::vector<size_t> unused_dust_indices;
   const bool use_rct = use_fork_rules(4, 0);
@@ -10508,6 +10536,8 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_single(const crypt
 
 std::vector<wallet2::pending_tx> wallet2::create_transactions_from(const cryptonote::account_public_address &address, bool is_subaddress, const size_t outputs, std::vector<size_t> unused_transfers_indices, std::vector<size_t> unused_dust_indices, const size_t fake_outs_count, const uint64_t unlock_time, uint32_t priority, const std::vector<uint8_t>& extra)
 {
+  PERF_TIMER(create_transactions_from);
+
   //ensure device is let in NONE mode in any case
   hw::device &hwdev = m_account.get_device();
   boost::unique_lock<hw::device> hwdev_lock (hwdev);
