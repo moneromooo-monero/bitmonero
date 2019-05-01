@@ -1839,6 +1839,38 @@ namespace wallet_rpc
     typedef epee::misc_utils::struct_init<response_t> response;
   };
 
+  struct COMMAND_RPC_EDIT_ADDRESS_BOOK_ENTRY
+  {
+    struct request_t
+    {
+      uint64_t index;
+      bool set_address;
+      std::string address;
+      bool set_payment_id;
+      std::string payment_id;
+      bool set_description;
+      std::string description;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(index)
+        KV_SERIALIZE(set_address)
+        KV_SERIALIZE(address)
+        KV_SERIALIZE(set_payment_id)
+        KV_SERIALIZE(payment_id)
+        KV_SERIALIZE(set_description)
+        KV_SERIALIZE(description)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<request_t> request;
+
+    struct response_t
+    {
+      BEGIN_KV_SERIALIZE_MAP()
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<response_t> response;
+  };
+
   struct COMMAND_RPC_GET_ADDRESS_BOOK_ENTRY
   {
     struct request_t
