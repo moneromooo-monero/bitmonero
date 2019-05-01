@@ -36,7 +36,7 @@ monero_add_test_executable(difficulty-tests
   ${difficulty_headers})
 target_link_libraries(difficulty-tests
   PRIVATE
-    cryptonote_core
+    cryptonote_basic
     ${EXTRA_LIBRARIES})
 
 add_test(
