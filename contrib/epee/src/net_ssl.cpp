@@ -60,14 +60,14 @@ namespace
   };
   using openssl_pkey = std::unique_ptr<EVP_PKEY, openssl_pkey_free>;
 
-  struct openssl_ec_key_free
+  struct openssl_rsa_free
   {
-    void operator()(EC_KEY* ptr) const noexcept
+    void operator()(RSA* ptr) const noexcept
     {
-      EC_KEY_free(ptr);
+      RSA_free(ptr);
     }
   };
-  using openssl_ec_key = std::unique_ptr<EC_KEY, openssl_ec_key_free>;
+  using openssl_rsa = std::unique_ptr<RSA, openssl_rsa_free>;
 
   struct openssl_bignum_free
   {
@@ -77,6 +77,15 @@ namespace
     }
   };
   using openssl_bignum = std::unique_ptr<BIGNUM, openssl_bignum_free>;
+
+  struct openssl_ec_key_free
+  {
+    void operator()(EC_KEY* ptr) const noexcept
+    {
+      EC_KEY_free(ptr);
+    }
+  };
+  using openssl_ec_key = std::unique_ptr<EC_KEY, openssl_ec_key_free>;
 
   boost::system::error_code load_ca_file(boost::asio::ssl::context& ctx, const std::string& path)
   {
@@ -101,7 +110,77 @@ namespace net_utils
 
 
 // https://stackoverflow.com/questions/256405/programmatically-create-x509-certificate-using-openssl
-bool create_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert)
+bool create_rsa_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert)
+{
+  MGINFO("Generating SSL certificate");
+  pkey = EVP_PKEY_new();
+  if (!pkey)
+  {
+    MERROR("Failed to create new private key");
+    return false;
+  }
+
+  openssl_pkey pkey_deleter{pkey};
+  openssl_rsa rsa{RSA_new()};
+  if (!rsa)
+  {
+    MERROR("Error allocating RSA private key");
+    return false;
+  }
+
+  openssl_bignum exponent{BN_new()};
+  if (!exponent)
+  {
+    MERROR("Error allocating exponent");
+    return false;
+  }
+
+  BN_set_word(exponent.get(), RSA_F4);
+
+  if (RSA_generate_key_ex(rsa.get(), 4096, exponent.get(), nullptr) != 1)
+  {
+    MERROR("Error generating RSA private key");
+    return false;
+  }
+
+  if (EVP_PKEY_assign_RSA(pkey, rsa.get()) <= 0)
+  {
+    MERROR("Error assigning RSA private key");
+    return false;
+  }
+
+  // the RSA key is now managed by the EVP_PKEY structure
+  (void)rsa.release();
+
+  cert = X509_new();
+  if (!cert)
+  {
+    MERROR("Failed to create new X509 certificate");
+    return false;
+  }
+  ASN1_INTEGER_set(X509_get_serialNumber(cert), 1);
+  X509_gmtime_adj(X509_get_notBefore(cert), 0);
+  X509_gmtime_adj(X509_get_notAfter(cert), 3600 * 24 * 182); // half a year
+  if (!X509_set_pubkey(cert, pkey))
+  {
+    MERROR("Error setting pubkey on certificate");
+    X509_free(cert);
+    return false;
+  }
+  X509_NAME *name = X509_get_subject_name(cert);
+  X509_set_issuer_name(cert, name);
+
+  if (X509_sign(cert, pkey, EVP_sha256()) == 0)
+  {
+    MERROR("Error signing certificate");
+    X509_free(cert);
+    return false;
+  }
+  (void)pkey_deleter.release();
+  return true;
+}
+
+bool create_ec_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert)
 {
   MGINFO("Generating SSL certificate");
   pkey = EVP_PKEY_new();
@@ -279,11 +358,19 @@ boost::asio::ssl::context ssl_options_t::create_context() const
   {
     EVP_PKEY *pkey;
     X509 *cert;
-    CHECK_AND_ASSERT_THROW_MES(create_ssl_certificate(pkey, cert), "Failed to create certificate");
+
+    CHECK_AND_ASSERT_THROW_MES(create_ec_ssl_certificate(pkey, cert), "Failed to create certificate");
     CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_certificate(ctx, cert), "Failed to use generated certificate");
     // don't free the cert, the CTX owns it now
     CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_PrivateKey(ctx, pkey), "Failed to use generated private key");
     EVP_PKEY_free(pkey);
+
+    CHECK_AND_ASSERT_THROW_MES(create_rsa_ssl_certificate(pkey, cert), "Failed to create certificate");
+    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_certificate(ctx, cert), "Failed to use generated certificate");
+    // don't free the cert, the CTX owns it now
+    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_PrivateKey(ctx, pkey), "Failed to use generated private key");
+    EVP_PKEY_free(pkey);
+
   }
   else
     auth.use_ssl_certificate(ssl_context);
