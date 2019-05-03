@@ -60,14 +60,14 @@ namespace
   };
   using openssl_pkey = std::unique_ptr<EVP_PKEY, openssl_pkey_free>;
 
-  struct openssl_rsa_free
+  struct openssl_ec_key_free
   {
-    void operator()(RSA* ptr) const noexcept
+    void operator()(EC_KEY* ptr) const noexcept
     {
-      RSA_free(ptr);
+      EC_KEY_free(ptr);
     }
   };
-  using openssl_rsa = std::unique_ptr<RSA, openssl_rsa_free>;
+  using openssl_ec_key = std::unique_ptr<EC_KEY, openssl_ec_key_free>;
 
   struct openssl_bignum_free
   {
@@ -112,13 +112,14 @@ bool create_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert)
   }
 
   openssl_pkey pkey_deleter{pkey};
-  openssl_rsa rsa{RSA_new()};
-  if (!rsa)
+  openssl_ec_key ec_key{EC_KEY_new()};
+  if (!ec_key)
   {
-    MERROR("Error allocating RSA private key");
+    MERROR("Error allocating EC private key");
     return false;
   }
 
+/*
   openssl_bignum exponent{BN_new()};
   if (!exponent)
   {
@@ -133,15 +134,49 @@ bool create_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert)
     MERROR("Error generating RSA private key");
     return false;
   }
+*/
 
-  if (EVP_PKEY_assign_RSA(pkey, rsa.get()) <= 0)
+
+    size_t crv_len = EC_get_builtin_curves(NULL, 0);
+MGINFO("Found " << crv_len << " builtin curves");
+    EC_builtin_curve *curves;
+    curves = (EC_builtin_curve*)malloc(sizeof(*curves) * crv_len);
+    EC_get_builtin_curves(curves, crv_len);
+    for (size_t i=0;i<crv_len;++i)
+    {
+MGINFO("  " << curves[i].nid << ": " << curves[i].comment);
+    }
+
+
+
+
+
+
+  EC_GROUP *group = EC_GROUP_new_by_curve_name(/*NID_X25519*/415);
+  if (!group)
   {
-    MERROR("Error assigning RSA private key");
+    MERROR("Error getting ED25519 EC group: ");
+    return false;
+  }
+  if (EC_KEY_set_group(ec_key.get(), group) != 1)
+  {
+    MERROR("Error setting EC group");
+    EC_GROUP_free(group);
+    return false;
+  }
+  if (EC_KEY_generate_key(ec_key.get()) != 1)
+  {
+    MERROR("Error generating EC private key");
+    return false;
+  }
+  if (EVP_PKEY_assign_EC_KEY(pkey, ec_key.get()) <= 0)
+  {
+    MERROR("Error assigning EC private key");
     return false;
   }
 
-  // the RSA key is now managed by the EVP_PKEY structure
-  (void)rsa.release();
+  // the key is now managed by the EVP_PKEY structure
+  (void)ec_key.release();
 
   cert = X509_new();
   if (!cert)
