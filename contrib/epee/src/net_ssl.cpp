@@ -231,7 +231,7 @@ MGINFO("  " << curves[i].nid << ": " << curves[i].comment);
 
 
 
-  EC_GROUP *group = EC_GROUP_new_by_curve_name(/*NID_X25519*/415);
+  EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_secp256k1);
   if (!group)
   {
     MERROR("Error getting ED25519 EC group: ");
