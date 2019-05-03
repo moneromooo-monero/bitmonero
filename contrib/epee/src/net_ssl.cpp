@@ -295,6 +295,18 @@ ssl_options_t::ssl_options_t(std::vector<std::vector<std::uint8_t>> fingerprints
   std::sort(fingerprints_.begin(), fingerprints_.end());
 }
 
+static std::string get_ssl_error()
+{
+  std::string error;
+  unsigned long e = ERR_get_error();
+  error = ERR_reason_error_string(e);
+  error += ", ";
+  error += ERR_lib_error_string(e);
+  error += ", ";
+  error += ERR_func_error_string(e);
+  return error;
+}
+
 boost::asio::ssl::context ssl_options_t::create_context() const
 {
   boost::asio::ssl::context ssl_context{boost::asio::ssl::context::tlsv12};
@@ -359,16 +371,16 @@ boost::asio::ssl::context ssl_options_t::create_context() const
     EVP_PKEY *pkey;
     X509 *cert;
 
-    CHECK_AND_ASSERT_THROW_MES(create_ec_ssl_certificate(pkey, cert), "Failed to create certificate");
-    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_certificate(ctx, cert), "Failed to use generated certificate");
+    CHECK_AND_ASSERT_THROW_MES(create_ec_ssl_certificate(pkey, cert), "Failed to create certificate: " << get_ssl_error());
+    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_certificate(ctx, cert), "Failed to use generated certificate: " << get_ssl_error());
     // don't free the cert, the CTX owns it now
-    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_PrivateKey(ctx, pkey), "Failed to use generated private key");
+    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_PrivateKey(ctx, pkey), "Failed to use generated private key: " << get_ssl_error());
     EVP_PKEY_free(pkey);
 
-    CHECK_AND_ASSERT_THROW_MES(create_rsa_ssl_certificate(pkey, cert), "Failed to create certificate");
-    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_certificate(ctx, cert), "Failed to use generated certificate");
+    CHECK_AND_ASSERT_THROW_MES(create_rsa_ssl_certificate(pkey, cert), "Failed to create certificate: " << get_ssl_error());
+    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_certificate(ctx, cert), "Failed to use generated certificate: " << get_ssl_error());
     // don't free the cert, the CTX owns it now
-    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_PrivateKey(ctx, pkey), "Failed to use generated private key");
+    CHECK_AND_ASSERT_THROW_MES(SSL_CTX_use_PrivateKey(ctx, pkey), "Failed to use generated private key: " << get_ssl_error());
     EVP_PKEY_free(pkey);
 
   }
