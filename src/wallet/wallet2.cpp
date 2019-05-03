@@ -13215,6 +13215,11 @@ uint64_t wallet2::get_bytes_received() const
   return m_http_client.get_bytes_received();
 }
 //----------------------------------------------------------------------------------------------------
+std::string wallet2::get_ssl_info()
+{
+  return m_http_client.get_ssl_info();
+}
+//----------------------------------------------------------------------------------------------------
 std::vector<std::pair<std::string, std::vector<std::tuple<const char*, tools::wallet2::configuration_element_t, tools::wallet2::configuration_function_t>>>> wallet2::configure(const password_container &pwd_container)
 {
   std::vector<std::pair<std::string, std::vector<std::tuple<const char*, configuration_element_t, configuration_function_t>>>> v;

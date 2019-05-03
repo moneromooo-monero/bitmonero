@@ -466,6 +466,11 @@ namespace net_utils
 				return m_net_client.get_bytes_received();
 			}
 			//---------------------------------------------------------------------------
+			std::string get_ssl_info() const
+			{
+				return m_net_client.get_ssl_info();
+			}
+			//---------------------------------------------------------------------------
 		private: 
 			//---------------------------------------------------------------------------
 			inline bool handle_reciev(std::chrono::milliseconds timeout)
