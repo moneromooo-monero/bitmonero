@@ -143,6 +143,8 @@ namespace net_utils
 
 	bool create_ec_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert);
 	bool create_rsa_ssl_certificate(EVP_PKEY *&pkey, X509 *&cert);
+
+	std::string get_ssl_info(boost::asio::ssl::stream<boost::asio::ip::tcp::socket> &socket);
 }
 }
 

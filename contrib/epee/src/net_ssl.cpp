@@ -566,6 +566,14 @@ bool ssl_support_from_string(ssl_support_t &ssl, boost::string_ref s)
   return true;
 }
 
+std::string get_ssl_info(boost::asio::ssl::stream<boost::asio::ip::tcp::socket> &socket)
+{
+  SSL *ssl = socket.native_handle();
+  const SSL_CIPHER *cipher = SSL_get_current_cipher(ssl);
+  auto name = SSL_CIPHER_get_name(cipher);
+  return name;
+}
+
 } // namespace
 } // namespace
 
