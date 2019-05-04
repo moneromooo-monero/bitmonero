@@ -283,13 +283,9 @@ ssl_options_t::ssl_options_t(std::vector<std::vector<std::uint8_t>> fingerprints
 boost::asio::ssl::context ssl_options_t::create_context() const
 {
   boost::asio::ssl::context ssl_context{boost::asio::ssl::context::tlsv12};
-#if BOOST_VERSION >= 107000
-  try { ssl_context = boost::asio::ssl::context{boost::asio::ssl::context::tlsv13}; } catch (...) {}
-#endif
   if (!bool(*this))
     return ssl_context;
 
-MGINFO("trace");
   // only allow tls v1.2 and up
   ssl_context.set_options(boost::asio::ssl::context::default_workarounds);
   ssl_context.set_options(boost::asio::ssl::context::no_sslv2);
