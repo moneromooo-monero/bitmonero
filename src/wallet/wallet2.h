@@ -1060,6 +1060,8 @@ private:
     void track_uses(bool value) { m_track_uses = value; }
     BackgroundMiningSetupType setup_background_mining() const { return m_setup_background_mining; }
     void setup_background_mining(BackgroundMiningSetupType value) { m_setup_background_mining = value; }
+    uint32_t inactivity_lock_timeout() const { return m_inactivity_lock_timeout; }
+    void inactivity_lock_timeout(uint32_t seconds) { m_inactivity_lock_timeout = seconds; }
     const boost::optional<std::pair<cryptonote::account_public_address, bool>> &get_default_change_address() const { return m_default_change_address; }
     void default_change_address(const std::pair<cryptonote::account_public_address, bool> &address) { m_default_change_address = address; }
     void reset_default_change_address() { m_default_change_address = boost::none; }
@@ -1520,6 +1522,7 @@ private:
     uint64_t m_segregation_height;
     bool m_ignore_fractional_outputs;
     bool m_track_uses;
+    uint32_t m_inactivity_lock_timeout;
     BackgroundMiningSetupType m_setup_background_mining;
     boost::optional<std::pair<cryptonote::account_public_address, bool>> m_default_change_address;
     bool m_is_initialized;

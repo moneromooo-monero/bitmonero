@@ -67,6 +67,7 @@ using namespace epee;
 #include "memwipe.h"
 #include "cryptonote_config.h"
 #include "net/http_client.h"                        // epee::net_utils::...
+#include "readline_buffer.h"
 
 #ifdef WIN32
 #ifndef STRSAFE_NO_DEPRECATE
@@ -1100,6 +1101,29 @@ std::string get_nix_version_display_string()
     );
     const std::uint64_t divisor = size->bytes / 1024;
     return (boost::format(size->format) % (double(bytes) / divisor)).str();
+  }
+
+  void clear_screen()
+  {
+    std::cout << "\033[2K" << std::flush; // clear whole line
+    std::cout << "\033c" << std::flush; // clear current screen and scrollback
+    std::cout << "\033[2J" << std::flush; // clear current screen only, scrollback is still around
+    std::cout << "\033[3J" << std::flush; // does nothing, should clear current screen and scrollback
+    std::cout << "\033[1;1H" << std::flush; // move cursor top/left
+    std::cout << "\r                                                \r" << std::flush; // erase odd chars if the ANSI codes were printed raw
+#ifdef _WIN32
+    COORD coord{0, 0};
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (GetConsoleScreenBufferInfo(h, &csbi))
+    {
+      DWORD cbConSize = csbi.dwSize.X * csbi.dwSize.Y, w;
+      FillConsoleOutputCharacter(h, (TCHAR)' ', cbConSize, coord, &w);
+      if (GetConsoleScreenBufferInfo(h, &csbi))
+        FillConsoleOutputAttribute(h, csbi.wAttributes, cbConSize, coord, &w);
+      SetConsoleCursorPosition(h, coord);
+    }
+#endif
   }
 
 }

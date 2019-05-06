@@ -135,6 +135,8 @@ using namespace cryptonote;
 #define DEFAULT_MIN_OUTPUT_COUNT 5
 #define DEFAULT_MIN_OUTPUT_VALUE (2*COIN)
 
+#define DEFAULT_INACTIVITY_LOCK_TIMEOUT 90 // a minute and a half
+
 static const std::string MULTISIG_SIGNATURE_MAGIC = "SigMultisigPkV1";
 static const std::string MULTISIG_EXTRA_INFO_MAGIC = "MultisigxV1";
 
@@ -1114,6 +1116,7 @@ wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended):
   m_segregation_height(0),
   m_ignore_fractional_outputs(true),
   m_track_uses(false),
+  m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT),
   m_setup_background_mining(BackgroundMiningMaybe),
   m_default_change_address(boost::none),
   m_is_initialized(false),
@@ -3664,6 +3667,9 @@ bool wallet2::store_keys(const std::string& keys_file_name, const epee::wipeable
   value2.SetInt(m_track_uses ? 1 : 0);
   json.AddMember("track_uses", value2, json.GetAllocator());
 
+  value2.SetInt(m_inactivity_lock_timeout);
+  json.AddMember("inactivity_lock_timeout", value2, json.GetAllocator());
+
   value2.SetInt(m_setup_background_mining);
   json.AddMember("setup_background_mining", value2, json.GetAllocator());
 
@@ -3822,6 +3828,7 @@ bool wallet2::load_keys(const std::string& keys_file_name, const epee::wipeable_
     m_segregation_height = 0;
     m_ignore_fractional_outputs = true;
     m_track_uses = false;
+    m_inactivity_lock_timeout = DEFAULT_INACTIVITY_LOCK_TIMEOUT;
     m_setup_background_mining = BackgroundMiningMaybe;
     m_default_change_address = boost::none;
     m_subaddress_lookahead_major = SUBADDRESS_LOOKAHEAD_MAJOR;
@@ -3978,6 +3985,8 @@ bool wallet2::load_keys(const std::string& keys_file_name, const epee::wipeable_
     m_ignore_fractional_outputs = field_ignore_fractional_outputs;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, track_uses, int, Int, false, false);
     m_track_uses = field_track_uses;
+    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, inactivity_lock_timeout, unsigned int, Uint, false, DEFAULT_INACTIVITY_LOCK_TIMEOUT);
+    m_inactivity_lock_timeout = field_inactivity_lock_timeout;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, setup_background_mining, BackgroundMiningSetupType, Int, false, BackgroundMiningMaybe);
     m_setup_background_mining = field_setup_background_mining;
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, default_change_address, std::string, String, false, std::string());
@@ -13321,6 +13330,8 @@ std::vector<std::pair<std::string, std::vector<std::tuple<const char*, tools::wa
   v.push_back({"", {std::make_tuple(tr("Never try to use too small an output in a transaction. Too small here refers to a value less than the increase in transaction fee needed to spend it (ie, it does not even pay for itself)."), m_ignore_fractional_outputs, SET(bool, m_ignore_fractional_outputs))}});
 
   v.push_back({"", {std::make_tuple(tr("Track uses of your outputs on the blockchain. Other Monero users' transactions can use your outputs in their ring signatures. This option lets you keep track of them to see when an observer can see your coins are 'possibly spent'"), m_track_uses, SET(bool, m_track_uses))}});
+
+  v.push_back({"", {std::make_tuple(tr("Number of seconds before locking the wallet if inactive (0 to disable)"), m_inactivity_lock_timeout, SET(uint32_t, m_inactivity_lock_timeout))}});
 
   v.push_back({"", {std::make_tuple(tr("Enable background mining. This helps the Monero network and makes you eligible for receiving newly created monero. This is low key mining method which will only happen once your computer is idle, and will not run if and when your computer is running on battery. If you don't want to decide yet, select 'Unsure'."), std::make_pair(m_setup_background_mining, std::vector<std::pair<uint32_t, std::string>>({{BackgroundMiningYes, "Yes"}, {BackgroundMiningNo, "No"}, {BackgroundMiningMaybe, "Unsure"}})), SET_enum(BackgroundMiningSetupType, m_setup_background_mining))}});
 

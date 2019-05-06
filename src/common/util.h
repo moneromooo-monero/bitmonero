@@ -246,4 +246,6 @@ namespace tools
   std::string get_human_readable_timestamp(uint64_t ts);
 
   std::string get_human_readable_bytes(uint64_t bytes);
+
+  void clear_screen();
 }
