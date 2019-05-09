@@ -360,3 +360,55 @@ class Daemon(object):
         save_bc = {
         }
         return self.rpc.send_request('/save_bc', save_bc)
+
+    def get_peer_list(self):
+        get_peer_list = {
+        }
+        return self.rpc.send_request('/get_peer_list', get_peer_list)
+
+    def set_log_hash_rate(self, visible):
+        set_log_hash_rate = {
+            'visible': visible,
+        }
+        return self.rpc.send_request('/set_log_hash_rate', set_log_hash_rate)
+
+    def stop_daemon(self):
+        stop_daemon = {
+        }
+        return self.rpc.send_request('/stop_daemon', stop_daemon)
+
+    def get_net_stats(self):
+        get_net_stats = {
+        }
+        return self.rpc.send_request('/get_net_stats', get_net_stats)
+
+    def get_limit(self):
+        get_limit = {
+        }
+        return self.rpc.send_request('/get_limit', get_limit)
+
+    def set_limit(self, limit_down, limit_up):
+        set_limit = {
+            'limit_down': limit_down,
+            'limit_up': limit_up,
+        }
+        return self.rpc.send_request('/set_limit', set_limit)
+
+    def out_peers(self, out_peers):
+        out_peers = {
+            'out_peers': out_peers,
+        }
+        return self.rpc.send_request('/out_peers', out_peers)
+
+    def in_peers(self, in_peers):
+        in_peers = {
+            'in_peers': in_peers,
+        }
+        return self.rpc.send_request('/in_peers', in_peers)
+
+    def update(self, command, path = None):
+        update = {
+            'command': command,
+            'path': path,
+        }
+        return self.rpc.send_request('/update', update)
