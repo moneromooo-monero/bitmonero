@@ -253,6 +253,17 @@ class Daemon(object):
         }
         return self.rpc.send_json_rpc_request(set_bans)
 
+    def banned(self, address):
+        banned = {
+            'method': 'banned',
+            'params': {
+                'address': address
+            },
+            'jsonrpc': '2.0',
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(banned)
+
     def get_transactions(self, txs_hashes = [], decode_as_json = False, prune = False, split = False):
         get_transactions = {
             'txs_hashes': txs_hashes,
@@ -412,3 +423,64 @@ class Daemon(object):
             'path': path,
         }
         return self.rpc.send_request('/update', update)
+
+    def get_block_count(self):
+        get_block_count = {
+            'method': 'get_block_count',
+            'params': {
+            },
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(get_block_count)
+
+    def get_block_hash(self, height):
+        get_block_hash = {
+            'method': 'get_block_hash',
+            'params': [height],
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(get_block_hash)
+
+    def relay_tx(self, txids = []):
+        relay_tx = {
+            'method': 'relay_tx',
+            'params': {
+                'txids': txids,
+            },
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(relay_tx)
+
+    def sync_info(self):
+        sync_info = {
+            'method': 'sync_info',
+            'params': {
+            },
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(sync_info)
+
+    def get_txpool_backlog(self):
+        get_txpool_backlog = {
+            'method': 'get_txpool_backlog',
+            'params': {
+            },
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(get_txpool_backlog)
+
+    def prune_blockchain(self, check = False):
+        prune_blockchain = {
+            'method': 'prune_blockchain',
+            'params': {
+                'check': check,
+            },
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(prune_blockchain)
