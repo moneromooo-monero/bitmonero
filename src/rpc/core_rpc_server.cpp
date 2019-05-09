@@ -2279,6 +2279,24 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_get_txpool_backlog_bin(const COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG_BIN::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG_BIN::response& res, epee::json_rpc::error& error_resp, const connection_context *ctx)
+  {
+    PERF_TIMER(on_get_txpool_backlog_bin);
+    bool r;
+    if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG_BIN>(invoke_http_mode::JON_RPC, "get_txpool_backlog.bin", req, res, r))
+      return r;
+
+    if (!m_core.get_txpool_backlog(res.backlog))
+    {
+      error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
+      error_resp.message = "Failed to get txpool backlog";
+      return false;
+    }
+
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_get_txpool_backlog(const COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::request& req, COMMAND_RPC_GET_TRANSACTION_POOL_BACKLOG::response& res, epee::json_rpc::error& error_resp, const connection_context *ctx)
   {
     PERF_TIMER(on_get_txpool_backlog);
