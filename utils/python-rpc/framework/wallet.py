@@ -140,13 +140,14 @@ class Wallet(object):
         }
         return self.rpc.send_json_rpc_request(create_wallet)
 
-    def get_balance(self, account_index = 0, address_indices = [], all_accounts = False):
+    def get_balance(self, account_index = 0, address_indices = [], all_accounts = False, strict = False):
         get_balance = {
             'method': 'get_balance',
             'params': {
                 'account_index': account_index,
                 'address_indices': address_indices,
                 'all_accounts': all_accounts,
+                'strict': strict,
             },
             'jsonrpc': '2.0', 
             'id': '0'
@@ -834,11 +835,12 @@ class Wallet(object):
         }
         return self.rpc.send_json_rpc_request(validate_address)
 
-    def get_accounts(self, tag):
+    def get_accounts(self, tag, strict_balances = False):
         get_accounts = {
             'method': 'get_accounts',
             'params': {
                 'tag': tag,
+                'strict_balances': strict_balances,
             },
             'jsonrpc': '2.0',
             'id': '0'
