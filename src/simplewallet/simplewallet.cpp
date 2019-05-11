@@ -33,6 +33,7 @@
  * 
  * \brief Source file that defines simple_wallet class.
  */
+#include <locale.h>
 #include <thread>
 #include <iostream>
 #include <sstream>
@@ -5882,17 +5883,25 @@ void simple_wallet::check_for_inactivity_lock(bool user)
     tools::clear_screen();
     m_in_command = true;
     if (!user)
-      tools::msg_writer() <<
-          " ________________________________________" << std::endl <<
-          "/ I locked your Monero wallet to protect \\" << std::endl <<
-          "\\ you while you were away.               /" << std::endl <<
-          " ----------------------------------------" << std::endl <<
+    {
+      const std::string speech = tr("I locked your Monero wallet to protect you while you were away");
+      std::vector<std::pair<std::string, size_t>> lines = tools::split_string_by_width(speech, 45);
+
+      size_t max_len = 0;
+      for (const auto &i: lines)
+        max_len = std::max(max_len, i.second);
+      const size_t n_u = max_len + 2;
+      tools::msg_writer() << " " << std::string(n_u, '_');
+      for (size_t i = 0; i < lines.size(); ++i)
+        tools::msg_writer() << (i == 0 ? "/" : i == lines.size() - 1 ? "\\" : "|") << " " << lines[i].first << std::string(max_len - lines[i].second, ' ') << " " << (i == 0 ? "\\" : i == lines.size() - 1 ? "/" : "|");
+      tools::msg_writer() << " " << std::string(n_u, '-') << std::endl <<
           "        \\   (__)" << std::endl <<
           "         \\  (oo)\\_______" << std::endl <<
           "            (__)\\       )\\/\\" << std::endl <<
           "                ||----w |" << std::endl <<
           "                ||     ||" << std::endl <<
           "" << std::endl;
+    }
     while (1)
     {
       tools::msg_writer() << tr("Locked due to inactivity. The wallet password is required to unlock the console.");
@@ -9732,6 +9741,7 @@ int main(int argc, char* argv[])
   std::locale::global(boost::locale::generator().generate(""));
   boost::filesystem::path::imbue(std::locale());
 #endif
+  setlocale(LC_CTYPE, "");
 
   po::options_description desc_params(wallet_args::tr("Wallet options"));
   tools::wallet2::init_options(desc_params);

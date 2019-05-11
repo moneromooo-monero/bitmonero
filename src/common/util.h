@@ -250,4 +250,8 @@ namespace tools
   std::string get_human_readable_bytes(uint64_t bytes);
 
   void clear_screen();
+
+  std::pair<std::string, size_t> get_string_prefix_by_width(const std::string &s, size_t columns);
+  size_t get_string_width(const std::string &s);
+  std::vector<std::pair<std::string, size_t>> split_string_by_width(const std::string &s, size_t columns);
 }
