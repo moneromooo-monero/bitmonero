@@ -99,7 +99,7 @@ namespace epee
         res = true;
       }
 
-      if (!eos())
+      if (!eos() && m_read_status != state_cancelled)
         m_read_status = state_init;
 
       return res;
@@ -129,6 +129,7 @@ namespace epee
     {
       boost::unique_lock<boost::mutex> lock(m_response_mutex);
       m_read_status = state_cancelled;
+      m_has_read_request = false;
       m_response_cv.notify_one();
     }
 
@@ -172,6 +173,9 @@ namespace epee
 
       while (m_run.load(std::memory_order_relaxed))
       {
+        if (m_read_status == state_cancelled)
+          return false;
+
         fd_set read_set;
         FD_ZERO(&read_set);
         FD_SET(stdin_fileno, &read_set);
@@ -189,6 +193,9 @@ namespace epee
 #else
       while (m_run.load(std::memory_order_relaxed))
       {
+        if (m_read_status == state_cancelled)
+          return false;
+
         int retval = ::WaitForSingleObject(::GetStdHandle(STD_INPUT_HANDLE), 100);
         switch (retval)
         {
@@ -229,7 +236,8 @@ reread:
             case rdln::full:    break;
             }
 #else
-            std::getline(std::cin, line);
+            if (m_read_status != state_cancelled)
+              std::getline(std::cin, line);
 #endif
             read_ok = !std::cin.eof() && !std::cin.fail();
           }

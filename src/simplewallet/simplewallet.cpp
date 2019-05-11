@@ -45,6 +45,7 @@
 #include <boost/regex.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 #include "include_base_utils.h"
+#include "console_handler.h"
 #include "common/i18n.h"
 #include "common/command_line.h"
 #include "common/util.h"
@@ -254,9 +255,7 @@ namespace
 
   std::string input_line(const std::string& prompt, const std::vector<std::string> &values = {})
   {
-#ifdef HAVE_READLINE
-    rdln::suspend_readline pause_readline;
-#endif
+    PAUSE_READLINE();
     std::cout << prompt;
     if (!values.empty())
       std::cout << "  (" << boost::algorithm::join(values, "/") << ")";
@@ -279,9 +278,7 @@ namespace
 
   epee::wipeable_string input_secure_line(const char *prompt)
   {
-#ifdef HAVE_READLINE
-    rdln::suspend_readline pause_readline;
-#endif
+    PAUSE_READLINE();
     auto pwd_container = tools::password_container::prompt(false, prompt, false);
     if (!pwd_container)
     {
@@ -297,9 +294,7 @@ namespace
 
   boost::optional<tools::password_container> password_prompter(const char *prompt, bool verify)
   {
-#ifdef HAVE_READLINE
-    rdln::suspend_readline pause_readline;
-#endif
+    PAUSE_READLINE();
     auto pwd_container = tools::password_container::prompt(verify, prompt);
     if (!pwd_container)
     {
@@ -2145,7 +2140,7 @@ bool simple_wallet::frozen(const std::vector<std::string> &args)
 bool simple_wallet::lock(const std::vector<std::string> &args)
 {
   m_locked = true;
-  check_for_inactivity_lock();
+  check_for_inactivity_lock(true);
   return true;
 }
 
@@ -2308,7 +2303,7 @@ bool simple_wallet::on_empty_command()
 
 bool simple_wallet::on_cancelled_command()
 {
-  check_for_inactivity_lock();
+  check_for_inactivity_lock(false);
   return true;
 }
 
@@ -5235,9 +5230,7 @@ boost::optional<epee::wipeable_string> simple_wallet::on_get_password(const char
     return boost::none;
   }
 
-#ifdef HAVE_READLINE
-  rdln::suspend_readline pause_readline;
-#endif
+  PAUSE_READLINE();
   std::string msg = tr("Enter password");
   if (reason && *reason)
     msg += std::string(" (") + reason + ")";
@@ -5258,9 +5251,7 @@ void simple_wallet::on_device_button_request(uint64_t code)
 //----------------------------------------------------------------------------------------------------
 boost::optional<epee::wipeable_string> simple_wallet::on_device_pin_request()
 {
-#ifdef HAVE_READLINE
-  rdln::suspend_readline pause_readline;
-#endif
+  PAUSE_READLINE();
   std::string msg = tr("Enter device PIN");
   auto pwd_container = tools::password_container::prompt(false, msg.c_str());
   THROW_WALLET_EXCEPTION_IF(!pwd_container, tools::error::password_entry_failed, tr("Failed to read device PIN"));
@@ -5274,9 +5265,7 @@ boost::optional<epee::wipeable_string> simple_wallet::on_device_passphrase_reque
     return boost::none;
   }
 
-#ifdef HAVE_READLINE
-  rdln::suspend_readline pause_readline;
-#endif
+  PAUSE_READLINE();
   std::string msg = tr("Enter device passphrase");
   auto pwd_container = tools::password_container::prompt(false, msg.c_str());
   THROW_WALLET_EXCEPTION_IF(!pwd_container, tools::error::password_entry_failed, tr("Failed to read device passphrase"));
@@ -5323,9 +5312,7 @@ bool simple_wallet::refresh_main(uint64_t start_height, enum ResetType reset, bo
     m_wallet->rescan_blockchain(reset == ResetHard, false, reset == ResetSoftKeepKI);
   }
 
-#ifdef HAVE_READLINE
-  rdln::suspend_readline pause_readline;
-#endif
+  PAUSE_READLINE();
 
   message_writer() << tr("Starting refresh...");
 
@@ -5884,7 +5871,7 @@ bool simple_wallet::prompt_if_old(const std::vector<tools::wallet2::pending_tx> 
   return true;
 }
 //----------------------------------------------------------------------------------------------------
-void simple_wallet::check_for_inactivity_lock()
+void simple_wallet::check_for_inactivity_lock(bool user)
 {
   if (m_locked)
   {
@@ -5894,6 +5881,18 @@ void simple_wallet::check_for_inactivity_lock()
 #endif
     tools::clear_screen();
     m_in_command = true;
+    if (!user)
+      tools::msg_writer() <<
+          " ________________________________________" << std::endl <<
+          "/ I locked your Monero wallet to protect \\" << std::endl <<
+          "\\ you while you were away.               /" << std::endl <<
+          " ----------------------------------------" << std::endl <<
+          "        \\   (__)" << std::endl <<
+          "         \\  (oo)\\_______" << std::endl <<
+          "            (__)\\       )\\/\\" << std::endl <<
+          "                ||----w |" << std::endl <<
+          "                ||     ||" << std::endl <<
+          "" << std::endl;
     while (1)
     {
       tools::msg_writer() << tr("Locked due to inactivity. The wallet password is required to unlock the console.");
@@ -5922,7 +5921,7 @@ bool simple_wallet::on_command(bool (simple_wallet::*cmd)(const std::vector<std:
     m_in_command = false;
   });
 
-  check_for_inactivity_lock();
+  check_for_inactivity_lock(false);
   return (this->*cmd)(args);
 }
 //----------------------------------------------------------------------------------------------------
