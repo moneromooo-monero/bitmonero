@@ -27,6 +27,12 @@
 
 #pragma once
 
+#include "int-util.h"
+
+// IP addresses are kept in network byte order
+// Masks below are little endian
+// -> convert from network byte order to host byte order before comparing
+
 namespace epee
 {
   namespace net_utils
@@ -34,6 +40,9 @@ namespace epee
     inline
     bool is_ip_local(uint32_t ip)
     {
+#if BYTE_ORDER == BIG_ENDIAN
+      ip = SWAP32LE(ip);
+#endif
       /*
       local ip area
       10.0.0.0 — 10.255.255.255 
@@ -57,6 +66,9 @@ namespace epee
     inline
     bool is_ip_loopback(uint32_t ip)
     {
+#if BYTE_ORDER == BIG_ENDIAN
+      ip = SWAP32LE(ip);
+#endif
       if( (ip | 0xffffff00) == 0xffffff7f)
         return true;
       //MAKE_IP
