@@ -162,6 +162,8 @@ public:
   bool check_blockchain_pruning();
 
   bool print_net_stats();
+
+  bool block_rate(uint64_t seconds);
 };
 
 } // namespace daemonize

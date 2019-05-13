@@ -2356,4 +2356,46 @@ namespace cryptonote
     typedef epee::misc_utils::struct_init<response_t> response;
   };
 
+  struct COMMAND_RPC_GET_BLOCK_RATE
+  {
+    struct request_t
+    {
+      std::vector<uint64_t> seconds;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(seconds)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<request_t> request;
+
+    struct entry
+    {
+      uint64_t seconds;
+      uint32_t expected;
+      uint32_t actual;
+      double probability;
+      std::vector<double> probabilities;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(seconds)
+        KV_SERIALIZE(expected)
+        KV_SERIALIZE(actual)
+        KV_SERIALIZE(probability)
+        KV_SERIALIZE(probabilities)
+      END_KV_SERIALIZE_MAP()
+    };
+
+    struct response_t
+    {
+      std::vector<entry> results;
+      std::string status;
+
+      BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(results)
+        KV_SERIALIZE(status)
+      END_KV_SERIALIZE_MAP()
+    };
+    typedef epee::misc_utils::struct_init<response_t> response;
+  };
+
 }

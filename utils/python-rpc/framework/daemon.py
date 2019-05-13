@@ -484,3 +484,14 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(prune_blockchain)
+
+    def get_block_rate(self, seconds = [3600]):
+        get_block_rate = {
+            'method': 'get_block_rate',
+            'params': {
+                'seconds': seconds,
+            },
+            'jsonrpc': '2.0', 
+            'id': '0'
+        }
+        return self.rpc.send_json_rpc_request(get_block_rate)

@@ -150,6 +150,8 @@ public:
   bool check_blockchain_pruning(const std::vector<std::string>& args);
 
   bool print_net_stats(const std::vector<std::string>& args);
+
+  bool block_rate(const std::vector<std::string>& args);
 };
 
 } // namespace daemonize
