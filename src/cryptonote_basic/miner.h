@@ -74,7 +74,7 @@ namespace cryptonote
     const account_public_address& get_mining_address() const;
     bool on_idle();
     void on_synchronized();
-    static void setup_seedhash(i_miner_handler *mh, const block& b, const uint64_t height);
+    static void setup_seedhash(i_miner_handler *mh, const int miners, const block& b, const uint64_t height);
     //synchronous analog (for fast calls)
     static bool find_nonce_for_given_block(i_miner_handler *mh, block& bl, const difficulty_type& diffic, uint64_t height);
     void pause();

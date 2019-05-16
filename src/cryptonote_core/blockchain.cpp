@@ -147,6 +147,7 @@ static const struct {
   { 9, 1057778, 0, 1533297600 },
   { 10, 1154318, 0, 1550153694 },
   { 11, 1155038, 0, 1550225678 },
+  { 12, 1212880, 0, 1558044000 },	/* FIXME: set actual height and datestamp */
 };
 static const uint64_t testnet_hard_fork_version_1_till = 624633;
 
@@ -849,7 +850,7 @@ void Blockchain::setup_seedhash(const block& b, const uint64_t height) const
     uint64_t seed_height;
     if (rx_needhash(height, &seed_height)) {
       crypto::hash hash = get_block_id_by_height(seed_height);
-      rx_seedhash(seed_height, (char *)&hash, false);
+      rx_seedhash(seed_height, (char *)&hash, 0);
     }
   }
 }

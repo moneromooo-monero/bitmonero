@@ -82,7 +82,7 @@ void cn_fast_hash(const void *data, size_t length, char *hash);
 void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed, uint64_t height);
 
 bool rx_needhash(const uint64_t height, uint64_t *seedheight);
-void rx_seedhash(const uint64_t seedheight, const char *hash, const bool mining);
+void rx_seedhash(const uint64_t seedheight, const char *hash, const int miners);
 
 void hash_extra_blake(const void *data, size_t length, char *hash);
 void hash_extra_groestl(const void *data, size_t length, char *hash);

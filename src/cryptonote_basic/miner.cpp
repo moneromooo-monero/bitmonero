@@ -84,7 +84,7 @@ using namespace epee;
 extern "C" void slow_hash_allocate_state();
 extern "C" void slow_hash_free_state();
 extern "C" bool rx_needhash(const uint64_t height, uint64_t *seedheight);
-extern "C" void rx_seedhash(const uint64_t seedheight, const char *hash, const bool mining);
+extern "C" void rx_seedhash(const uint64_t seedheight, const char *hash, const int miners);
 namespace cryptonote
 {
 
@@ -468,7 +468,7 @@ namespace cryptonote
     return true;
   }
   //-----------------------------------------------------------------------------------------------------
-  void miner::setup_seedhash(i_miner_handler *mh, const block& b, const uint64_t height)
+  void miner::setup_seedhash(i_miner_handler *mh, const int threads, const block& b, const uint64_t height)
   {
     int cn_variant = b.major_version >= 7 ? b.major_version - 6 : 0;
     if (cn_variant >= 6) {
@@ -479,7 +479,7 @@ namespace cryptonote
           hash = mh->get_block_id(seed_height);
         else
           memset(&hash, 0, sizeof(hash));
-        rx_seedhash(seed_height, (char *)&hash, true);
+        rx_seedhash(seed_height, (char *)&hash, threads);
       }
     }
   }
@@ -489,7 +489,7 @@ namespace cryptonote
     for(; bl.nonce != std::numeric_limits<uint32_t>::max(); bl.nonce++)
     {
       crypto::hash h;
-      setup_seedhash(mh, bl, height);
+      setup_seedhash(mh, 1, bl, height);
       get_block_longhash(bl, h, height);
 
       if(check_hash(h, diffic))
@@ -589,7 +589,7 @@ namespace cryptonote
 
       b.nonce = nonce;
       crypto::hash h;
-      setup_seedhash(m_phandler, b, height);
+      setup_seedhash(m_phandler, m_threads_total, b, height);
       get_block_longhash(b, h, height);
 
       if(check_hash(h, local_diff))

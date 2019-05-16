@@ -49,12 +49,20 @@ int my_mutex_lock(volatile MUTEX_TYPE *mx)
   }
   return WaitForSingleObject(*mx, INFINITE) == WAIT_FAILED;
 }
+#define THREAD_TYPE	HANDLE
+#define THREAD_RTYPE	void
+#define THREAD_CREATE(thr, func, arg)	thr = _beginthread(func, 0, arg)
+#define THREAD_JOIN(thr)			WaitForSingleObject(thr, INFINITE)
 #else
+#include <pthread.h>
 #define MUTEX_TYPE pthread_mutex_t
 #define MUTEX_INIT	PTHREAD_MUTEX_INITIALIZER
 #define MUTEX_LOCK(x)	pthread_mutex_lock(&x)
 #define MUTEX_UNLOCK(x)	pthread_mutex_unlock(&x)
-#include <pthread.h>
+#define THREAD_TYPE pthread_t
+#define THREAD_RTYPE	void *
+#define THREAD_CREATE(thr, func, arg)	pthread_create(&thr, NULL, func, arg)
+#define THREAD_JOIN(thr)			pthread_join(thr, NULL)
 #endif
 
 #include "int-util.h"
@@ -1849,10 +1857,24 @@ bool rx_needhash(const uint64_t height, uint64_t *seedheight) {
   return (rx_sp->rs_height != s_height);
 }
 
-void rx_seedhash(const uint64_t height, const char *hash, const bool mining) {
+typedef struct seedinfo {
+  unsigned long si_start;
+  unsigned long si_count;
+} seedinfo;
+
+static THREAD_RTYPE rx_seedthread(void *arg) {
+  seedinfo *si = arg;
+  rx_state *rx_sp = &rx_s[rx_s_toggle];
+  randomx_init_dataset(rx_dataset, rx_sp->rs_cache, si->si_start, si->si_count);
+  return NULL;
+}
+
+void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
   randomx_flags flags = RANDOMX_FLAG_DEFAULT;
   rx_state *rx_sp = &rx_s[rx_s_toggle];
   MUTEX_LOCK(rx_mutex);
+  if (rx_sp->rs_height == height)
+    goto leave;
   if (use_v4_jit())
     flags |= RANDOMX_FLAG_JIT;
   if (rx_sp->rs_cache == NULL) {
@@ -1863,14 +1885,45 @@ void rx_seedhash(const uint64_t height, const char *hash, const bool mining) {
   if (rx_sp->rs_cache != NULL) {
     randomx_init_cache(rx_sp->rs_cache, hash, 32);
     rx_sp->rs_height = height;
-    if (mining) {
+    if (miners) {
       if (rx_dataset == NULL) {
         rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_LARGE_PAGES);
         if (rx_dataset == NULL)
           rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_DEFAULT);
       }
       if (rx_dataset != NULL) {
-        randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, randomx_dataset_item_count());
+        if (miners > 1) {
+          unsigned long delta = randomx_dataset_item_count() / miners;
+          unsigned long start;
+          int i;
+          seedinfo *si;
+          THREAD_TYPE *st;
+          si = malloc(miners * sizeof(seedinfo));
+          if (si == NULL)
+            goto leave;
+          st = malloc(miners * sizeof(THREAD_TYPE));
+          if (st == NULL) {
+            free(si);
+            goto leave;
+          }
+          for (i=0; i<miners; i++) {
+              si[i].si_start = start;
+            si[i].si_count = delta;
+            start += delta;
+          }
+          si[i-1].si_count = randomx_dataset_item_count() - si[i-1].si_start;
+          for (i=1; i<miners; i++) {
+            THREAD_CREATE(st[i], rx_seedthread, &si[i]);
+          }
+          randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, si[0].si_count);
+          for (i=1; i<miners; i++) {
+            THREAD_JOIN(st[i]);
+          }
+          free(st);
+          free(si);
+        } else {
+          randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, randomx_dataset_item_count());
+        }
         flags |= RANDOMX_FLAG_FULL_MEM;
       }
     }
@@ -1881,13 +1934,14 @@ void rx_seedhash(const uint64_t height, const char *hash, const bool mining) {
       if(rx_vm == NULL) //large pages failed
         rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
       if(rx_vm == NULL) {//fallback if everything fails
-        flags = RANDOMX_FLAG_DEFAULT | (mining ? RANDOMX_FLAG_FULL_MEM : 0);
+        flags = RANDOMX_FLAG_DEFAULT | (miners ? RANDOMX_FLAG_FULL_MEM : 0);
         rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
       }
     } else {
       randomx_vm_set_cache(rx_vm, rx_sp->rs_cache);
     }
   }
+leave:
   MUTEX_UNLOCK(rx_mutex);
 }
 
