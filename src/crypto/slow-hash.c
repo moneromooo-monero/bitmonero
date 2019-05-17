@@ -1873,7 +1873,7 @@ void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
   randomx_flags flags = RANDOMX_FLAG_DEFAULT;
   rx_state *rx_sp = &rx_s[rx_s_toggle];
   MUTEX_LOCK(rx_mutex);
-  if (rx_sp->rs_height == height)
+  if (rx_sp->rs_height == height && rx_sp->rs_cache != NULL)
     goto leave;
   if (use_v4_jit())
     flags |= RANDOMX_FLAG_JIT;
