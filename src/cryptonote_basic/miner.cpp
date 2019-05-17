@@ -85,7 +85,7 @@ extern "C" void slow_hash_allocate_state();
 extern "C" void slow_hash_free_state();
 extern "C" bool rx_needhash(const uint64_t height, uint64_t *seedheight);
 extern "C" void rx_seedhash(const uint64_t seedheight, const char *hash, const int miners);
-extern "C" void rx_slow_hash(const void *data, size_t length, char *hash);
+extern "C" void rx_slow_hash(const void *data, size_t length, char *hash, const int miners);
 namespace cryptonote
 {
 
@@ -508,7 +508,7 @@ namespace cryptonote
           memset(&hash, 0, sizeof(hash));
         rx_seedhash(seed_height, hash.data, miners);
       }
-	  rx_slow_hash(bd.data(), bd.size(), res.data);
+      rx_slow_hash(bd.data(), bd.size(), res.data, miners);
     } else {
       crypto::cn_slow_hash(bd.data(), bd.size(), res, pow_variant, height);
     }

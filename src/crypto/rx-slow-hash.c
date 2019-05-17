@@ -173,85 +173,65 @@ static CTHR_THREAD_RTYPE rx_seedthread(void *arg) {
   return NULL;
 }
 
+static void rx_initdata(const rx_state *rx_sp, const int miners) {
+  if (miners > 1) {
+    unsigned long delta = randomx_dataset_item_count() / miners;
+    unsigned long start = 0;
+    int i;
+    seedinfo *si;
+    CTHR_THREAD_TYPE *st;
+    si = malloc(miners * sizeof(seedinfo));
+    if (si == NULL)
+      local_abort("Couldn't allocate RandomX mining threadinfo");
+    st = malloc(miners * sizeof(CTHR_THREAD_TYPE));
+    if (st == NULL) {
+      free(si);
+      local_abort("Couldn't allocate RandomX mining threadlist");
+    }
+    for (i=0; i<miners-1; i++) {
+      si[i].si_start = start;
+      si[i].si_count = delta;
+      start += delta;
+    }
+    si[i].si_start = start;
+    si[i].si_count = randomx_dataset_item_count() - start;
+    for (i=1; i<miners; i++) {
+      CTHR_THREAD_CREATE(st[i], rx_seedthread, &si[i]);
+    }
+    randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, si[0].si_count);
+    for (i=1; i<miners; i++) {
+      CTHR_THREAD_JOIN(st[i]);
+    }
+    free(st);
+    free(si);
+  } else {
+    randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, randomx_dataset_item_count());
+  }
+}
+
 void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
   randomx_flags flags = RANDOMX_FLAG_DEFAULT;
   rx_state *rx_sp = &rx_s[rx_s_toggle];
   CTHR_MUTEX_LOCK(rx_mutex);
-  if (rx_sp->rs_height == height && rx_sp->rs_cache != NULL)
-    goto leave;
-  if (use_rx_jit())
-    flags |= RANDOMX_FLAG_JIT;
-  if (rx_sp->rs_cache == NULL) {
-    rx_sp->rs_cache = randomx_alloc_cache(flags | RANDOMX_FLAG_LARGE_PAGES);
-    if (rx_sp->rs_cache == NULL)
-      rx_sp->rs_cache = randomx_alloc_cache(flags);
-  }
-  if (rx_sp->rs_cache != NULL) {
+  if (rx_sp->rs_height != height || rx_sp->rs_cache == NULL) {
+    if (use_rx_jit())
+      flags |= RANDOMX_FLAG_JIT;
+    if (rx_sp->rs_cache == NULL) {
+      rx_sp->rs_cache = randomx_alloc_cache(flags | RANDOMX_FLAG_LARGE_PAGES);
+      if (rx_sp->rs_cache == NULL)
+        rx_sp->rs_cache = randomx_alloc_cache(flags);
+      if (rx_sp->rs_cache == NULL)
+        local_abort("Couldn't allocate RandomX cache");
+    }
     randomx_init_cache(rx_sp->rs_cache, hash, 32);
     rx_sp->rs_height = height;
-    if (miners) {
-      if (rx_dataset == NULL) {
-        rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_LARGE_PAGES);
-        if (rx_dataset == NULL)
-          rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_DEFAULT);
-      }
-      if (rx_dataset != NULL) {
-        if (miners > 1) {
-          unsigned long delta = randomx_dataset_item_count() / miners;
-          unsigned long start = 0;
-          int i;
-          seedinfo *si;
-          CTHR_THREAD_TYPE *st;
-          si = malloc(miners * sizeof(seedinfo));
-          if (si == NULL)
-            goto leave;
-		  /* leave rx_dataset allocated on failure, a subsequent call with fewer mining threads might succeed */
-          st = malloc(miners * sizeof(CTHR_THREAD_TYPE));
-          if (st == NULL) {
-            free(si);
-            goto leave;
-          }
-          for (i=0; i<miners-1; i++) {
-            si[i].si_start = start;
-            si[i].si_count = delta;
-            start += delta;
-          }
-		  si[i].si_start = start;
-          si[i].si_count = randomx_dataset_item_count() - start;
-          for (i=1; i<miners; i++) {
-            CTHR_THREAD_CREATE(st[i], rx_seedthread, &si[i]);
-          }
-          randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, si[0].si_count);
-          for (i=1; i<miners; i++) {
-            CTHR_THREAD_JOIN(st[i]);
-          }
-          free(st);
-          free(si);
-        } else {
-          randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, randomx_dataset_item_count());
-        }
-        flags |= RANDOMX_FLAG_FULL_MEM;
-      }
-    }
-    if (rx_vm == NULL) {
-      if(!force_software_aes() && check_aes_hw())
-        flags |= RANDOMX_FLAG_HARD_AES;
-      rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, rx_dataset);
-      if(rx_vm == NULL) //large pages failed
-        rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
-      if(rx_vm == NULL) {//fallback if everything fails
-        flags = RANDOMX_FLAG_DEFAULT | (miners ? RANDOMX_FLAG_FULL_MEM : 0);
-        rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
-      }
-    } else {
-      randomx_vm_set_cache(rx_vm, rx_sp->rs_cache);
-    }
+    if (miners && rx_dataset != NULL)
+      rx_initdata(rx_sp, miners);
   }
-leave:
   CTHR_MUTEX_UNLOCK(rx_mutex);
 }
 
-void rx_slow_hash(const void *data, size_t length, char *hash) {
+void rx_slow_hash(const void *data, size_t length, char *hash, int miners) {
   if (rx_vm == NULL) {
     rx_state *rx_sp = &rx_s[rx_s_toggle];
     randomx_flags flags = RANDOMX_FLAG_DEFAULT;
@@ -259,16 +239,31 @@ void rx_slow_hash(const void *data, size_t length, char *hash) {
       flags |= RANDOMX_FLAG_JIT;
     if(!force_software_aes() && check_aes_hw())
       flags |= RANDOMX_FLAG_HARD_AES;
-    rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, NULL);
-    if(rx_vm == NULL) //large pages failed
-      rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, NULL);
-    if(rx_vm == NULL) {//fallback if everything fails
-      flags = RANDOMX_FLAG_DEFAULT;
-      rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, NULL);
+    if (miners) {
+      if (rx_dataset == NULL) {
+        CTHR_MUTEX_LOCK(rx_mutex);
+        if (rx_dataset == NULL) {
+          rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_LARGE_PAGES);
+          if (rx_dataset == NULL)
+            rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_DEFAULT);
+		  if (rx_dataset == NULL)
+            local_abort("Couldn't allocate RandomX mining dataset");
+          rx_initdata(rx_sp, miners);
+        }
+        CTHR_MUTEX_UNLOCK(rx_mutex);
+      }
+      flags |= RANDOMX_FLAG_FULL_MEM;
     }
+    rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, rx_dataset);
+    if(rx_vm == NULL) //large pages failed
+      rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
+    if(rx_vm == NULL) {//fallback if everything fails
+      flags = RANDOMX_FLAG_DEFAULT | (miners ? RANDOMX_FLAG_FULL_MEM : 0);
+      rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
+    }
+    if (rx_vm == NULL)
+      local_abort("Couldn't allocate RandomX VM");
   }
-  if (rx_vm == NULL)
-    local_abort("Couldn't allocate RandomX VM");
   randomx_calculate_hash(rx_vm, data, length, hash);
 }
 
