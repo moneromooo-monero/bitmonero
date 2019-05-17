@@ -470,8 +470,7 @@ namespace cryptonote
   //-----------------------------------------------------------------------------------------------------
   void miner::setup_seedhash(i_miner_handler *mh, const int threads, const block& b, const uint64_t height)
   {
-    int cn_variant = b.major_version >= 7 ? b.major_version - 6 : 0;
-    if (cn_variant >= 6) {
+    if (b.major_version >= 12) {
       uint64_t seed_height;
       if (rx_needhash(height, &seed_height)) {
         crypto::hash hash;
@@ -479,7 +478,7 @@ namespace cryptonote
           hash = mh->get_block_id(seed_height);
         else
           memset(&hash, 0, sizeof(hash));
-        rx_seedhash(seed_height, (char *)&hash, threads);
+        rx_seedhash(seed_height, hash.data, threads);
       }
     }
   }

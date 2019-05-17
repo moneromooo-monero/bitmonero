@@ -845,12 +845,11 @@ crypto::hash Blockchain::get_block_id_by_height(uint64_t height) const
 //------------------------------------------------------------------
 void Blockchain::setup_seedhash(const block& b, const uint64_t height) const
 {
-  int cn_variant = b.major_version >= 7 ? b.major_version - 6 : 0;
-  if (cn_variant >= 6) {
+  if (b.major_version >= 12) {
     uint64_t seed_height;
     if (rx_needhash(height, &seed_height)) {
       crypto::hash hash = get_block_id_by_height(seed_height);
-      rx_seedhash(seed_height, (char *)&hash, 0);
+      rx_seedhash(seed_height, hash.data, 0);
     }
   }
 }

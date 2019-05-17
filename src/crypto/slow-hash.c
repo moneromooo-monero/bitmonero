@@ -1894,7 +1894,7 @@ void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
       if (rx_dataset != NULL) {
         if (miners > 1) {
           unsigned long delta = randomx_dataset_item_count() / miners;
-          unsigned long start;
+          unsigned long start = 0;
           int i;
           seedinfo *si;
           THREAD_TYPE *st;
@@ -1907,7 +1907,7 @@ void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
             goto leave;
           }
           for (i=0; i<miners; i++) {
-              si[i].si_start = start;
+            si[i].si_start = start;
             si[i].si_count = delta;
             start += delta;
           }
@@ -1961,9 +1961,7 @@ void rx_slow_hash(const void *data, size_t length, char *hash) {
       rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, NULL);
     }
   }
-  if (rx_vm != NULL) {
-    randomx_calculate_hash(rx_vm, data, length, hash);
-  } else {
-    memset(hash, 0, 32);
-  }
+  if (rx_vm == NULL)
+    local_abort("Couldn't allocate RandomX VM");
+  randomx_calculate_hash(rx_vm, data, length, hash);
 }
