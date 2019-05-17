@@ -36,6 +36,7 @@
 #include "enums.h"
 #include "serialization/keyvalue_serialization.h"
 #include "misc_log_ex.h"
+#include "int-util.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "net"
@@ -89,7 +90,20 @@ namespace net_utils
 		static constexpr bool is_blockable() noexcept { return true; }
 
 		BEGIN_KV_SERIALIZE_MAP()
-			KV_SERIALIZE(m_ip)
+			if (is_store)
+			{
+				KV_SERIALIZE_VAL_POD_AS_BLOB_N(m_ip, "ip")
+				uint32_t ip = SWAP32LE(this_ref.m_ip);
+				epee::serialization::selector<is_store>::serialize(ip, stg, hparent_section, "m_ip");
+			}
+			else
+			{
+				if (!epee::serialization::selector<is_store>::serialize_t_val_as_blob(this_ref.m_ip, stg, hparent_section, "ip"))
+				{
+					KV_SERIALIZE(m_ip)
+					const_cast<ipv4_network_address&>(this_ref).m_ip = SWAP32LE(this_ref.m_ip);
+				}
+			}
 			KV_SERIALIZE(m_port)
 		END_KV_SERIALIZE_MAP()
 	};
@@ -123,7 +137,8 @@ namespace net_utils
 		static constexpr bool is_blockable() noexcept { return true; }
 
 		BEGIN_KV_SERIALIZE_MAP()
-			KV_SERIALIZE(m_ip)
+			uint32_t ip = SWAP32LE(this_ref.m_ip);
+			epee::serialization::selector<is_store>::serialize(ip, stg, hparent_section, "ip");
 			KV_SERIALIZE(m_mask)
 		END_KV_SERIALIZE_MAP()
 	};
