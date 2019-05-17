@@ -65,6 +65,16 @@ namespace cryptonote
   class tx_memory_pool;
   struct test_options;
 
+#ifndef I_BLOCKID_DEFINED
+  struct i_blockid
+  {
+    virtual crypto::hash get_block_id(uint64_t height) const = 0;
+  protected:
+    ~i_blockid(){};
+  };
+#define I_BLOCKID_DEFINED	1
+#endif
+
   /** Declares ways in which the BlockchainDB backend should be told to sync
    *
    */
@@ -88,7 +98,7 @@ namespace cryptonote
   /************************************************************************/
   /*                                                                      */
   /************************************************************************/
-  class Blockchain
+  class Blockchain: public i_blockid
   {
   public:
     /**
@@ -216,13 +226,7 @@ namespace cryptonote
      */
     crypto::hash get_block_id_by_height(uint64_t height) const;
 
-    /**
-     * @brief setup seed hash for epoch of given height
-     *
-     * @param block the block to be hashed
-     * @param height the height of the block
-     */
-    void setup_seedhash(const block& b, const uint64_t height) const;
+    crypto::hash get_block_id(uint64_t height) const  {return get_block_id_by_height(height);}
 
     /**
      * @brief gets the block with a given hash

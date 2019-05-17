@@ -843,17 +843,6 @@ crypto::hash Blockchain::get_block_id_by_height(uint64_t height) const
 }
 
 //------------------------------------------------------------------
-void Blockchain::setup_seedhash(const block& b, const uint64_t height) const
-{
-  if (b.major_version >= 12) {
-    uint64_t seed_height;
-    if (rx_needhash(height, &seed_height)) {
-      crypto::hash hash = get_block_id_by_height(seed_height);
-      rx_seedhash(seed_height, hash.data, 0);
-    }
-  }
-}
-//------------------------------------------------------------------
 bool Blockchain::get_block_by_hash(const crypto::hash &h, block &blk, bool *orphan) const
 {
   LOG_PRINT_L3("Blockchain::" << __func__);
@@ -1753,8 +1742,7 @@ bool Blockchain::handle_alternative_block(const block& b, const crypto::hash& id
     difficulty_type current_diff = get_next_difficulty_for_alternative_chain(alt_chain, bei);
     CHECK_AND_ASSERT_MES(current_diff, false, "!!!!!!! DIFFICULTY OVERHEAD !!!!!!!");
     crypto::hash proof_of_work = null_hash;
-    setup_seedhash(bei.bl, bei.height);
-    get_block_longhash(bei.bl, proof_of_work, bei.height);
+    miner::get_block_longhash(this, bei.bl, proof_of_work, bei.height, 0);
     if(!check_hash(proof_of_work, current_diff))
     {
       MERROR_VER("Block with id: " << id << std::endl << " for alternative chain, does not have enough proof of work: " << proof_of_work << std::endl << " expected difficulty: " << current_diff);
@@ -3656,8 +3644,7 @@ leave:
     }
     else
     {
-      setup_seedhash(bl, blockchain_height);
-      proof_of_work = get_block_longhash(bl, blockchain_height);
+      proof_of_work = miner::get_block_longhash(this, bl, blockchain_height, 0);
     }
 
     // validate proof_of_work versus difficulty target
@@ -4159,8 +4146,7 @@ void Blockchain::block_longhash_worker(uint64_t height, const epee::span<const b
     if (m_cancel)
        break;
     crypto::hash id = get_block_hash(block);
-    setup_seedhash(block, height);
-    crypto::hash pow = get_block_longhash(block, height++);
+    crypto::hash pow = miner::get_block_longhash(this, block, height++, 0);
     map.emplace(id, pow);
   }
 

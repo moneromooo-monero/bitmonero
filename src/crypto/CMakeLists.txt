@@ -46,6 +46,7 @@ set(crypto_sources
   random.c
   skein.c
   slow-hash.c
+  rx-slow-hash.c
   CryptonightR_JIT.c
   tree-hash.c)
 

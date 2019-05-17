@@ -85,6 +85,7 @@ extern "C" void slow_hash_allocate_state();
 extern "C" void slow_hash_free_state();
 extern "C" bool rx_needhash(const uint64_t height, uint64_t *seedheight);
 extern "C" void rx_seedhash(const uint64_t seedheight, const char *hash, const int miners);
+extern "C" void rx_slow_hash(const void *data, size_t length, char *hash);
 namespace cryptonote
 {
 
@@ -101,12 +102,13 @@ namespace cryptonote
   }
 
 
-  miner::miner(i_miner_handler* phandler):m_stop(1),
+  miner::miner(i_miner_handler* phandler, i_blockid* pblockid):m_stop(1),
     m_template(boost::value_initialized<block>()),
     m_template_no(0),
     m_diffic(0),
     m_thread_index(0),
     m_phandler(phandler),
+    m_pblockid(pblockid),
     m_height(0),
     m_threads_active(0),
     m_pausers_count(0),
@@ -468,28 +470,12 @@ namespace cryptonote
     return true;
   }
   //-----------------------------------------------------------------------------------------------------
-  void miner::setup_seedhash(i_miner_handler *mh, const int threads, const block& b, const uint64_t height)
-  {
-    if (b.major_version >= 12) {
-      uint64_t seed_height;
-      if (rx_needhash(height, &seed_height)) {
-        crypto::hash hash;
-        if (mh != NULL)
-          hash = mh->get_block_id(seed_height);
-        else
-          memset(&hash, 0, sizeof(hash));
-        rx_seedhash(seed_height, hash.data, threads);
-      }
-    }
-  }
-  //-----------------------------------------------------------------------------------------------------
-  bool miner::find_nonce_for_given_block(i_miner_handler *mh, block& bl, const difficulty_type& diffic, uint64_t height)
+  bool miner::find_nonce_for_given_block(const i_blockid *mh, block& bl, const difficulty_type& diffic, uint64_t height)
   {
     for(; bl.nonce != std::numeric_limits<uint32_t>::max(); bl.nonce++)
     {
       crypto::hash h;
-      setup_seedhash(mh, 1, bl, height);
-      get_block_longhash(bl, h, height);
+      get_block_longhash(mh, bl, h, height, 1);
 
       if(check_hash(h, diffic))
       {
@@ -499,6 +485,41 @@ namespace cryptonote
     }
     bl.invalidate_hashes();
     return false;
+  }
+  //---------------------------------------------------------------
+  bool miner::get_block_longhash(const i_blockid *mh, const block& b, crypto::hash& res, const uint64_t height, const int miners)
+  {
+    // block 202612 bug workaround
+    if (height == 202612)
+    {
+      static const std::string longhash_202612 = "84f64766475d51837ac9efbef1926486e58563c95a19fef4aec3254f03000000";
+      string_tools::hex_to_pod(longhash_202612, res);
+      return true;
+    }
+    blobdata bd = get_block_hashing_blob(b);
+    const int pow_variant = b.major_version >= 7 ? b.major_version - 6 : 0;
+    if (pow_variant >= 6) {
+      uint64_t seed_height;
+      if (rx_needhash(height, &seed_height)) {
+        crypto::hash hash;
+        if (mh != NULL)
+          hash = mh->get_block_id(seed_height);
+        else
+          memset(&hash, 0, sizeof(hash));
+        rx_seedhash(seed_height, hash.data, miners);
+      }
+	  rx_slow_hash(bd.data(), bd.size(), res.data);
+    } else {
+      crypto::cn_slow_hash(bd.data(), bd.size(), res, pow_variant, height);
+    }
+    return true;
+  }
+  //---------------------------------------------------------------
+  crypto::hash miner::get_block_longhash(const i_blockid *mh, const block& b, const uint64_t height, const int miners)
+  {
+    crypto::hash p = crypto::null_hash;
+    get_block_longhash(mh, b, p, height, miners);
+    return p;
   }
   //-----------------------------------------------------------------------------------------------------
   void miner::on_synchronized()
@@ -588,8 +609,7 @@ namespace cryptonote
 
       b.nonce = nonce;
       crypto::hash h;
-      setup_seedhash(m_phandler, m_threads_total, b, height);
-      get_block_longhash(b, h, height);
+      get_block_longhash(m_pblockid, b, h, height, m_threads_total);
 
       if(check_hash(h, local_diff))
       {

@@ -47,11 +47,20 @@ namespace cryptonote
   struct i_miner_handler
   {
     virtual bool handle_block_found(block& b, block_verification_context &bvc) = 0;
-    virtual crypto::hash get_block_id(uint64_t height) = 0;
     virtual bool get_block_template(block& b, const account_public_address& adr, difficulty_type& diffic, uint64_t& height, uint64_t& expected_reward, const blobdata& ex_nonce) = 0;
   protected:
     ~i_miner_handler(){};
   };
+
+#ifndef I_BLOCKID_DEFINED
+  struct i_blockid
+  {
+    virtual crypto::hash get_block_id(uint64_t height) const = 0;
+  protected:
+    ~i_blockid(){};
+  };
+#define I_BLOCKID_DEFINED	1
+#endif
 
   /************************************************************************/
   /*                                                                      */
@@ -59,7 +68,7 @@ namespace cryptonote
   class miner
   {
   public: 
-    miner(i_miner_handler* phandler);
+    miner(i_miner_handler* phandler, i_blockid* pblockid);
     ~miner();
     bool init(const boost::program_options::variables_map& vm, network_type nettype);
     static void init_options(boost::program_options::options_description& desc);
@@ -74,9 +83,10 @@ namespace cryptonote
     const account_public_address& get_mining_address() const;
     bool on_idle();
     void on_synchronized();
-    static void setup_seedhash(i_miner_handler *mh, const int miners, const block& b, const uint64_t height);
     //synchronous analog (for fast calls)
-    static bool find_nonce_for_given_block(i_miner_handler *mh, block& bl, const difficulty_type& diffic, uint64_t height);
+    static bool find_nonce_for_given_block(const i_blockid *mh, block& bl, const difficulty_type& diffic, uint64_t height);
+    static bool get_block_longhash(const i_blockid *mh, const block& b, crypto::hash& res, const uint64_t height, const int miners);
+    static crypto::hash get_block_longhash(const i_blockid *mh, const block& b, const uint64_t height, const int miners);
     void pause();
     void resume();
     void do_print_hashrate(bool do_hr);
@@ -135,6 +145,7 @@ namespace cryptonote
     std::list<boost::thread> m_threads;
     epee::critical_section m_threads_lock;
     i_miner_handler* m_phandler;
+    const i_blockid* m_pblockid;
     account_public_address m_mine_address;
     epee::math_helper::once_a_time_seconds<5> m_update_block_template_interval;
     epee::math_helper::once_a_time_seconds<2> m_update_merge_hr_interval;

@@ -34,36 +34,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#ifdef _WIN32
-#include <windows.h>
-#define MUTEX_TYPE	HANDLE
-#define MUTEX_INIT	NULL
-#define MUTEX_LOCK(x)	my_mutex_lock(&x)
-#define MUTEX_UNLOCK(x)	(ReleaseMutex(x) == 0)
-int my_mutex_lock(volatile MUTEX_TYPE *mx)
-{
-  if (*mx == NULL) {
-    HANDLE p = CreateMutex(NULL, FALSE, NULL);
-    if (InterlockedCompareExchangePointer((PVOID*)mx, (PVOID)p, NULL) != NULL)
-      CloseHandle(p);
-  }
-  return WaitForSingleObject(*mx, INFINITE) == WAIT_FAILED;
-}
-#define THREAD_TYPE	HANDLE
-#define THREAD_RTYPE	void
-#define THREAD_CREATE(thr, func, arg)	thr = _beginthread(func, 0, arg)
-#define THREAD_JOIN(thr)			WaitForSingleObject(thr, INFINITE)
-#else
-#include <pthread.h>
-#define MUTEX_TYPE pthread_mutex_t
-#define MUTEX_INIT	PTHREAD_MUTEX_INITIALIZER
-#define MUTEX_LOCK(x)	pthread_mutex_lock(&x)
-#define MUTEX_UNLOCK(x)	pthread_mutex_unlock(&x)
-#define THREAD_TYPE pthread_t
-#define THREAD_RTYPE	void *
-#define THREAD_CREATE(thr, func, arg)	pthread_create(&thr, NULL, func, arg)
-#define THREAD_JOIN(thr)			pthread_join(thr, NULL)
-#endif
 
 #include "int-util.h"
 #include "hash-ops.h"
@@ -74,28 +44,6 @@ int my_mutex_lock(volatile MUTEX_TYPE *mx)
 
 #include <errno.h>
 #include <string.h>
-
-#include "randomx.h"
-
-#if defined(_MSC_VER)
-#define THREADV __declspec(thread)
-#else
-#define THREADV __thread
-#endif
-
-MUTEX_TYPE rx_mutex = MUTEX_INIT;
-
-typedef struct rx_state {
-  uint64_t  rs_height;
-  randomx_cache *rs_cache;
-} rx_state;
-
-rx_state rx_s[2];
-
-randomx_dataset *rx_dataset;
-THREADV int rx_s_toggle;
-THREADV randomx_vm *rx_vm = NULL;
-void rx_slow_hash(const void *data, size_t length, char *hash);
 
 #define MEMORY         (1 << 21) // 2MB scratchpad
 #define ITER           (1 << 20)
@@ -490,6 +438,12 @@ static inline int use_v4_jit(void)
   _b1 = _b; \
   _b = _c; \
 
+#if defined(_MSC_VER)
+#define THREADV __declspec(thread)
+#else
+#define THREADV __thread
+#endif
+
 #pragma pack(push, 1)
 union cn_slow_hash_state
 {
@@ -789,7 +743,7 @@ BOOL SetLockPagesPrivilege(HANDLE hProcess, BOOL bEnable)
  * the allocated buffer.
  */
 
-void slow_hash_allocate_state(void)
+void cn_slow_hash_allocate_state(void)
 {
     if(hp_state != NULL)
         return;
@@ -851,12 +805,8 @@ void slow_hash_allocate_state(void)
  *@brief frees the state allocated by slow_hash_allocate_state
  */
 
-void slow_hash_free_state(void)
+void cn_slow_hash_free_state(void)
 {
-    if (rx_vm != NULL) {
-        randomx_destroy_vm(rx_vm);
-        rx_vm = NULL;
-    }
     if(hp_state == NULL)
         return;
 
@@ -921,10 +871,6 @@ void slow_hash_free_state(void)
  */
 void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed, uint64_t height)
 {
-    if (variant >= 6) {
-        rx_slow_hash(data, length, hash);
-        return;
-    }
     RDATA_ALIGN16 uint8_t expandedKey[240];  /* These buffers are aligned to use later with SSE functions */
 
     uint8_t text[INIT_SIZE_BYTE];
@@ -947,7 +893,7 @@ void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int 
 
     // this isn't supposed to happen, but guard against it for now.
     if(hp_state == NULL)
-        slow_hash_allocate_state();
+        cn_slow_hash_allocate_state();
 
     // locals to avoid constant TLS dereferencing
     uint8_t *local_hp_state = hp_state;
@@ -1065,18 +1011,14 @@ void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int 
 }
 
 #elif !defined NO_AES && (defined(__arm__) || defined(__aarch64__))
-void slow_hash_allocate_state(void)
+void cn_slow_hash_allocate_state(void)
 {
   // Do nothing, this is just to maintain compatibility with the upgraded slow-hash.c
   return;
 }
 
-void slow_hash_free_state(void)
+void cn_slow_hash_free_state(void)
 {
-  if (rx_vm != NULL) {
-    randomx_destroy_vm(rx_vm);
-    rx_vm = NULL;
-  }
   // As above
   return;
 }
@@ -1306,10 +1248,6 @@ STATIC INLINE void aligned_free(void *ptr)
 
 void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed, uint64_t height)
 {
-    if (variant >= 6) {
-        rx_slow_hash(data, length, hash);
-        return;
-    }
     RDATA_ALIGN16 uint8_t expandedKey[240];
 
 #ifndef FORCE_USE_HEAP
@@ -1526,10 +1464,6 @@ STATIC INLINE void xor_blocks(uint8_t* a, const uint8_t* b)
 
 void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed, uint64_t height)
 {
-    if (variant >= 6) {
-        rx_slow_hash(data, length, hash);
-        return;
-    }
     uint8_t text[INIT_SIZE_BYTE];
     uint8_t a[AES_BLOCK_SIZE];
     uint8_t a1[AES_BLOCK_SIZE];
@@ -1650,18 +1584,14 @@ void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int 
 
 #define hp_jitfunc ((v4_random_math_JIT_func)NULL)
 
-void slow_hash_allocate_state(void)
+void cn_slow_hash_allocate_state(void)
 {
   // Do nothing, this is just to maintain compatibility with the upgraded slow-hash.c
   return;
 }
 
-void slow_hash_free_state(void)
+void cn_slow_hash_free_state(void)
 {
-  if (rx_vm != NULL) {
-    randomx_destroy_vm(rx_vm);
-    rx_vm = NULL;
-  }
   // As above
   return;
 }
@@ -1738,10 +1668,6 @@ union cn_slow_hash_state {
 #pragma pack(pop)
 
 void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int prehashed, uint64_t height) {
-  if (variant >= 6) {
-    rx_slow_hash(data, length, hash);
-    return;
-  }
 #ifndef FORCE_USE_HEAP
   uint8_t long_state[MEMORY];
 #else
@@ -1842,126 +1768,17 @@ void cn_slow_hash(const void *data, size_t length, char *hash, int variant, int 
 
 #endif
 
-#define SEEDHASH_EPOCH_BLOCKS	2048
-#define SEEDHASH_EPOCH_LAG	64
+extern void rx_slow_hash_allocate_state(void);
+extern void rx_slow_hash_free_state(void);
 
-bool rx_needhash(const uint64_t height, uint64_t *seedheight) {
-  uint64_t s_height =  (height <= SEEDHASH_EPOCH_BLOCKS+SEEDHASH_EPOCH_LAG) ? 0 :
-                       (height - SEEDHASH_EPOCH_LAG - 1) & ~(SEEDHASH_EPOCH_BLOCKS-1);
-  rx_state *rx_sp;
-  rx_s_toggle = (s_height & SEEDHASH_EPOCH_BLOCKS) != 0;
-  *seedheight = s_height;
-  rx_sp = &rx_s[rx_s_toggle];
-  if (!s_height && !rx_sp->rs_cache)
-    return true;
-  return (rx_sp->rs_height != s_height);
+void slow_hash_allocate_state(void)
+{
+  cn_slow_hash_allocate_state();
+  rx_slow_hash_allocate_state();
 }
 
-typedef struct seedinfo {
-  unsigned long si_start;
-  unsigned long si_count;
-} seedinfo;
-
-static THREAD_RTYPE rx_seedthread(void *arg) {
-  seedinfo *si = arg;
-  rx_state *rx_sp = &rx_s[rx_s_toggle];
-  randomx_init_dataset(rx_dataset, rx_sp->rs_cache, si->si_start, si->si_count);
-  return NULL;
-}
-
-void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
-  randomx_flags flags = RANDOMX_FLAG_DEFAULT;
-  rx_state *rx_sp = &rx_s[rx_s_toggle];
-  MUTEX_LOCK(rx_mutex);
-  if (rx_sp->rs_height == height && rx_sp->rs_cache != NULL)
-    goto leave;
-  if (use_v4_jit())
-    flags |= RANDOMX_FLAG_JIT;
-  if (rx_sp->rs_cache == NULL) {
-    rx_sp->rs_cache = randomx_alloc_cache(flags | RANDOMX_FLAG_LARGE_PAGES);
-    if (rx_sp->rs_cache == NULL)
-      rx_sp->rs_cache = randomx_alloc_cache(flags);
-  }
-  if (rx_sp->rs_cache != NULL) {
-    randomx_init_cache(rx_sp->rs_cache, hash, 32);
-    rx_sp->rs_height = height;
-    if (miners) {
-      if (rx_dataset == NULL) {
-        rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_LARGE_PAGES);
-        if (rx_dataset == NULL)
-          rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_DEFAULT);
-      }
-      if (rx_dataset != NULL) {
-        if (miners > 1) {
-          unsigned long delta = randomx_dataset_item_count() / miners;
-          unsigned long start = 0;
-          int i;
-          seedinfo *si;
-          THREAD_TYPE *st;
-          si = malloc(miners * sizeof(seedinfo));
-          if (si == NULL)
-            goto leave;
-          st = malloc(miners * sizeof(THREAD_TYPE));
-          if (st == NULL) {
-            free(si);
-            goto leave;
-          }
-          for (i=0; i<miners; i++) {
-            si[i].si_start = start;
-            si[i].si_count = delta;
-            start += delta;
-          }
-          si[i-1].si_count = randomx_dataset_item_count() - si[i-1].si_start;
-          for (i=1; i<miners; i++) {
-            THREAD_CREATE(st[i], rx_seedthread, &si[i]);
-          }
-          randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, si[0].si_count);
-          for (i=1; i<miners; i++) {
-            THREAD_JOIN(st[i]);
-          }
-          free(st);
-          free(si);
-        } else {
-          randomx_init_dataset(rx_dataset, rx_sp->rs_cache, 0, randomx_dataset_item_count());
-        }
-        flags |= RANDOMX_FLAG_FULL_MEM;
-      }
-    }
-    if (rx_vm == NULL) {
-      if(!force_software_aes() && check_aes_hw())
-        flags |= RANDOMX_FLAG_HARD_AES;
-      rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, rx_dataset);
-      if(rx_vm == NULL) //large pages failed
-        rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
-      if(rx_vm == NULL) {//fallback if everything fails
-        flags = RANDOMX_FLAG_DEFAULT | (miners ? RANDOMX_FLAG_FULL_MEM : 0);
-        rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
-      }
-    } else {
-      randomx_vm_set_cache(rx_vm, rx_sp->rs_cache);
-    }
-  }
-leave:
-  MUTEX_UNLOCK(rx_mutex);
-}
-
-void rx_slow_hash(const void *data, size_t length, char *hash) {
-  if (rx_vm == NULL) {
-    rx_state *rx_sp = &rx_s[rx_s_toggle];
-    randomx_flags flags = RANDOMX_FLAG_DEFAULT;
-    if (use_v4_jit())
-      flags |= RANDOMX_FLAG_JIT;
-    if(!force_software_aes() && check_aes_hw())
-      flags |= RANDOMX_FLAG_HARD_AES;
-    rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, NULL);
-    if(rx_vm == NULL) //large pages failed
-      rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, NULL);
-    if(rx_vm == NULL) {//fallback if everything fails
-      flags = RANDOMX_FLAG_DEFAULT;
-      rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, NULL);
-    }
-  }
-  if (rx_vm == NULL)
-    local_abort("Couldn't allocate RandomX VM");
-  randomx_calculate_hash(rx_vm, data, length, hash);
+void slow_hash_free_state(void)
+{
+  cn_slow_hash_free_state();
+  rx_slow_hash_free_state();
 }
