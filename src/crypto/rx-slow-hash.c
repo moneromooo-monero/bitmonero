@@ -146,8 +146,8 @@ static inline int use_rx_jit(void)
   return 0;
 #endif
 }
-#define SEEDHASH_EPOCH_BLOCKS	2048
-#define SEEDHASH_EPOCH_LAG	64
+#define SEEDHASH_EPOCH_BLOCKS	2048	/* Must be same as BLOCKS_SYNCHRONIZING_MAX_COUNT in cryptonote_config.h */
+#define SEEDHASH_EPOCH_LAG		64
 
 bool rx_needhash(const uint64_t height, uint64_t *seedheight) {
   uint64_t s_height =  (height <= SEEDHASH_EPOCH_BLOCKS+SEEDHASH_EPOCH_LAG) ? 0 :
@@ -246,13 +246,15 @@ void rx_slow_hash(const void *data, size_t length, char *hash, int miners) {
           rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_LARGE_PAGES);
           if (rx_dataset == NULL)
             rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_DEFAULT);
-		  if (rx_dataset == NULL)
-            local_abort("Couldn't allocate RandomX mining dataset");
-          rx_initdata(rx_sp, miners);
+          if (rx_dataset != NULL)
+            rx_initdata(rx_sp, miners);
         }
         CTHR_MUTEX_UNLOCK(rx_mutex);
       }
-      flags |= RANDOMX_FLAG_FULL_MEM;
+      if (rx_dataset != NULL)
+        flags |= RANDOMX_FLAG_FULL_MEM;
+      else
+        miners = 0;
     }
     rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, rx_dataset);
     if(rx_vm == NULL) //large pages failed
@@ -273,6 +275,6 @@ void rx_slow_hash_allocate_state(void) {
 void rx_slow_hash_free_state(void) {
   if (rx_vm != NULL) {
     randomx_destroy_vm(rx_vm);
-	rx_vm = NULL;
+    rx_vm = NULL;
   }
 }
