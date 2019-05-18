@@ -1238,6 +1238,7 @@ namespace cryptonote
     }
     return 0;
   }
+  extern "C" bool rx_needhash(const uint64_t height, uint64_t *seed_height);
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_getblocktemplate(const COMMAND_RPC_GETBLOCKTEMPLATE::request& req, COMMAND_RPC_GETBLOCKTEMPLATE::response& res, epee::json_rpc::error& error_resp, const connection_context *ctx)
   {
@@ -1295,6 +1296,16 @@ namespace cryptonote
       error_resp.message = "Internal error: failed to create block template";
       LOG_ERROR("Failed to create block template");
       return false;
+    }
+    if (b.major_version >= 12)
+    {
+      uint64_t seed_height;
+      crypto::hash seed_hash;
+      rx_needhash(res.height, &seed_height);
+      m_core.get_block_id_by_height(seed_height);
+      res.seed_hash = string_tools::pod_to_hex(seed_hash);
+    } else {
+      res.seed_hash.clear();
     }
     store_difficulty(wdiff, res.difficulty, res.wide_difficulty, res.difficulty_top64);
     blobdata block_blob = t_serializable_object_to_blob(b);

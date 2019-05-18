@@ -474,7 +474,7 @@ namespace cryptonote
     for(; bl.nonce != std::numeric_limits<uint32_t>::max(); bl.nonce++)
     {
       crypto::hash h;
-      get_block_longhash(pbc, bl, h, height, 1);
+      get_block_longhash(pbc, bl, h, height, tools::get_max_concurrency());
 
       if(check_hash(h, diffic))
       {
