@@ -146,8 +146,19 @@ static inline int use_rx_jit(void)
   return 0;
 #endif
 }
+
 #define SEEDHASH_EPOCH_BLOCKS	2048	/* Must be same as BLOCKS_SYNCHRONIZING_MAX_COUNT in cryptonote_config.h */
 #define SEEDHASH_EPOCH_LAG		64
+
+void rx_reorg(const uint64_t split_height) {
+  int i;
+  CTHR_MUTEX_LOCK(rx_mutex);
+  for (i=0; i<2; i++) {
+    if (split_height < rx_s[i].rs_height)
+      rx_s[i].rs_height = 1;	/* set to an invalid seed height */
+  }
+  CTHR_MUTEX_UNLOCK(rx_mutex);
+}
 
 bool rx_needhash(const uint64_t height, uint64_t *seedheight) {
   uint64_t s_height =  (height <= SEEDHASH_EPOCH_BLOCKS+SEEDHASH_EPOCH_LAG) ? 0 :

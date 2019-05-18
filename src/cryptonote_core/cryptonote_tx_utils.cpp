@@ -37,6 +37,7 @@ using namespace epee;
 #include "common/apply_permutation.h"
 #include "cryptonote_tx_utils.h"
 #include "cryptonote_config.h"
+#include "blockchain.h"
 #include "cryptonote_basic/miner.h"
 #include "cryptonote_basic/tx_extra.h"
 #include "crypto/crypto.h"
@@ -663,4 +664,48 @@ namespace cryptonote
     return true;
   }
   //---------------------------------------------------------------
+  extern "C" bool rx_needhash(const uint64_t height, uint64_t *seedheight);
+  extern "C" void rx_seedhash(const uint64_t seedheight, const char *hash, const int miners);
+  extern "C" void rx_slow_hash(const void *data, size_t length, char *hash, const int miners);
+  extern "C" void rx_reorg(const uint64_t split_height);
+
+  bool get_block_longhash(const Blockchain *pbc, const block& b, crypto::hash& res, const uint64_t height, const int miners)
+  {
+    // block 202612 bug workaround
+    if (height == 202612)
+    {
+      static const std::string longhash_202612 = "84f64766475d51837ac9efbef1926486e58563c95a19fef4aec3254f03000000";
+      epee::string_tools::hex_to_pod(longhash_202612, res);
+      return true;
+    }
+    blobdata bd = get_block_hashing_blob(b);
+    const int pow_variant = b.major_version >= 7 ? b.major_version - 6 : 0;
+    if (pow_variant >= 6) {
+      uint64_t seed_height;
+      if (rx_needhash(height, &seed_height)) {
+        crypto::hash hash;
+        if (pbc != NULL)
+          hash = pbc->get_block_id_by_height(seed_height);
+        else
+          memset(&hash, 0, sizeof(hash));  // only happens when generating genesis block
+        rx_seedhash(seed_height, hash.data, miners);
+      }
+      rx_slow_hash(bd.data(), bd.size(), res.data, miners);
+    } else {
+      crypto::cn_slow_hash(bd.data(), bd.size(), res, pow_variant, height);
+    }
+    return true;
+  }
+
+  crypto::hash get_block_longhash(const Blockchain *pbc, const block& b, const uint64_t height, const int miners)
+  {
+    crypto::hash p = crypto::null_hash;
+    get_block_longhash(pbc, b, p, height, miners);
+    return p;
+  }
+
+  void get_block_longhash_reorg(const uint64_t split_height)
+  {
+    rx_reorg(split_height);
+  }
 }
