@@ -240,6 +240,8 @@ void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
       rx_initdata(rx_sp, miners);
   }
   CTHR_MUTEX_UNLOCK(rx_mutex);
+  if (rx_vm != NULL)
+    randomx_vm_set_cache(rx_vm, rx_sp->rs_cache);
 }
 
 void rx_slow_hash(const void *data, size_t length, char *hash, int miners) {
