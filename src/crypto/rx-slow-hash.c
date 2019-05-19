@@ -173,14 +173,14 @@ bool rx_needhash(const uint64_t height, uint64_t *seedheight) {
 }
 
 typedef struct seedinfo {
+  randomx_cache *si_cache;
   unsigned long si_start;
   unsigned long si_count;
 } seedinfo;
 
 static CTHR_THREAD_RTYPE rx_seedthread(void *arg) {
   seedinfo *si = arg;
-  rx_state *rx_sp = &rx_s[rx_s_toggle];
-  randomx_init_dataset(rx_dataset, rx_sp->rs_cache, si->si_start, si->si_count);
+  randomx_init_dataset(rx_dataset, si->si_cache, si->si_start, si->si_count);
   return NULL;
 }
 
@@ -200,10 +200,12 @@ static void rx_initdata(const rx_state *rx_sp, const int miners) {
       local_abort("Couldn't allocate RandomX mining threadlist");
     }
     for (i=0; i<miners-1; i++) {
+      si[i].si_cache = rx_sp->rs_cache;
       si[i].si_start = start;
       si[i].si_count = delta;
       start += delta;
     }
+    si[i].si_cache = rx_sp->rs_cache;
     si[i].si_start = start;
     si[i].si_count = randomx_dataset_item_count() - start;
     for (i=1; i<miners; i++) {
