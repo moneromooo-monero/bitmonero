@@ -1302,7 +1302,7 @@ namespace cryptonote
       uint64_t seed_height;
       crypto::hash seed_hash;
       rx_needhash(res.height, &seed_height);
-      m_core.get_block_id_by_height(seed_height);
+      seed_hash = m_core.get_block_id_by_height(seed_height);
       res.seed_hash = string_tools::pod_to_hex(seed_hash);
     } else {
       res.seed_hash.clear();
