@@ -247,6 +247,7 @@ namespace cryptonote
         meta.relayed = relayed;
         meta.do_not_relay = do_not_relay;
         meta.double_spend_seen = have_tx_keyimges_as_spent(tx);
+        meta.pruned = tx.pruned;
         meta.bf_padding = 0;
         memset(meta.padding, 0, sizeof(meta.padding));
         try
@@ -291,6 +292,7 @@ namespace cryptonote
       meta.relayed = relayed;
       meta.do_not_relay = do_not_relay;
       meta.double_spend_seen = false;
+      meta.pruned = tx.pruned;
       meta.bf_padding = 0;
       memset(meta.padding, 0, sizeof(meta.padding));
 
@@ -485,7 +487,7 @@ namespace cryptonote
       {
         tx = ci->second;
       }
-      else if (!parse_and_validate_tx_from_blob(txblob, tx))
+      else if (!(meta.pruned ? parse_and_validate_tx_base_from_blob(txblob, tx) : parse_and_validate_tx_from_blob(txblob, tx)))
       {
         MERROR("Failed to parse tx from txpool");
         return false;
@@ -604,7 +606,7 @@ namespace cryptonote
     txs.reserve(m_blockchain.get_txpool_tx_count());
     m_blockchain.for_all_txpool_txes([this, now, &txs](const crypto::hash &txid, const txpool_tx_meta_t &meta, const cryptonote::blobdata *){
       // 0 fee transactions are never relayed
-      if(meta.fee > 0 && !meta.do_not_relay && now - meta.last_relayed_time > get_relay_delay(now, meta.receive_time))
+      if(!meta.pruned && meta.fee > 0 && !meta.do_not_relay && now - meta.last_relayed_time > get_relay_delay(now, meta.receive_time))
       {
         // if the tx is older than half the max lifetime, we don't re-relay it, to avoid a problem
         // mentioned by smooth where nodes would flush txes at slightly different times, causing
@@ -670,7 +672,7 @@ namespace cryptonote
     txs.reserve(m_blockchain.get_txpool_tx_count(include_unrelayed_txes));
     m_blockchain.for_all_txpool_txes([&txs](const crypto::hash &txid, const txpool_tx_meta_t &meta, const cryptonote::blobdata *bd){
       transaction tx;
-      if (!parse_and_validate_tx_from_blob(*bd, tx))
+      if (!(meta.pruned ? parse_and_validate_tx_base_from_blob(*bd, tx) : parse_and_validate_tx_from_blob(*bd, tx)))
       {
         MERROR("Failed to parse tx from txpool");
         // continue
@@ -794,7 +796,7 @@ namespace cryptonote
       txi.id_hash = epee::string_tools::pod_to_hex(txid);
       txi.tx_blob = *bd;
       transaction tx;
-      if (!parse_and_validate_tx_from_blob(*bd, tx))
+      if (!(meta.pruned ? parse_and_validate_tx_base_from_blob(*bd, tx) : parse_and_validate_tx_from_blob(*bd, tx)))
       {
         MERROR("Failed to parse tx from txpool");
         // continue
@@ -866,7 +868,7 @@ namespace cryptonote
     m_blockchain.for_all_txpool_txes([&tx_infos, key_image_infos](const crypto::hash &txid, const txpool_tx_meta_t &meta, const cryptonote::blobdata *bd){
       cryptonote::rpc::tx_in_pool txi;
       txi.tx_hash = txid;
-      if (!parse_and_validate_tx_from_blob(*bd, txi.tx))
+      if (!(meta.pruned ? parse_and_validate_tx_base_from_blob(*bd, txi.tx) : parse_and_validate_tx_from_blob(*bd, txi.tx)))
       {
         MERROR("Failed to parse tx from txpool");
         // continue
@@ -1146,7 +1148,7 @@ namespace cryptonote
       ss << "id: " << txid << std::endl;
       if (!short_format) {
         cryptonote::transaction tx;
-        if (!parse_and_validate_tx_from_blob(*txblob, tx))
+        if (!(meta.pruned ? parse_and_validate_tx_base_from_blob(*txblob, tx) : parse_and_validate_tx_from_blob(*txblob, tx)))
         {
           MERROR("Failed to parse tx from txpool");
           return true; // continue
@@ -1201,6 +1203,12 @@ namespace cryptonote
         continue;
       }
       LOG_PRINT_L2("Considering " << sorted_it->second << ", weight " << meta.weight << ", current block weight " << total_weight << "/" << max_total_weight << ", current coinbase " << print_money(best_coinbase));
+
+      if (meta.pruned)
+      {
+        LOG_PRINT_L2("  tx is pruned");
+        continue;
+      }
 
       // Can not exceed maximum block weight
       if (max_total_weight < total_weight + meta.weight)
@@ -1325,7 +1333,7 @@ namespace cryptonote
         {
           cryptonote::blobdata txblob = m_blockchain.get_txpool_tx_blob(txid);
           cryptonote::transaction tx;
-          if (!parse_and_validate_tx_from_blob(txblob, tx))
+          if (!parse_and_validate_tx_from_blob(txblob, tx)) // remove pruned ones on startup, they're meant to be temporary
           {
             MERROR("Failed to parse tx from txpool");
             continue;

@@ -75,13 +75,13 @@ namespace tests
     bool get_stat_info(cryptonote::core_stat_info& st_inf){return true;}
     bool have_block(const crypto::hash& id);
     void get_blockchain_top(uint64_t& height, crypto::hash& top_id);
-    bool handle_incoming_tx(const cryptonote::blobdata& tx_blob, cryptonote::tx_verification_context& tvc, bool keeped_by_block, bool relayed, bool do_not_relay);
-    bool handle_incoming_txs(const std::vector<cryptonote::blobdata>& tx_blobs, std::vector<cryptonote::tx_verification_context>& tvc, bool keeped_by_block, bool relayed, bool do_not_relay);
+    bool handle_incoming_tx(const cryptonote::tx_blob_entry& tx_blob, cryptonote::tx_verification_context& tvc, bool keeped_by_block, bool relayed, bool do_not_relay);
+    bool handle_incoming_txs(const std::vector<cryptonote::tx_blob_entry>& tx_blobs, std::vector<cryptonote::tx_verification_context>& tvc, bool keeped_by_block, bool relayed, bool do_not_relay);
     bool handle_incoming_block(const cryptonote::blobdata& block_blob, const cryptonote::block *block, cryptonote::block_verification_context& bvc, bool update_miner_blocktemplate = true);
     void pause_mine(){}
     void resume_mine(){}
     bool on_idle(){return true;}
-    bool find_blockchain_supplement(const std::list<crypto::hash>& qblock_ids, cryptonote::NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp){return true;}
+    bool find_blockchain_supplement(const std::list<crypto::hash>& qblock_ids, bool clip_pruned, cryptonote::NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp){return true;}
     bool handle_get_objects(cryptonote::NOTIFY_REQUEST_GET_OBJECTS::request& arg, cryptonote::NOTIFY_RESPONSE_GET_OBJECTS::request& rsp, cryptonote::cryptonote_connection_context& context){return true;}
     cryptonote::Blockchain &get_blockchain_storage() { throw std::runtime_error("Called invalid member function: please never call get_blockchain_storage on the TESTING class proxy_core."); }
     bool get_test_drop_download() {return true;}
@@ -108,5 +108,6 @@ namespace tests
     uint32_t get_blockchain_pruning_seed() const { return 0; }
     bool prune_blockchain(uint32_t pruning_seed) const { return true; }
     float get_blockchain_height_plausibility(uint64_t height) const { return 1.0f; }
+    bool is_within_compiled_block_hash_area(uint64_t height) const { return false; }
   };
 }

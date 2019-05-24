@@ -1848,8 +1848,8 @@ bool Blockchain::handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NO
 
     // FIXME: s/rsp.missed_ids/missed_tx_id/ ?  Seems like rsp.missed_ids
     //        is for missed blocks, not missed transactions as well.
-    get_transactions_blobs(bl.second.tx_hashes, e.txs, missed_tx_ids);
-
+    e.pruned = arg.prune;
+    get_transactions_blobs(bl.second.tx_hashes, e.txs, missed_tx_ids, arg.prune);
     if (missed_tx_ids.size() != 0)
     {
       LOG_ERROR("Error retrieving blocks, missed " << missed_tx_ids.size()
@@ -1868,7 +1868,7 @@ bool Blockchain::handle_get_objects(NOTIFY_REQUEST_GET_OBJECTS::request& arg, NO
     e.block = std::move(bl.first);
   }
   //get and pack other transactions, if needed
-  get_transactions_blobs(arg.txs, rsp.txs, rsp.missed_ids);
+  get_transactions_blobs(arg.txs, rsp.txs, rsp.missed_ids, arg.prune);
 
   return true;
 }
@@ -2146,23 +2146,95 @@ bool Blockchain::get_blocks(const t_ids_container& block_ids, t_blocks_container
   return true;
 }
 //------------------------------------------------------------------
+static bool fill(BlockchainDB *db, const crypto::hash &tx_hash, cryptonote::blobdata &tx, bool pruned)
+{
+  if (pruned)
+  {
+    if (!db->get_pruned_tx_blob(tx_hash, tx))
+    {
+      MDEBUG("Pruned transaction blob not found for " << tx_hash);
+      return false;
+    }
+  }
+  else
+  {
+    if (!db->get_tx_blob(tx_hash, tx))
+    {
+      MDEBUG("Transaction blob not found for " << tx_hash);
+      return false;
+    }
+  }
+  return true;
+}
+//------------------------------------------------------------------
+static bool fill(BlockchainDB *db, const crypto::hash &tx_hash, tx_blob_entry &tx, bool pruned)
+{
+  if (!fill(db, tx_hash, tx.blob, pruned))
+    return false;
+  if (pruned)
+  {
+    if (is_v1_tx(tx.blob))
+    {
+      // v1 txes aren't pruned, so fetch the whole thing
+      cryptonote::blobdata prunable_blob;
+      if (!db->get_prunable_tx_blob(tx_hash, prunable_blob))
+      {
+        MDEBUG("Prunable transaction blob not found for " << tx_hash);
+        return false;
+      }
+      tx.blob.append(prunable_blob);
+      tx.prunable_hash = crypto::null_hash;
+    }
+    else
+    {
+      if (!db->get_prunable_tx_hash(tx_hash, tx.prunable_hash))
+      {
+        MDEBUG("Prunable transaction data hash not found for " << tx_hash);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+//------------------------------------------------------------------
 //TODO: return type should be void, throw on exception
 //       alternatively, return true only if no transactions missed
-template<class t_ids_container, class t_tx_container, class t_missed_container>
-bool Blockchain::get_transactions_blobs(const t_ids_container& txs_ids, t_tx_container& txs, t_missed_container& missed_txs, bool pruned) const
+bool Blockchain::get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<cryptonote::blobdata>& txs, std::vector<crypto::hash>& missed_txs, bool pruned) const
 {
   LOG_PRINT_L3("Blockchain::" << __func__);
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
 
-  reserve_container(txs, txs_ids.size());
+  txs.reserve(txs_ids.size());
   for (const auto& tx_hash : txs_ids)
   {
     try
     {
       cryptonote::blobdata tx;
-      if (pruned && m_db->get_pruned_tx_blob(tx_hash, tx))
+      if (fill(m_db, tx_hash, tx, pruned))
         txs.push_back(std::move(tx));
-      else if (!pruned && m_db->get_tx_blob(tx_hash, tx))
+      else
+        missed_txs.push_back(tx_hash);
+    }
+    catch (const std::exception& e)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+//------------------------------------------------------------------
+bool Blockchain::get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<tx_blob_entry>& txs, std::vector<crypto::hash>& missed_txs, bool pruned) const
+{
+  LOG_PRINT_L3("Blockchain::" << __func__);
+  CRITICAL_REGION_LOCAL(m_blockchain_lock);
+
+  txs.reserve(txs_ids.size());
+  for (const auto& tx_hash : txs_ids)
+  {
+    try
+    {
+      tx_blob_entry tx;
+      if (fill(m_db, tx_hash, tx, pruned))
         txs.push_back(std::move(tx));
       else
         missed_txs.push_back(tx_hash);
@@ -2272,7 +2344,11 @@ bool Blockchain::find_blockchain_supplement(const std::list<crypto::hash>& qbloc
   if (clip_pruned)
   {
     const uint32_t pruning_seed = get_blockchain_pruning_seed();
-    start_height = tools::get_next_unpruned_block_height(start_height, current_height, pruning_seed);
+    if (start_height < tools::get_next_unpruned_block_height(start_height, current_height, pruning_seed))
+    {
+      MDEBUG("We only have a pruned version of the common ancestor");
+      return false;
+    }
     stop_height = tools::get_next_pruned_block_height(start_height, current_height, pruning_seed);
   }
   size_t count = 0;
@@ -2285,12 +2361,12 @@ bool Blockchain::find_blockchain_supplement(const std::list<crypto::hash>& qbloc
   return true;
 }
 
-bool Blockchain::find_blockchain_supplement(const std::list<crypto::hash>& qblock_ids, NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp) const
+bool Blockchain::find_blockchain_supplement(const std::list<crypto::hash>& qblock_ids, bool clip_pruned, NOTIFY_RESPONSE_CHAIN_ENTRY::request& resp) const
 {
   LOG_PRINT_L3("Blockchain::" << __func__);
   CRITICAL_REGION_LOCAL(m_blockchain_lock);
 
-  bool result = find_blockchain_supplement(qblock_ids, resp.m_block_ids, resp.start_height, resp.total_height, true);
+  bool result = find_blockchain_supplement(qblock_ids, resp.m_block_ids, resp.start_height, resp.total_height, clip_pruned);
   if (result)
   {
     cryptonote::difficulty_type wide_cumulative_difficulty = m_db->get_block_cumulative_difficulty(resp.total_height - 1);
@@ -2729,18 +2805,24 @@ bool Blockchain::expand_transaction_2(transaction &tx, const crypto::hash &tx_pr
   // II
   if (rv.type == rct::RCTTypeFull)
   {
-    rv.p.MGs.resize(1);
-    rv.p.MGs[0].II.resize(tx.vin.size());
-    for (size_t n = 0; n < tx.vin.size(); ++n)
-      rv.p.MGs[0].II[n] = rct::ki2rct(boost::get<txin_to_key>(tx.vin[n]).k_image);
+    if (!tx.pruned)
+    {
+      rv.p.MGs.resize(1);
+      rv.p.MGs[0].II.resize(tx.vin.size());
+      for (size_t n = 0; n < tx.vin.size(); ++n)
+        rv.p.MGs[0].II[n] = rct::ki2rct(boost::get<txin_to_key>(tx.vin[n]).k_image);
+    }
   }
   else if (rv.type == rct::RCTTypeSimple || rv.type == rct::RCTTypeBulletproof || rv.type == rct::RCTTypeBulletproof2)
   {
-    CHECK_AND_ASSERT_MES(rv.p.MGs.size() == tx.vin.size(), false, "Bad MGs size");
-    for (size_t n = 0; n < tx.vin.size(); ++n)
+    if (!tx.pruned)
     {
-      rv.p.MGs[n].II.resize(1);
-      rv.p.MGs[n].II[0] = rct::ki2rct(boost::get<txin_to_key>(tx.vin[n]).k_image);
+      CHECK_AND_ASSERT_MES(rv.p.MGs.size() == tx.vin.size(), false, "Bad MGs size");
+      for (size_t n = 0; n < tx.vin.size(); ++n)
+      {
+        rv.p.MGs[n].II.resize(1);
+        rv.p.MGs[n].II[0] = rct::ki2rct(boost::get<txin_to_key>(tx.vin[n]).k_image);
+      }
     }
   }
   else
@@ -4381,7 +4463,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
     bytes += entry.block.size();
     for (const auto &tx_blob : entry.txs)
     {
-      bytes += tx_blob.size();
+      bytes += tx_blob.blob.size();
     }
     total_txs += entry.txs.size();
   }
@@ -4538,7 +4620,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
       crypto::hash &tx_prefix_hash = txes[tx_index].second;
       ++tx_index;
 
-      if (!parse_and_validate_tx_base_from_blob(tx_blob, tx))
+      if (!parse_and_validate_tx_base_from_blob(tx_blob.blob, tx))
         SCAN_TABLE_QUIT("Could not parse tx from incoming blocks.");
       cryptonote::get_transaction_prefix_hash(tx, tx_prefix_hash);
 
@@ -5022,6 +5104,5 @@ void Blockchain::cache_block_template(const block &b, const cryptonote::account_
 
 namespace cryptonote {
 template bool Blockchain::get_transactions(const std::vector<crypto::hash>&, std::vector<transaction>&, std::vector<crypto::hash>&) const;
-template bool Blockchain::get_transactions_blobs(const std::vector<crypto::hash>&, std::vector<cryptonote::blobdata>&, std::vector<crypto::hash>&, bool) const;
 template bool Blockchain::get_split_transactions_blobs(const std::vector<crypto::hash>&, std::vector<std::tuple<crypto::hash, cryptonote::blobdata, crypto::hash, cryptonote::blobdata>>&, std::vector<crypto::hash>&) const;
 }
