@@ -49,6 +49,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(getblocktemplate)
+    get_block_template = getblocktemplate
 
     def send_raw_transaction(self, tx_as_hex, do_not_relay = False, do_sanity_checks = True):
         send_raw_transaction = {
@@ -57,6 +58,7 @@ class Daemon(object):
             'do_sanity_checks': do_sanity_checks,
         }
         return self.rpc.send_request("/send_raw_transaction", send_raw_transaction)
+    sendrawtransaction = send_raw_transaction
 
     def submitblock(self, block):
         submitblock = {
@@ -66,6 +68,7 @@ class Daemon(object):
             'id': '0'
         }    
         return self.rpc.send_json_rpc_request(submitblock)
+    submit_block = submitblock
 
     def getblock(self, hash = '', height = 0, fill_pow_hash = False):
         getblock = {
@@ -79,6 +82,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(getblock)
+    get_block = getblock
 
     def getlastblockheader(self):
         getlastblockheader = {
@@ -89,6 +93,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(getlastblockheader)
+    get_last_block_header = getlastblockheader
 
     def getblockheaderbyhash(self, hash = "", hashes = []):
         getblockheaderbyhash = {
@@ -101,6 +106,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(getblockheaderbyhash)
+    get_block_header_by_hash = getblockheaderbyhash
 
     def getblockheaderbyheight(self, height):
         getblockheaderbyheight = {
@@ -112,6 +118,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(getblockheaderbyheight)
+    get_block_header_by_height = getblockheaderbyheight
 
     def getblockheadersrange(self, start_height, end_height, fill_pow_hash = False):
         getblockheadersrange = {
@@ -125,6 +132,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(getblockheadersrange)
+    get_block_headers_range = getblockheadersrange
 
     def get_connections(self):
         get_connections = {
@@ -141,6 +149,7 @@ class Daemon(object):
                 'id': '0'
         }    
         return self.rpc.send_json_rpc_request(get_info)
+    getinfo = get_info
 
     def hard_fork_info(self):
         hard_fork_info = {
@@ -172,6 +181,7 @@ class Daemon(object):
                 'id': '0'
         }
         return self.rpc.send_request("/get_height", get_height)
+    getheight = get_height
 
     def pop_blocks(self, nblocks = 1):
         pop_blocks = {
@@ -272,6 +282,7 @@ class Daemon(object):
             'split': split,
         }
         return self.rpc.send_request('/get_transactions', get_transactions)
+    gettransactions = get_transactions
 
     def get_outs(self, outputs = [], get_txid = False):
         get_outs = {
@@ -433,6 +444,7 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(get_block_count)
+    getblockcount = get_block_count
 
     def get_block_hash(self, height):
         get_block_hash = {
@@ -442,6 +454,8 @@ class Daemon(object):
             'id': '0'
         }
         return self.rpc.send_json_rpc_request(get_block_hash)
+    on_get_block_hash = get_block_hash
+    on_getblockhash = get_block_hash
 
     def relay_tx(self, txids = []):
         relay_tx = {
