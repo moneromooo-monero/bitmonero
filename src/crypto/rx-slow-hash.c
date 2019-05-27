@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "misc_log_ex.h"
 #include "randomx.h"
 #include "c_threads.h"
 
@@ -230,9 +231,13 @@ void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
     if (use_rx_jit())
       flags |= RANDOMX_FLAG_JIT;
     if (rx_sp->rs_cache == NULL) {
+      mdebug("randomx", "Allocating randomx cache");
       rx_sp->rs_cache = randomx_alloc_cache(flags | RANDOMX_FLAG_LARGE_PAGES);
       if (rx_sp->rs_cache == NULL)
+      {
+        mwarning("randomx", "Failed to initialize randomx with large pages, hashing will be slow");
         rx_sp->rs_cache = randomx_alloc_cache(flags);
+      }
       if (rx_sp->rs_cache == NULL)
         local_abort("Couldn't allocate RandomX cache");
     }
@@ -240,6 +245,7 @@ void rx_seedhash(const uint64_t height, const char *hash, const int miners) {
     rx_sp->rs_height = height;
     if (miners && rx_dataset != NULL)
       rx_initdata(rx_sp, miners);
+    minfo("randomx", "randomx setup with %d mining threads", miners);
   }
   CTHR_MUTEX_UNLOCK(rx_mutex);
   if (rx_vm != NULL)
@@ -252,15 +258,22 @@ void rx_slow_hash(const void *data, size_t length, char *hash, int miners) {
     randomx_flags flags = RANDOMX_FLAG_DEFAULT;
     if (use_rx_jit())
       flags |= RANDOMX_FLAG_JIT;
+    else
+      mwarning("randomx", "Not using JIT, hashing will be slow");
     if(!force_software_aes() && check_aes_hw())
       flags |= RANDOMX_FLAG_HARD_AES;
+    else
+      mwarning("randomx", "Not using hardware AES, hashing will be slow");
     if (miners) {
       if (rx_dataset == NULL) {
         CTHR_MUTEX_LOCK(rx_mutex);
         if (rx_dataset == NULL) {
           rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_LARGE_PAGES);
           if (rx_dataset == NULL)
+          {
+            mwarning("randomx", "Failed to allocate randomx dataset with large pages, hashing will be slow");
             rx_dataset = randomx_alloc_dataset(RANDOMX_FLAG_DEFAULT);
+          }
           if (rx_dataset != NULL)
             rx_initdata(rx_sp, miners);
         }
@@ -273,7 +286,10 @@ void rx_slow_hash(const void *data, size_t length, char *hash, int miners) {
     }
     rx_vm = randomx_create_vm(flags | RANDOMX_FLAG_LARGE_PAGES, rx_sp->rs_cache, rx_dataset);
     if(rx_vm == NULL) //large pages failed
+    {
+      mwarning("randomx", "Failed to create randomx VM with large pages, hashing will be slow");
       rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
+    }
     if(rx_vm == NULL) {//fallback if everything fails
       flags = RANDOMX_FLAG_DEFAULT | (miners ? RANDOMX_FLAG_FULL_MEM : 0);
       rx_vm = randomx_create_vm(flags, rx_sp->rs_cache, rx_dataset);
