@@ -151,21 +151,57 @@ static inline int use_rx_jit(void)
 #define SEEDHASH_EPOCH_BLOCKS	2048	/* Must be same as BLOCKS_SYNCHRONIZING_MAX_COUNT in cryptonote_config.h */
 #define SEEDHASH_EPOCH_LAG		64
 
+static inline int is_power_of_2(uint64_t n) { return n && (n & (n-1)) == 0; }
+
+static uint64_t get_seedhash_epoch_lag()
+{
+  uint64_t lag;
+  const char *e = getenv("SEEDHASH_EPOCH_LAG");
+  if (!e)
+    return SEEDHASH_EPOCH_LAG;
+  lag = atoi(e);
+  if (lag > SEEDHASH_EPOCH_LAG || !is_power_of_2(lag))
+    return SEEDHASH_EPOCH_LAG;
+  return lag;
+}
+
+static uint64_t get_seedhash_epoch_blocks()
+{
+  uint64_t blocks;
+  const char *e = getenv("SEEDHASH_EPOCH_BLOCKS");
+  if (!e)
+    return SEEDHASH_EPOCH_BLOCKS;
+  blocks = atoi(e);
+  if (blocks < 2 || blocks > SEEDHASH_EPOCH_BLOCKS || !is_power_of_2(blocks))
+    return SEEDHASH_EPOCH_BLOCKS;
+  return blocks;
+}
+
 void rx_reorg(const uint64_t split_height) {
   int i;
   CTHR_MUTEX_LOCK(rx_mutex);
   for (i=0; i<2; i++) {
     if (split_height < rx_s[i].rs_height)
+{
       rx_s[i].rs_height = 1;	/* set to an invalid seed height */
+printf("BEEEP\n");
+}
   }
   CTHR_MUTEX_UNLOCK(rx_mutex);
 }
 
 bool rx_needhash(const uint64_t height, uint64_t *seedheight) {
-  uint64_t s_height =  (height <= SEEDHASH_EPOCH_BLOCKS+SEEDHASH_EPOCH_LAG) ? 0 :
-                       (height - SEEDHASH_EPOCH_LAG - 1) & ~(SEEDHASH_EPOCH_BLOCKS-1);
+  static uint64_t seedhash_epoch_blocks = 0;
+  static uint64_t seedhash_epoch_lag = 0;
+  if (seedhash_epoch_blocks == 0)
+    seedhash_epoch_blocks = get_seedhash_epoch_blocks();
+  if (seedhash_epoch_lag == 0)
+    seedhash_epoch_lag = get_seedhash_epoch_lag();
+
+  uint64_t s_height =  (height <= seedhash_epoch_blocks+seedhash_epoch_lag) ? 0 :
+                       (height - seedhash_epoch_lag - 1) & ~(seedhash_epoch_blocks-1);
   rx_state *rx_sp;
-  rx_s_toggle = (s_height & SEEDHASH_EPOCH_BLOCKS) != 0;
+  rx_s_toggle = (s_height & seedhash_epoch_blocks) != 0;
   *seedheight = s_height;
   rx_sp = &rx_s[rx_s_toggle];
   if (!s_height && !rx_sp->rs_cache)

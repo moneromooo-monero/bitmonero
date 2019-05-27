@@ -11,6 +11,8 @@ import os
 
 USAGE = 'usage: functional_tests_rpc.py <python> <srcdir> <builddir> [<tests-to-run> | all]'
 DEFAULT_TESTS = ['daemon_info', 'blockchain', 'wallet_address', 'integrated_address', 'mining', 'transfer', 'txpool', 'multisig', 'cold_signing', 'sign_message', 'proofs', 'get_output_distribution']
+ENVIRONMENT = {'SEEDHASH_EPOCH_BLOCKS': 8, 'SEEDHASH_EPOCH_LAG': 4}
+
 try:
   python = sys.argv[1]
   srcdir = sys.argv[2]
@@ -62,6 +64,8 @@ try:
     PYTHONPATH += ':'
   PYTHONPATH += srcdir + '/../../utils/python-rpc'
   os.environ['PYTHONPATH'] = PYTHONPATH
+  for k in ENVIRONMENT.keys():
+    os.environ[k] = str(ENVIRONMENT[k])
   for i in range(len(command_lines)):
     #print('Running: ' + str(command_lines[i]))
     processes.append(subprocess.Popen(command_lines[i], stdout = outputs[i]))
