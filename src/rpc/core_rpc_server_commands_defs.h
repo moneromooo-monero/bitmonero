@@ -1718,8 +1718,10 @@ namespace cryptonote
   {
     struct request_t
     {
-	  uint64_t out_peers;
+      bool set;
+      uint32_t out_peers;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(set)
         KV_SERIALIZE(out_peers)
       END_KV_SERIALIZE_MAP()
     };
@@ -1727,9 +1729,11 @@ namespace cryptonote
     
     struct response_t
     {
+      uint32_t out_peers;
       std::string status;
 
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(out_peers)
         KV_SERIALIZE(status)
       END_KV_SERIALIZE_MAP()
     };
@@ -1740,8 +1744,10 @@ namespace cryptonote
   {
     struct request_t
     {
-      uint64_t in_peers;
+      bool set;
+      uint32_t in_peers;
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(set)
         KV_SERIALIZE(in_peers)
       END_KV_SERIALIZE_MAP()
     };
@@ -1749,9 +1755,11 @@ namespace cryptonote
 
     struct response_t
     {
+      uint32_t in_peers;
       std::string status;
 
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE(in_peers)
         KV_SERIALIZE(status)
       END_KV_SERIALIZE_MAP()
     };
