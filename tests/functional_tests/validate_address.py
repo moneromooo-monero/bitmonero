@@ -28,11 +28,10 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import time
-
 """Test address validation RPC calls
 """
 
+from __future__ import print_function
 from framework.wallet import Wallet
 
 class AddressValidationTest():
@@ -43,7 +42,7 @@ class AddressValidationTest():
       self.check_openalias_addresses()
 
     def create(self):
-        print 'Creating wallet'
+        print('Creating wallet')
         seed = 'velvet lymph giddy number token physics poetry unquoted nibs useful sabotage limits benches lifestyle eden nitrogen anvil fewest avoid batch vials washing fences goat unquoted'
         address = '42ey1afDFnn4886T7196doS9GPMzexD9gXpsZJDwVjeRVdFCSoHnv7KPbBeGpzJBzHRCAs9UxqeoyFQMYbqSWYTfJJQAWDm'
         self.wallet = Wallet()
@@ -55,7 +54,7 @@ class AddressValidationTest():
         assert res.seed == seed
 
     def check_bad_addresses(self):
-        print 'Validating bad addresses'
+        print('Validating bad addresses')
         bad_addresses = ['', 'a', '42ey1afDFnn4886T7196doS9GPMzexD9gXpsZJDwVjeRVdFCSoHnv7KPbBeGpzJBzHRCAs9UxqeoyFQMYbqSWYTfJJQAWD9', ' ', '@', '42ey']
         for address in bad_addresses:
             res = self.wallet.validate_address(address, any_net_type = False)
@@ -64,7 +63,7 @@ class AddressValidationTest():
             assert not res.valid
 
     def check_good_addresses(self):
-        print 'Validating good addresses'
+        print('Validating good addresses')
         addresses = [
             [ 'mainnet',  '', '42ey1afDFnn4886T7196doS9GPMzexD9gXpsZJDwVjeRVdFCSoHnv7KPbBeGpzJBzHRCAs9UxqeoyFQMYbqSWYTfJJQAWDm' ],
             [ 'mainnet',  '', '44Kbx4sJ7JDRDV5aAhLJzQCjDz2ViLRduE3ijDZu3osWKBjMGkV1XPk4pfDUMqt1Aiezvephdqm6YD19GKFD9ZcXVUTp6BW' ],
@@ -93,7 +92,7 @@ class AddressValidationTest():
                     assert not res.valid
 
     def check_openalias_addresses(self):
-        print 'Validating openalias addresses'
+        print('Validating openalias addresses')
         addresses = [
             ['donate@getmonero.org', '44AFFq5kSiGBoZ4NMDwYtN18obc8AemS33DBLWs3H7otXft3XjrpDtQGv7SqSsaBYBb98uNbr2VBBEt7f2wfn3RVGQBEP3A']
         ]
