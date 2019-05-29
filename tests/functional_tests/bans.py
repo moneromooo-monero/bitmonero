@@ -39,6 +39,7 @@ Test the following RPCs:
 
 """
 
+from __future__ import print_function
 from framework.daemon import Daemon
 
 class BanTest():
