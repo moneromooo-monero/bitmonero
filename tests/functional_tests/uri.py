@@ -29,10 +29,14 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import urllib
-
 """Test URI RPC
 """
+
+from __future__ import print_function
+try:
+  from urllib import quote as urllib_quote
+except:
+  from urllib.parse import quote as urllib_quote
 
 from framework.wallet import Wallet
 
@@ -42,7 +46,7 @@ class URITest():
       self.test_monero_uri()
 
     def create(self):
-        print 'Creating wallet'
+        print('Creating wallet')
         wallet = Wallet()
         # close the wallet if any, will throw if none is loaded
         try: wallet.close_wallet()
@@ -53,11 +57,11 @@ class URITest():
         assert res.seed == seed
 
     def test_monero_uri(self):
-        print 'Testing monero: URI'
+        print('Testing monero: URI')
         wallet = Wallet()
 
         utf8string = [u'えんしゅう', u'あまやかす']
-        quoted_utf8string = [urllib.quote(x.encode('utf8')) for x in utf8string]
+        quoted_utf8string = [urllib_quote(x.encode('utf8')) for x in utf8string]
 
         ok = False
         try: res = wallet.make_uri()
