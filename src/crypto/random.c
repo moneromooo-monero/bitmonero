@@ -146,3 +146,20 @@ void generate_random_bytes_not_thread_safe(size_t n, void *result) {
     }
   }
 }
+
+void add_extra_entropy(const void *ptr, size_t bytes)
+{
+  char hash[HASH_SIZE];
+  int i;
+
+  while (bytes > 0)
+  {
+    const size_t round_bytes = bytes > HASH_SIZE ? HASH_SIZE : bytes;
+    cn_fast_hash(ptr, round_bytes, hash);
+    bytes -= round_bytes;
+    ptr = cpadd(ptr, round_bytes);
+    for (i = 0; i < HASH_SIZE; ++i)
+      state.b[i] ^= (uint8_t)hash[i];
+    hash_permutation(&state);
+  }
+}
