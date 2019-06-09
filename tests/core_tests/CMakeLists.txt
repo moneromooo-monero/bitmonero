@@ -43,6 +43,7 @@ set(core_tests_sources
   v2_tests.cpp
   rct.cpp
   bulletproofs.cpp
+  rct2.cpp
   wallet_tools.cpp)
 
 set(core_tests_headers
@@ -62,6 +63,7 @@ set(core_tests_headers
   v2_tests.h
   rct.h
   bulletproofs.h
+  rct2.h
   wallet_tools.h)
 
 monero_add_test_executable(core_tests

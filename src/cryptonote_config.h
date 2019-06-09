@@ -150,6 +150,7 @@
 #define HF_VERSION_SAME_MIXIN                   12
 #define HF_VERSION_MIN_2_OUTPUTS                12
 #define HF_VERSION_MIN_V2_COINBASE_TX           12
+#define HF_VERSION_CLSAG                        12
 
 #define PER_KB_FEE_QUANTIZATION_DECIMALS        8
 
