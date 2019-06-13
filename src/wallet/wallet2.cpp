@@ -8309,7 +8309,10 @@ void wallet2::transfer_selected(const std::vector<cryptonote::tx_destination_ent
       change_dts.is_subaddress = m_default_change_address->second;
     }
     else
+    {
       change_dts.addr = get_subaddress({subaddr_account, 0});
+      change_dts.is_subaddress = subaddr_account != 0;
+    }
     change_dts.amount = found_money - needed_money;
   }
 
