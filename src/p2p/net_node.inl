@@ -37,6 +37,7 @@
 #include <boost/optional/optional.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/algorithm/string.hpp>
 #include <atomic>
 #include <functional>
 #include <limits>
@@ -70,6 +71,46 @@
 #define NET_MAKE_IP(b1,b2,b3,b4)  ((LPARAM)(((DWORD)(b1)<<24)+((DWORD)(b2)<<16)+((DWORD)(b3)<<8)+((DWORD)(b4))))
 
 #define MIN_WANTED_SEED_NODES 12
+
+namespace
+{
+  std::string select_port(const std::string &portspec)
+  {
+    std::vector<uint16_t> ports;
+    uint16_t port0, port1;
+
+    ports.reserve(65536);
+    std::vector<std::string> fields;
+    boost::split(fields, portspec, boost::is_any_of(","));
+    for (const auto &field: fields)
+    {
+      // field is either A-B or A
+      std::vector<std::string> subfields;
+      boost::split(subfields, field, boost::is_any_of("-"));
+      if (subfields.size() == 1)
+      {
+        if (epee::string_tools::get_xtype_from_string(port0, subfields[0]))
+          ports.push_back(port0);
+        else
+          MERROR("Invalid port: " << field);
+      }
+      else if (subfields.size() == 2)
+      {
+        if (epee::string_tools::get_xtype_from_string(port0, subfields[0]) && epee::string_tools::get_xtype_from_string(port1, subfields[1]) && port1 >= port0)
+          for (uint32_t port = port0; port <= port1; ++port) ports.push_back(port);
+        else
+          MERROR("Invalid port range: " << field);
+      }
+      else
+      {
+        MERROR("Invalid port or range: " << field);
+      }
+    }
+    if (ports.empty())
+      throw std::runtime_error("Invalid port specification");
+    return std::to_string(ports[crypto::rand_idx(ports.size())]);
+  }
+}
 
 namespace nodetool
 {
@@ -269,7 +310,7 @@ namespace nodetool
     network_zone& public_zone = m_network_zones[epee::net_utils::zone::public_];
     public_zone.m_connect = &public_connect;
     public_zone.m_bind_ip = command_line::get_arg(vm, arg_p2p_bind_ip);
-    public_zone.m_port = command_line::get_arg(vm, arg_p2p_bind_port);
+    public_zone.m_port = select_port(command_line::get_arg(vm, arg_p2p_bind_port));
     public_zone.m_can_pingback = true;
     m_external_port = command_line::get_arg(vm, arg_p2p_external_port);
     m_allow_local_ip = command_line::get_arg(vm, arg_p2p_allow_local_ip);
