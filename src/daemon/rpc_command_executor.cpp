@@ -52,13 +52,10 @@ namespace {
     time(&now);
     time_t last_seen = static_cast<time_t>(peer.last_seen);
 
-    std::string id_str;
     std::string port_str;
     std::string elapsed = peer.last_seen == 0 ? "never" : epee::misc_utils::get_time_interval_string(now - last_seen);
     std::string ip_str = epee::string_tools::get_ip_string_from_int32(peer.ip);
-    std::stringstream peer_id_str;
-    peer_id_str << std::hex << std::setw(16) << peer.id;
-    peer_id_str >> id_str;
+    std::string id_str = epee::string_tools::pad_string(epee::string_tools::to_string_hex(peer.id), 16, '0', true);
     epee::string_tools::xtype_to_string(peer.port, port_str);
     std::string addr_str = ip_str + ":" + port_str;
     std::string rpc_port = peer.rpc_port ? std::to_string(peer.rpc_port) : "-";
