@@ -151,3 +151,15 @@ target_link_libraries(bulletproof_fuzz_tests
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
+
+monero_add_test_executable(regex_fuzz_tests regex.cpp fuzzer.cpp)
+target_link_libraries(regex_fuzz_tests
+  PRIVATE
+    common
+    epee
+    ${Boost_THREAD_LIBRARY}
+    ${Boost_CHRONO_LIBRARY}
+    ${Boost_REGEX_LIBRARY}
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${EXTRA_LIBRARIES})
