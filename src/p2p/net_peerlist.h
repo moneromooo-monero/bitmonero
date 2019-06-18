@@ -374,12 +374,12 @@ namespace nodetool
     auto by_addr_it_gr = m_peers_gray.get<by_addr>().find(ple.adr);
     if(by_addr_it_gr == m_peers_gray.get<by_addr>().end())
     {
-      //put new record into white list
+      //put new record into gray list
       m_peers_gray.insert(ple);
       trim_gray_peerlist();    
     }else
     {
-      //update record in white list 
+      //update record in gray list 
       m_peers_gray.replace(by_addr_it_gr, ple);      
     }
     return true;
