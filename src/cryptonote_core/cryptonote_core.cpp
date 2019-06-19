@@ -1908,7 +1908,7 @@ namespace cryptonote
     static constexpr double threshold = 1. / (864000 / DIFFICULTY_TARGET_V2); // one false positive every 10 days
 
     const time_t now = time(NULL);
-    const std::vector<time_t> timestamps = m_blockchain_storage.get_last_block_timestamps(150);
+    const std::vector<uint64_t> timestamps = m_blockchain_storage.get_last_block_timestamps(150);
 
     static const unsigned int seconds[] = { 5400, 3600, 1800, 1200, 600 };
     for (size_t n = 0; n < sizeof(seconds)/sizeof(seconds[0]); ++n)
@@ -1939,7 +1939,7 @@ namespace cryptonote
   std::pair<unsigned int, double> core::get_block_rate(uint64_t seconds)
   {
     const time_t now = time(NULL);
-    const std::vector<time_t> timestamps = m_blockchain_storage.get_last_block_timestamps(3 * seconds / DIFFICULTY_TARGET_V2);
+    const std::vector<uint64_t> timestamps = m_blockchain_storage.get_last_block_timestamps(3 * seconds / DIFFICULTY_TARGET_V2);
 
     unsigned int b = 0;
     const time_t time_boundary = now - static_cast<time_t>(seconds);
