@@ -497,7 +497,7 @@ static void mlog(el::Level level, const char *category, const char *format, va_l
     return;
   }
 
-  MCLOG(level, category, p);
+  MCLOG(level, category, el::Color::Default, p);
   free(p);
 }
 

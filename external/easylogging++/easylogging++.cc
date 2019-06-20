@@ -610,19 +610,34 @@ void Configurations::unsafeSetGlobally(ConfigurationType configurationType, cons
 
 // LogBuilder
 
-void LogBuilder::convertToColoredOutput(base::type::string_t* logLine, Level level) {
+void LogBuilder::convertToColoredOutput(base::type::string_t* logLine, Level level, Color color) {
   if (!m_termSupportsColor) return;
   const base::type::char_t* resetColor = ELPP_LITERAL("\x1b[0m");
-  if (level == Level::Error || level == Level::Fatal)
-    *logLine = ELPP_LITERAL("\x1b[31m") + *logLine + resetColor;
-  else if (level == Level::Warning)
-    *logLine = ELPP_LITERAL("\x1b[33m") + *logLine + resetColor;
-  else if (level == Level::Debug)
-    *logLine = ELPP_LITERAL("\x1b[32m") + *logLine + resetColor;
-  else if (level == Level::Info)
-    *logLine = ELPP_LITERAL("\x1b[36m") + *logLine + resetColor;
-  else if (level == Level::Trace)
-    *logLine = ELPP_LITERAL("\x1b[35m") + *logLine + resetColor;
+  if (color == Color::Red)
+    *logLine = ELPP_LITERAL("\x1b[1;31m") + *logLine + resetColor;
+  else if (color == Color::Yellow)
+    *logLine = ELPP_LITERAL("\x1b[1;33m") + *logLine + resetColor;
+  else if (color == Color::Green)
+    *logLine = ELPP_LITERAL("\x1b[1;32m") + *logLine + resetColor;
+  else if (color == Color::Cyan)
+    *logLine = ELPP_LITERAL("\x1b[1;36m") + *logLine + resetColor;
+  else if (color == Color::Magenta)
+    *logLine = ELPP_LITERAL("\x1b[1;35m") + *logLine + resetColor;
+  else if (color == Color::Blue)
+    *logLine = ELPP_LITERAL("\x1b[1;34m") + *logLine + resetColor;
+  else if (color == Color::Default)
+  {
+    if (level == Level::Error || level == Level::Fatal)
+      *logLine = ELPP_LITERAL("\x1b[31m") + *logLine + resetColor;
+    else if (level == Level::Warning)
+      *logLine = ELPP_LITERAL("\x1b[33m") + *logLine + resetColor;
+    else if (level == Level::Debug)
+      *logLine = ELPP_LITERAL("\x1b[32m") + *logLine + resetColor;
+    else if (level == Level::Info)
+      *logLine = ELPP_LITERAL("\x1b[36m") + *logLine + resetColor;
+    else if (level == Level::Trace)
+      *logLine = ELPP_LITERAL("\x1b[35m") + *logLine + resetColor;
+  }
 }
 
 // Logger
@@ -2385,7 +2400,7 @@ void DefaultLogDispatchCallback::handle(const LogDispatchData* data) {
     boost::split(v, msg, boost::is_any_of("\n"));
     for (const std::string &s: v)
     {
-      LogMessage msgline(logmsg->level(), logmsg->file(), logmsg->line(), logmsg->func(), logmsg->verboseLevel(), logmsg->logger(), &s);
+      LogMessage msgline(logmsg->level(), logmsg->color(), logmsg->file(), logmsg->line(), logmsg->func(), logmsg->verboseLevel(), logmsg->logger(), &s);
       dispatch(prefix + s + "\n",
           m_data->logMessage()->logger()->logBuilder()->build(&msgline,
                m_data->dispatchAction() == base::DispatchAction::NormalLog || m_data->dispatchAction() == base::DispatchAction::FileOnlyLog));
@@ -2427,7 +2442,7 @@ void DefaultLogDispatchCallback::dispatch(base::type::string_t&& rawLine, base::
     if (m_data->dispatchAction() != base::DispatchAction::FileOnlyLog) {
       if (m_data->logMessage()->logger()->m_typedConfigurations->toStandardOutput(m_data->logMessage()->level())) {
         if (ELPP->hasFlag(LoggingFlag::ColoredTerminalOutput))
-          m_data->logMessage()->logger()->logBuilder()->convertToColoredOutput(&rawLine, m_data->logMessage()->level());
+          m_data->logMessage()->logger()->logBuilder()->convertToColoredOutput(&rawLine, m_data->logMessage()->level(), m_data->logMessage()->color());
         ELPP_COUT << ELPP_COUT_LINE(rawLine);
       }
     }
@@ -2469,7 +2484,7 @@ void AsyncLogDispatchCallback::handle(const LogDispatchData* data) {
   if ((data->dispatchAction() == base::DispatchAction::NormalLog || data->dispatchAction() == base::DispatchAction::FileOnlyLog)
       && data->logMessage()->logger()->typedConfigurations()->toStandardOutput(data->logMessage()->level())) {
     if (ELPP->hasFlag(LoggingFlag::ColoredTerminalOutput))
-      data->logMessage()->logger()->logBuilder()->convertToColoredOutput(&logLine, data->logMessage()->level());
+      data->logMessage()->logger()->logBuilder()->convertToColoredOutput(&logLine, data->logMessage()->level(), data->logMessage()->color());
     ELPP_COUT << ELPP_COUT_LINE(logLine);
   }
   // Save resources and only queue if we want to write to file otherwise just ignore handler
@@ -2761,7 +2776,7 @@ void Writer::initializeLogger(const std::string& loggerId, bool lookup, bool nee
         ELPP->registeredLoggers()->get(std::string(base::consts::kDefaultLoggerId));
       }
     }
-    Writer(Level::Debug, m_file, m_line, m_func).construct(1, base::consts::kDefaultLoggerId)
+    Writer(Level::Debug, Color::Default, m_file, m_line, m_func).construct(1, base::consts::kDefaultLoggerId)
         << "Logger [" << loggerId << "] is not registered yet!";
     m_proceed = false;
   } else {
@@ -2835,7 +2850,7 @@ void Writer::processDispatch() {
 void Writer::triggerDispatch(void) {
   if (m_proceed) {
     if (m_msg == nullptr) {
-      LogMessage msg(m_level, m_file, m_line, m_func, m_verboseLevel,
+      LogMessage msg(m_level, m_color, m_file, m_line, m_func, m_verboseLevel,
                      m_logger);
       base::LogDispatcher(m_proceed, &msg, m_dispatchAction).dispatch();
     } else {
@@ -2848,7 +2863,7 @@ void Writer::triggerDispatch(void) {
   }
   if (m_proceed && m_level == Level::Fatal
       && !ELPP->hasFlag(LoggingFlag::DisableApplicationAbortOnFatalLog)) {
-    base::Writer(Level::Warning, m_file, m_line, m_func).construct(1, base::consts::kDefaultLoggerId)
+    base::Writer(Level::Warning, Color::Default, m_file, m_line, m_func).construct(1, base::consts::kDefaultLoggerId)
         << "Aborting application. Reason: Fatal log at [" << m_file << ":" << m_line << "]";
     std::stringstream reasonStream;
     reasonStream << "Fatal log at [" << m_file << ":" << m_line << "]"
