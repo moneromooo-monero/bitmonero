@@ -18,6 +18,7 @@
 #include "easylogging++.h"
 
 #include <unistd.h>
+#include <boost/algorithm/string.hpp>
 
 #if defined(AUTO_INITIALIZE_EASYLOGGINGPP)
 INITIALIZE_EASYLOGGINGPP
@@ -2373,10 +2374,30 @@ void DefaultLogDispatchCallback::handle(const LogDispatchData* data) {
   m_data = data;
   base::TypedConfigurations* tc = m_data->logMessage()->logger()->typedConfigurations();
   const base::LogFormat* logFormat = &tc->logFormat(m_data->logMessage()->level());
-  dispatch(base::utils::DateTime::getDateTime(logFormat->dateTimeFormat().c_str(), &tc->subsecondPrecision(m_data->logMessage()->level()))
-      + "\t" + convertToChar(m_data->logMessage()->level()) + " " + m_data->logMessage()->message() + "\n",
-      m_data->logMessage()->logger()->logBuilder()->build(m_data->logMessage(),
-           m_data->dispatchAction() == base::DispatchAction::NormalLog || m_data->dispatchAction() == base::DispatchAction::FileOnlyLog));
+
+  const auto &logmsg = m_data->logMessage();
+  const auto msg = logmsg->message();
+  if (strchr(msg.c_str(), '\n'))
+  {
+    const std::string prefix = base::utils::DateTime::getDateTime(logFormat->dateTimeFormat().c_str(), &tc->subsecondPrecision(m_data->logMessage()->level()))
+        + "\t" + convertToChar(m_data->logMessage()->level()) + " ";
+    std::vector<std::string> v;
+    boost::split(v, msg, boost::is_any_of("\n"));
+    for (const std::string &s: v)
+    {
+      LogMessage msgline(logmsg->level(), logmsg->file(), logmsg->line(), logmsg->func(), logmsg->verboseLevel(), logmsg->logger(), &s);
+      dispatch(prefix + s + "\n",
+          m_data->logMessage()->logger()->logBuilder()->build(&msgline,
+               m_data->dispatchAction() == base::DispatchAction::NormalLog || m_data->dispatchAction() == base::DispatchAction::FileOnlyLog));
+    }
+  }
+  else
+  {
+    dispatch(base::utils::DateTime::getDateTime(logFormat->dateTimeFormat().c_str(), &tc->subsecondPrecision(m_data->logMessage()->level()))
+        + "\t" + convertToChar(m_data->logMessage()->level()) + " " + m_data->logMessage()->message() + "\n",
+        m_data->logMessage()->logger()->logBuilder()->build(m_data->logMessage(),
+             m_data->dispatchAction() == base::DispatchAction::NormalLog || m_data->dispatchAction() == base::DispatchAction::FileOnlyLog));
+  }
 }
 
 void DefaultLogDispatchCallback::dispatch(base::type::string_t&& rawLine, base::type::string_t&& logLine) {
