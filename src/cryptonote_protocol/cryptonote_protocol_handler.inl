@@ -55,7 +55,7 @@
     if (ELPP->vRegistry()->allowed(level, cat)) { \
       init; \
       if (test) \
-        el::base::Writer(level, __FILE__, __LINE__, ELPP_FUNC, el::base::DispatchAction::NormalLog).construct(cat) << x; \
+        el::base::Writer(level, __FILE__, __LINE__, ELPP_FUNC, el::base::DispatchAction::NormalLog).construct(cat) << context << x; \
     } \
   } while(0)
 
