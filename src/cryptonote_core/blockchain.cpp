@@ -147,7 +147,7 @@ static const struct {
   { 9, 1057778, 0, 1533297600 },
   { 10, 1154318, 0, 1550153694 },
   { 11, 1155038, 0, 1550225678 },
-  { 12, 1212880, 0, 1558044000 },	/* FIXME: set actual height and datestamp */
+  { 12, 1290420, 0, 1567378800 },	/* FIXME: set actual height and datestamp */
 };
 static const uint64_t testnet_hard_fork_version_1_till = 624633;
 
