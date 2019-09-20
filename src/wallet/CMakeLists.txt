@@ -99,6 +99,7 @@ target_link_libraries(wallet_rpc_server
     version
     daemonizer
     ${EPEE_READLINE}
+    ${ZMQ_LIB}
     ${Boost_CHRONO_LIBRARY}
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${Boost_FILESYSTEM_LIBRARY}

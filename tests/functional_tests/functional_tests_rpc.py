@@ -49,8 +49,8 @@ outputs = []
 ports = []
 
 for i in range(N_MONERODS):
-  command_lines.append([str(18180+i) if x == "monerod_rpc_port" else str(18280+i) if x == "monerod_p2p_port" else str(18380+i) if x == "monerod_zmq_port" else x for x in monerod_base])
-  outputs.append(open(builddir + '/tests/functional_tests/monerod' + str(i) + '.log', 'a+'))
+  #command_lines.append([str(18180+i) if x == "monerod_rpc_port" else str(18280+i) if x == "monerod_p2p_port" else str(18380+i) if x == "monerod_zmq_port" else x for x in monerod_base])
+  #outputs.append(open(builddir + '/tests/functional_tests/monerod' + str(i) + '.log', 'a+'))
   ports.append(18180+i)
 
 for i in range(N_WALLETS):
