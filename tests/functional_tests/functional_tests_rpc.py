@@ -11,6 +11,8 @@ import os
 
 USAGE = 'usage: functional_tests_rpc.py <python> <srcdir> <builddir> [<tests-to-run> | all]'
 DEFAULT_TESTS = ['address_book', 'bans', 'blockchain', 'cold_signing', 'daemon_info', 'get_output_distribution', 'integrated_address', 'mining', 'multisig', 'proofs', 'sign_message', 'transfer', 'txpool', 'uri', 'validate_address', 'wallet']
+ENVIRONMENT = {'SEEDHASH_EPOCH_BLOCKS': 8, 'SEEDHASH_EPOCH_LAG': 4}
+
 try:
   python = sys.argv[1]
   srcdir = sys.argv[2]
@@ -65,6 +67,8 @@ try:
   os.environ['PYTHONPATH'] = PYTHONPATH
   os.environ['WALLET_DIRECTORY'] = WALLET_DIRECTORY
   os.environ['PYTHONIOENCODING'] = 'utf-8'
+  for k in ENVIRONMENT.keys():
+    os.environ[k] = str(ENVIRONMENT[k])
   for i in range(len(command_lines)):
     #print('Running: ' + str(command_lines[i]))
     processes.append(subprocess.Popen(command_lines[i], stdout = outputs[i]))

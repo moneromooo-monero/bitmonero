@@ -156,6 +156,32 @@ static inline int use_rx_jit(void)
 #define SEEDHASH_EPOCH_BLOCKS	2048	/* Must be same as BLOCKS_SYNCHRONIZING_MAX_COUNT in cryptonote_config.h */
 #define SEEDHASH_EPOCH_LAG		64
 
+static inline int is_power_of_2(uint64_t n) { return n && (n & (n-1)) == 0; }
+
+static uint64_t get_seedhash_epoch_lag(void)
+{
+  uint64_t lag;
+  const char *e = getenv("SEEDHASH_EPOCH_LAG");
+  if (!e)
+    return SEEDHASH_EPOCH_LAG;
+  lag = atoi(e);
+  if (lag > SEEDHASH_EPOCH_LAG || !is_power_of_2(lag))
+    return SEEDHASH_EPOCH_LAG;
+  return lag;
+}
+
+static uint64_t get_seedhash_epoch_blocks(void)
+{
+  uint64_t blocks;
+  const char *e = getenv("SEEDHASH_EPOCH_BLOCKS");
+  if (!e)
+    return SEEDHASH_EPOCH_BLOCKS;
+  blocks = atoi(e);
+  if (blocks < 2 || blocks > SEEDHASH_EPOCH_BLOCKS || !is_power_of_2(blocks))
+    return SEEDHASH_EPOCH_BLOCKS;
+  return blocks;
+}
+
 void rx_reorg(const uint64_t split_height) {
   int i;
   CTHR_MUTEX_LOCK(rx_mutex);
@@ -167,14 +193,25 @@ void rx_reorg(const uint64_t split_height) {
 }
 
 uint64_t rx_seedheight(const uint64_t height) {
-  uint64_t s_height =  (height <= SEEDHASH_EPOCH_BLOCKS+SEEDHASH_EPOCH_LAG) ? 0 :
-                       (height - SEEDHASH_EPOCH_LAG - 1) & ~(SEEDHASH_EPOCH_BLOCKS-1);
+  static uint64_t seedhash_epoch_blocks = 0;
+  if (seedhash_epoch_blocks == 0)
+    seedhash_epoch_blocks = get_seedhash_epoch_blocks();
+  static uint64_t seedhash_epoch_lag = 0;
+  if (seedhash_epoch_lag == 0)
+    seedhash_epoch_lag = get_seedhash_epoch_lag();
+
+  uint64_t s_height =  (height <= seedhash_epoch_blocks+seedhash_epoch_lag) ? 0 :
+                       (height - seedhash_epoch_lag - 1) & ~(seedhash_epoch_blocks-1);
   return s_height;
 }
 
 void rx_seedheights(const uint64_t height, uint64_t *seedheight, uint64_t *nextheight) {
+  static uint64_t seedhash_epoch_lag = 0;
+  if (seedhash_epoch_lag == 0)
+    seedhash_epoch_lag = get_seedhash_epoch_lag();
+
   *seedheight = rx_seedheight(height);
-  *nextheight = rx_seedheight(height + SEEDHASH_EPOCH_LAG);
+  *nextheight = rx_seedheight(height + seedhash_epoch_lag);
 }
 
 typedef struct seedinfo {
