@@ -12428,6 +12428,7 @@ rct::key wallet2::get_multisig_k(size_t idx, const std::unordered_set<rct::key> 
 //----------------------------------------------------------------------------------------------------
 rct::multisig_kLRki wallet2::get_multisig_kLRki(size_t n, const rct::key &k) const
 {
+  PERF_TIMER(get_multisig_kLRki);
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad m_transfers index");
   rct::multisig_kLRki kLRki;
   kLRki.k = k;
@@ -12438,6 +12439,7 @@ rct::multisig_kLRki wallet2::get_multisig_kLRki(size_t n, const rct::key &k) con
 //----------------------------------------------------------------------------------------------------
 rct::multisig_kLRki wallet2::get_multisig_composite_kLRki(size_t n, const std::unordered_set<crypto::public_key> &ignore_set, std::unordered_set<rct::key> &used_L, std::unordered_set<rct::key> &new_used_L) const
 {
+  PERF_TIMER(get_multisig_composite_kLRki);
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad transfer index");
 
   const transfer_details &td = m_transfers[n];
@@ -12469,6 +12471,7 @@ rct::multisig_kLRki wallet2::get_multisig_composite_kLRki(size_t n, const std::u
 //----------------------------------------------------------------------------------------------------
 crypto::key_image wallet2::get_multisig_composite_key_image(size_t n) const
 {
+  PERF_TIMER(get_multisig_composite_key_image);
   CHECK_AND_ASSERT_THROW_MES(n < m_transfers.size(), "Bad output index");
 
   const transfer_details &td = m_transfers[n];
@@ -12486,6 +12489,8 @@ crypto::key_image wallet2::get_multisig_composite_key_image(size_t n) const
 //----------------------------------------------------------------------------------------------------
 cryptonote::blobdata wallet2::export_multisig()
 {
+  PERF_TIMER(export_multisig);
+
   std::vector<tools::wallet2::multisig_info> info;
 
   const crypto::public_key signer = get_multisig_signer_public_key();
@@ -12499,10 +12504,13 @@ cryptonote::blobdata wallet2::export_multisig()
     info[n].m_LR.clear();
     info[n].m_partial_key_images.clear();
 
-    for (size_t m = 0; m < get_account().get_multisig_keys().size(); ++m)
+    const crypto::public_key pkey = td.get_public_key();
+    const size_t n_keys = get_account().get_multisig_keys().size();
+    info[n].m_partial_key_images.reserve(n_keys);
+    for (size_t m = 0; m < n_keys; ++m)
     {
       // we want to export the partial key image, not the full one, so we can't use td.m_key_image
-      bool r = generate_multisig_key_image(get_account().get_keys(), m, td.get_public_key(), ki);
+      bool r = generate_multisig_key_image(get_account().get_keys(), m, pkey, ki);
       CHECK_AND_ASSERT_THROW_MES(r, "Failed to generate key image");
       info[n].m_partial_key_images.push_back(ki);
     }
@@ -12511,6 +12519,8 @@ cryptonote::blobdata wallet2::export_multisig()
     // if we have 2/4 wallet with signers: A, B, C, D and A is a transaction creator it will need to pick up 1 signer from 3 wallets left.
     // That means counting combinations for excluding 2-of-3 wallets (k = total signers count - threshold, n = total signers count - 1).
     size_t nlr = tools::combinations_count(m_multisig_signers.size() - m_multisig_threshold, m_multisig_signers.size() - 1);
+    info[n].m_LR.reserve(nlr);
+    td.m_multisig_k.reserve(nlr);
     for (size_t m = 0; m < nlr; ++m)
     {
       td.m_multisig_k.push_back(rct::skGen());
@@ -12520,6 +12530,8 @@ cryptonote::blobdata wallet2::export_multisig()
 
     info[n].m_signer = signer;
   }
+
+  PERF_TIMER(save);
 
   std::stringstream oss;
   boost::archive::portable_binary_oarchive ar(oss);
@@ -12559,10 +12571,15 @@ void wallet2::update_multisig_rescan_info(const std::vector<std::vector<rct::key
 //----------------------------------------------------------------------------------------------------
 size_t wallet2::import_multisig(std::vector<cryptonote::blobdata> blobs)
 {
+  PERF_TIMER(import_multisig);
+
   CHECK_AND_ASSERT_THROW_MES(m_multisig, "Wallet is not multisig");
+
+  PERF_TIMER_START(load);
 
   std::vector<std::vector<tools::wallet2::multisig_info>> info;
   std::unordered_set<crypto::public_key> seen;
+  info.reserve(blobs.size());
   for (cryptonote::blobdata &data: blobs)
   {
     const size_t magiclen = strlen(MULTISIG_EXPORT_FILE_MAGIC);
@@ -12592,14 +12609,15 @@ size_t wallet2::import_multisig(std::vector<cryptonote::blobdata> blobs)
     }
     seen.insert(signer);
 
-    std::string body(data, headerlen);
-    std::istringstream iss(body);
+    std::istringstream iss(std::move(std::string(data, headerlen)));
     std::vector<tools::wallet2::multisig_info> i;
     boost::archive::portable_binary_iarchive ar(iss);
     ar >> i;
     MINFO(boost::format("%u outputs found") % boost::lexical_cast<std::string>(i.size()));
     info.push_back(std::move(i));
   }
+
+  PERF_TIMER_STOP(load);
 
   CHECK_AND_ASSERT_THROW_MES(info.size() + 1 <= m_multisig_signers.size() && info.size() + 1 >= m_multisig_threshold, "Wrong number of multisig sources");
 
@@ -12636,6 +12654,8 @@ size_t wallet2::import_multisig(std::vector<cryptonote::blobdata> blobs)
     std::sort(info.begin(), info.end(), [](const std::vector<tools::wallet2::multisig_info> &i0, const std::vector<tools::wallet2::multisig_info> &i1){ return memcmp(&i0[0].m_signer, &i1[0].m_signer, sizeof(i0[0].m_signer)); });
   }
 
+  PERF_TIMER_START(first_pass);
+
   // first pass to determine where to detach the blockchain
   for (size_t n = 0; n < n_outputs; ++n)
   {
@@ -12647,16 +12667,20 @@ size_t wallet2::import_multisig(std::vector<cryptonote::blobdata> blobs)
     break;
   }
 
+  PERF_TIMER_STOP(first_pass);
+
+  PERF_TIMER_START(rescan);
   for (size_t n = 0; n < n_outputs && n < m_transfers.size(); ++n)
   {
     update_multisig_rescan_info(k, info, n);
   }
+  PERF_TIMER_STOP(rescan);
 
   m_multisig_rescan_k = &k;
   m_multisig_rescan_info = &info;
   try
   {
-
+    PERF_TIMER(refresh);
     refresh(false);
   }
   catch (...)
