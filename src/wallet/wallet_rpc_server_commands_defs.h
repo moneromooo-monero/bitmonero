@@ -2344,7 +2344,10 @@ namespace wallet_rpc
   {
     struct request_t
     {
+      bool spent_only;
+
       BEGIN_KV_SERIALIZE_MAP()
+        KV_SERIALIZE_OPT(spent_only, false);
       END_KV_SERIALIZE_MAP()
     };
     typedef epee::misc_utils::struct_init<request_t> request;
