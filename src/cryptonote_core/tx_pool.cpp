@@ -600,7 +600,7 @@ namespace cryptonote
 
     try
     {
-      LockedTXN lock(m_blockchain.get_db());
+      LockedReadOnlyTXN lock(m_blockchain.get_db());
       txpool_tx_meta_t meta;
       if (!m_blockchain.get_txpool_tx_meta(txid, meta))
       {
