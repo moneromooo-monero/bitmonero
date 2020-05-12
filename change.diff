@@ -1,0 +1,111 @@
+diff --git a/src/simplewallet/simplewallet.cpp b/src/simplewallet/simplewallet.cpp
+index b1e69161f..9d6c9b910 100644
+--- a/src/simplewallet/simplewallet.cpp
++++ b/src/simplewallet/simplewallet.cpp
+@@ -5466,7 +5466,7 @@ void simple_wallet::on_new_block(uint64_t height, const cryptonote::block& block
+     m_refresh_progress_reporter.update(height, false);
+ }
+ //----------------------------------------------------------------------------------------------------
+-void simple_wallet::on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, uint64_t unlock_time)
++void simple_wallet::on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, bool is_change, uint64_t unlock_time)
+ {
+   if (m_locked)
+     return;
+@@ -5477,7 +5477,7 @@ void simple_wallet::on_money_received(uint64_t height, const crypto::hash &txid,
+     tr("idx ") << subaddr_index;
+ 
+   const uint64_t warn_height = m_wallet->nettype() == TESTNET ? 1000000 : m_wallet->nettype() == STAGENET ? 50000 : 1650000;
+-  if (height >= warn_height)
++  if (height >= warn_height && !is_change)
+   {
+     std::vector<tx_extra_field> tx_extra_fields;
+     parse_tx_extra(tx.extra, tx_extra_fields); // failure ok
+diff --git a/src/simplewallet/simplewallet.h b/src/simplewallet/simplewallet.h
+index 59818b303..8034ec310 100644
+--- a/src/simplewallet/simplewallet.h
++++ b/src/simplewallet/simplewallet.h
+@@ -342,7 +342,7 @@ namespace cryptonote
+ 
+     //----------------- i_wallet2_callback ---------------------
+     virtual void on_new_block(uint64_t height, const cryptonote::block& block);
+-    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, uint64_t unlock_time);
++    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, bool change, uint64_t unlock_time);
+     virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index);
+     virtual void on_money_spent(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& in_tx, uint64_t amount, const cryptonote::transaction& spend_tx, const cryptonote::subaddress_index& subaddr_index);
+     virtual void on_skip_transaction(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx);
+diff --git a/src/wallet/api/wallet.cpp b/src/wallet/api/wallet.cpp
+index d89261c64..0badd922a 100644
+--- a/src/wallet/api/wallet.cpp
++++ b/src/wallet/api/wallet.cpp
+@@ -157,7 +157,7 @@ struct Wallet2CallbackImpl : public tools::i_wallet2_callback
+         }
+     }
+ 
+-    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, uint64_t unlock_time)
++    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, bool is_change, uint64_t unlock_time)
+     {
+ 
+         std::string tx_hash =  epee::string_tools::pod_to_hex(txid);
+diff --git a/src/wallet/wallet2.cpp b/src/wallet/wallet2.cpp
+index 93e522a93..49bf13fa5 100644
+--- a/src/wallet/wallet2.cpp
++++ b/src/wallet/wallet2.cpp
+@@ -1867,6 +1867,19 @@ void wallet2::cache_tx_data(const cryptonote::transaction& tx, const crypto::has
+   }
+ }
+ //----------------------------------------------------------------------------------------------------
++bool wallet2::spends_one_of_ours(const cryptonote::transaction &tx) const
++{
++  for (const auto &in: tx.vin)
++  {
++    const cryptonote::txin_to_key &in_to_key = boost::get<cryptonote::txin_to_key>(in);
++    auto it = m_key_images.find(in_to_key.k_image);
++    if (it != m_key_images.end())
++      return true;
++    }
++  }
++  return false;
++}
++//----------------------------------------------------------------------------------------------------
+ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote::transaction& tx, const std::vector<uint64_t> &o_indices, uint64_t height, uint8_t block_version, uint64_t ts, bool miner_tx, bool pool, bool double_spend_seen, const tx_cache_data &tx_cache_data, std::map<std::pair<uint64_t, uint64_t>, size_t> *output_tracker_cache)
+ {
+   PERF_TIMER(process_new_transaction);
+@@ -2153,7 +2166,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
+             }
+ 	    LOG_PRINT_L0("Received money: " << print_money(td.amount()) << ", with tx: " << txid);
+ 	    if (0 != m_callback)
+-	      m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index, td.m_tx.unlock_time);
++	      m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index, spends_one_of_ours(tx), td.m_tx.unlock_time);
+           }
+           total_received_1 += amount;
+           notify = true;
+@@ -2230,7 +2243,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
+ 
+ 	    LOG_PRINT_L0("Received money: " << print_money(td.amount()) << ", with tx: " << txid);
+ 	    if (0 != m_callback)
+-	      m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index, td.m_tx.unlock_time);
++	      m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index, spends_one_of_ours(tx), td.m_tx.unlock_time);
+           }
+           total_received_1 += extra_amount;
+           notify = true;
+diff --git a/src/wallet/wallet2.h b/src/wallet/wallet2.h
+index eb33713b5..8e4e6decc 100644
+--- a/src/wallet/wallet2.h
++++ b/src/wallet/wallet2.h
+@@ -131,7 +131,7 @@ private:
+   public:
+     // Full wallet callbacks
+     virtual void on_new_block(uint64_t height, const cryptonote::block& block) {}
+-    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, uint64_t unlock_time) {}
++    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, bool change, uint64_t unlock_time) {}
+     virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index) {}
+     virtual void on_money_spent(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& in_tx, uint64_t amount, const cryptonote::transaction& spend_tx, const cryptonote::subaddress_index& subaddr_index) {}
+     virtual void on_skip_transaction(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx) {}
+@@ -1517,6 +1517,7 @@ private:
+     void check_rpc_cost(const char *call, uint64_t post_call_credits, uint64_t pre_credits, double expected_cost);
+ 
+     bool should_expand(const cryptonote::subaddress_index &index) const;
++    bool spends_one_of_ours(const cryptonote::transaction &tx) const;
+ 
+     cryptonote::account_base m_account;
+     boost::optional<epee::net_utils::http::login> m_daemon_login;
