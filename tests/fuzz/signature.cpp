@@ -84,8 +84,7 @@ int SignatureFuzzer::run(const std::string &filename)
     return 1;
   }
 
-  bool valid = wallet.verify("test", address, s);
-  std::cout << "Signature " << (valid ? "valid" : "invalid") << std::endl;
+  wallet.verify("test", address, s);
 
   return 0;
 }
