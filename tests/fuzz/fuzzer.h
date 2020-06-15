@@ -26,6 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <stdlib.h>
 #include <string>
 #include "file_io_utils.h"
 
@@ -34,6 +35,16 @@
 #define BEGIN_INIT_SIMPLE_FUZZER() \
   static int init() \
   { \
+    const char *ASAN_OPTIONS = getenv("ASAN_OPTIONS"); \
+    if (ASAN_OPTIONS) \
+    { \
+      char *new_ASAN_OPTIONS = (char*)malloc(strlen(ASAN_OPTIONS) + strlen("ASAN_OPTIONS=:allocator_may_return_null=1") + 1); \
+      sprintf(new_ASAN_OPTIONS, "ASAN_OPTIONS=%s:allocator_may_return_null=1", ASAN_OPTIONS); \
+      putenv(new_ASAN_OPTIONS); \
+      free(new_ASAN_OPTIONS); \
+    } \
+    else \
+      putenv("ASAN_OPTIONS=allocator_may_return_null=1"); \
     try \
     {
 
