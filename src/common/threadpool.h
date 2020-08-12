@@ -55,12 +55,13 @@ public:
   class waiter {
     boost::mutex mt;
     boost::condition_variable cv;
+    threadpool &pool;
     int num;
     public:
     void inc();
     void dec();
-    void wait(threadpool *tpool);  //! Wait for a set of tasks to finish.
-    waiter() : num(0){}
+    void wait();  //! Wait for a set of tasks to finish.
+    waiter(threadpool &pool) : pool(pool), num(0){}
     ~waiter();
   };
 
