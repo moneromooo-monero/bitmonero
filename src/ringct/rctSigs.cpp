@@ -942,7 +942,8 @@ namespace rct {
             DP("range proofs verified?");
             for (size_t i = 0; i < rv.outPk.size(); i++)
               tpool.submit(&waiter, [&, i] { results[i] = verRange(rv.outPk[i].mask, rv.p.rangeSigs[i]); });
-            waiter.wait();
+            if (!waiter.wait())
+              return false;
 
             for (size_t i = 0; i < results.size(); ++i) {
               if (!results[i]) {
@@ -1060,7 +1061,8 @@ namespace rct {
           return false;
         }
 
-        waiter.wait();
+        if (!waiter.wait())
+          return false;
         for (size_t i = 0; i < results.size(); ++i) {
           if (!results[i]) {
             LOG_PRINT_L1("Range proof verified failed for proof " << i);
@@ -1121,7 +1123,8 @@ namespace rct {
               results[i] = verRctMGSimple(message, rv.p.MGs[i], rv.mixRing[i], pseudoOuts[i]);
           });
         }
-        waiter.wait();
+        if (!waiter.wait())
+          return false;
 
         for (size_t i = 0; i < results.size(); ++i) {
           if (!results[i]) {

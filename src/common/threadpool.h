@@ -57,11 +57,14 @@ public:
     boost::condition_variable cv;
     threadpool &pool;
     int num;
+    bool error_flag;
     public:
     void inc();
     void dec();
-    void wait();  //! Wait for a set of tasks to finish.
-    waiter(threadpool &pool) : pool(pool), num(0){}
+    bool wait();  //! Wait for a set of tasks to finish, returns false iff any error
+    void set_error() { error_flag = true; }
+    bool error() const { return error_flag; }
+    waiter(threadpool &pool) : pool(pool), num(0), error_flag(false) {}
     ~waiter();
   };
 

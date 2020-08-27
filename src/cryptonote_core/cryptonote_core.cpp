@@ -979,7 +979,8 @@ namespace cryptonote
         }
       });
     }
-    waiter.wait();
+    if (!waiter.wait())
+      return false;
     it = tx_blobs.begin();
     std::vector<bool> already_have(tx_blobs.size(), false);
     for (size_t i = 0; i < tx_blobs.size(); i++, ++it) {
@@ -1011,7 +1012,8 @@ namespace cryptonote
         });
       }
     }
-    waiter.wait();
+    if (!waiter.wait())
+      return false;
 
     std::vector<tx_verification_batch_info> tx_info;
     tx_info.reserve(tx_blobs.size());
