@@ -602,6 +602,7 @@ namespace cryptonote
       }      
 
       std::vector<tx_blob_entry> have_tx;
+      have_tx.reserve(new_block.tx_hashes.size());
 
       // Instead of requesting missing transactions by hash like BTC, 
       // we do it by index (thanks to a suggestion from moneromooo) because
@@ -610,6 +611,7 @@ namespace cryptonote
       // Also, remember to pepper some whitespace changes around to bother
       // moneromooo ... only because I <3 him. 
       std::vector<uint64_t> need_tx_indices;
+      need_tx_indices.reserve(new_block.tx_hashes.size());
         
       transaction tx;
       crypto::hash tx_hash;
@@ -889,6 +891,7 @@ namespace cryptonote
     }
 
     std::vector<crypto::hash> txids;
+    txids.reserve(b.tx_hashes.size());
     NOTIFY_NEW_FLUFFY_BLOCK::request fluffy_response;
     fluffy_response.b.block = t_serializable_object_to_blob(b);
     fluffy_response.current_blockchain_height = arg.current_blockchain_height;
@@ -2370,6 +2373,7 @@ skip:
           if (span.second > 0)
           {
             is_next = true;
+            req.blocks.reserve(hashes.size());
             for (const auto &hash: hashes)
             {
               req.blocks.push_back(hash);
@@ -2418,6 +2422,7 @@ skip:
         if (span.second > 0)
         {
           is_next = true;
+          req.blocks.reserve(hashes.size());
           for (const auto &hash: hashes)
           {
             req.blocks.push_back(hash);
@@ -2451,6 +2456,7 @@ skip:
             return false;
           }
 
+          req.blocks.reserve(req.blocks.size() + span.second);
           for (size_t n = 0; n < span.second; ++n)
           {
             req.blocks.push_back(context.m_needed_objects[n].first);
@@ -2761,6 +2767,7 @@ skip:
     }
 
     context.m_needed_objects.clear();
+    context.m_needed_objects.reserve(arg.m_block_ids.size());
     uint64_t added = 0;
     std::unordered_set<crypto::hash> blocks_found;
     for (size_t i = 0; i < arg.m_block_ids.size(); ++i)
