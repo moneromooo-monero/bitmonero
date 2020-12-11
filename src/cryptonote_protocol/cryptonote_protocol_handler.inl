@@ -2742,7 +2742,7 @@ skip:
       return 1;
     }
     context.m_expect_response = 0;
-    if (arg.start_height > context.m_expect_height)
+    if (arg.start_height + 1 > context.m_expect_height) // we expect to get one overlapping hash
     {
       LOG_ERROR_CCONTEXT("Got NOTIFY_RESPONSE_CHAIN_ENTRY past expected height, dropping connection");
       drop_connection(context, true, false);
