@@ -191,3 +191,14 @@ target_link_libraries(regex_fuzz_tests
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES}
     $ENV{LIB_FUZZING_ENGINE})
+
+monero_add_test_executable(utf8_fuzz_tests utf8.cpp fuzzer.cpp)
+target_link_libraries(utf8_fuzz_tests
+  PRIVATE
+    common
+    epee
+    ${Boost_THREAD_LIBRARY}
+    ${Boost_CHRONO_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${EXTRA_LIBRARIES}
+    $ENV{LIB_FUZZING_ENGINE})
