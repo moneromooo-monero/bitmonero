@@ -1,7 +1,7 @@
 #!/bin/sh
 
 AFLFUZZ=$(which afl-fuzz)
-TESTS="block|transaction|signature|cold-outputs|cold-transaction|load-from-binary|load-from-json|base58|parse-url|http-client|levin|bulletproof|regex|utf8"
+TESTS="block|transaction|signature|cold-outputs|cold-transaction|load-from-binary|load-from-json|base58|parse-url|http-client|levin|bulletproof|regex|utf8|clsag"
 if ! test -x "$AFLFUZZ"
 then
   echo "afl-fuzz not found - install american-fuzzy-lop"
@@ -15,7 +15,7 @@ then
   exit 1
 fi
 case "$type" in
-  block|transaction|signature|cold-outputs|cold-transaction|load-from-binary|load-from-json|base58|parse-url|http-client|levin|bulletproof|regex|utf8) ;;
+  block|transaction|signature|cold-outputs|cold-transaction|load-from-binary|load-from-json|base58|parse-url|http-client|levin|bulletproof|regex|utf8|clsag) ;;
   *) echo "usage: $0 $TESTS"; exit 1 ;;
 esac
 
