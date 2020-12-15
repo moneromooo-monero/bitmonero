@@ -697,6 +697,7 @@ namespace cryptonote
       bool was_bootstrap_ever_used;
       uint64_t database_size;
       bool update_available;
+      bool busy_syncing;
       std::string version;
       bool synchronized;
 
@@ -737,6 +738,7 @@ namespace cryptonote
         KV_SERIALIZE(was_bootstrap_ever_used)
         KV_SERIALIZE(database_size)
         KV_SERIALIZE(update_available)
+        KV_SERIALIZE(busy_syncing)
         KV_SERIALIZE(version)
         KV_SERIALIZE(synchronized)
       END_KV_SERIALIZE_MAP()

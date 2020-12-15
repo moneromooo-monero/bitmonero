@@ -115,6 +115,7 @@ namespace cryptonote
     std::string get_peers_overview() const;
     std::pair<uint32_t, uint32_t> get_next_needed_pruning_stripe() const;
     bool needs_new_sync_connections() const;
+    bool is_busy_syncing();
     bool sync_txpool();
   private:
     //----------------- commands handlers ----------------------------------------------
