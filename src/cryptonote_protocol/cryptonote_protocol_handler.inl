@@ -2770,6 +2770,7 @@ MGINFO(context << "Got 1 element chain, ignored ********");
     }
 
     std::unordered_set<crypto::hash> hashes;
+    bool first = true;
     for (const auto &h: arg.m_block_ids)
     {
       if (!hashes.insert(h).second)
@@ -2778,6 +2779,13 @@ MGINFO(context << "Got 1 element chain, ignored ********");
         drop_connection(context, true, false);
         return 1;
       }
+      if (!first && m_core.have_block(h))
+      {
+        LOG_ERROR_CCONTEXT("sent existing block");
+        drop_connection(context, true, false);
+        return 1;
+      }
+      first = false;
     }
 
     if (arg.total_height >= CRYPTONOTE_MAX_BLOCK_NUMBER || arg.m_block_ids.size() >= CRYPTONOTE_MAX_BLOCK_NUMBER)
