@@ -218,3 +218,15 @@ set_property(TARGET tx-extra_fuzz_tests
   PROPERTY
     FOLDER "tests")
 
+monero_add_minimal_executable(clsag_fuzz_tests clsag.cpp fuzzer.cpp)
+target_link_libraries(clsag_fuzz_tests
+  PRIVATE
+    ringct
+    ringct_basic
+    common
+    epee
+    ${Boost_THREAD_LIBRARY}
+    ${Boost_CHRONO_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${EXTRA_LIBRARIES}
+    $ENV{LIB_FUZZING_ENGINE})
