@@ -218,3 +218,13 @@ set_property(TARGET tx-extra_fuzz_tests
   PROPERTY
     FOLDER "tests")
 
+monero_add_minimal_executable(clsag_fuzz_tests clsag.cpp fuzzer.cpp)
+target_link_libraries(clsag_fuzz_tests
+  PRIVATE
+    cryptonote_core
+    serialization
+    ${CMAKE_THREAD_LIBS_INIT})
+set_property(TARGET clsag_fuzz_tests
+  PROPERTY
+    FOLDER "tests")
+
