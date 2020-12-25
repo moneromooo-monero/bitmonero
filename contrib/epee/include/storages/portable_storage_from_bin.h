@@ -42,6 +42,24 @@ namespace epee
 {
   namespace serialization
   {
+    template<typename T>
+    struct ps_min_bytes {
+      static constexpr const size_t bytes = 4096;
+    };
+    template<> struct ps_min_bytes<uint64_t> { static constexpr const size_t bytes = 8; };
+    template<> struct ps_min_bytes<int64_t> { static constexpr const size_t bytes = 8; };
+    template<> struct ps_min_bytes<uint32_t> { static constexpr const size_t bytes = 4; };
+    template<> struct ps_min_bytes<int32_t> { static constexpr const size_t bytes = 4; };
+    template<> struct ps_min_bytes<uint16_t> { static constexpr const size_t bytes = 2; };
+    template<> struct ps_min_bytes<int16_t> { static constexpr const size_t bytes = 2; };
+    template<> struct ps_min_bytes<uint8_t> { static constexpr const size_t bytes = 1; };
+    template<> struct ps_min_bytes<int8_t> { static constexpr const size_t bytes = 1; };
+    template<> struct ps_min_bytes<double> { static constexpr const size_t bytes = 8; };
+    template<> struct ps_min_bytes<bool> { static constexpr const size_t bytes = 1; };
+    template<> struct ps_min_bytes<std::string> { static constexpr const size_t bytes = 2; };
+    template<> struct ps_min_bytes<section> { static constexpr const size_t bytes = 256; };
+    template<> struct ps_min_bytes<array_entry> { static constexpr const size_t bytes = 128; };
+
     struct throwable_buffer_reader
     {
       throwable_buffer_reader(const void* ptr, size_t sz);
@@ -61,6 +79,8 @@ namespace epee
       void read(section& sec);
       void read(std::string& str);
       void read(array_entry &ae);
+      template<class t_type>
+      size_t min_bytes() const;
     private:
       struct recursuion_limitation_guard
       {
@@ -130,7 +150,6 @@ namespace epee
       return v;
     }
 
-
     template<class type_name>
     storage_entry throwable_buffer_reader::read_ae()
     {
@@ -138,7 +157,11 @@ namespace epee
       //for pod types
       array_entry_t<type_name> sa;
       size_t size = read_varint();
+printf("ae: %zu / %zu / %zu\n", size, sizeof(storage_entry), ps_min_bytes<type_name>::bytes);
+      //CHECK_AND_ASSERT_THROW_MES(size <= m_count / ps_min_bytes<type_name>::bytes, "Size sanity check failed");
       CHECK_AND_ASSERT_THROW_MES(size <= m_count, "Size sanity check failed");
+      CHECK_AND_ASSERT_THROW_MES(size <= 16384 || size <= m_count / ps_min_bytes<type_name>::bytes, "Large array stricter size sanity check failed");
+
       sa.reserve(size);
       //TODO: add some optimization here later
       while(size--)
