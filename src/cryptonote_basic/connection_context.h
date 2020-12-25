@@ -46,6 +46,7 @@ namespace cryptonote
         m_last_request_time(boost::date_time::not_a_date_time), m_callback_request_count(0),
         m_last_known_hash(crypto::null_hash), m_pruning_seed(0), m_rpc_port(0), m_rpc_credits_per_hash(0), m_anchor(false), m_score(0),
         m_expect_response(0), m_expect_height(0), m_expect_hash(crypto::null_hash), m_expect_difficulty(0) {}
+        m_num_requested(0)  {}
 
     enum state
     {
@@ -76,6 +77,7 @@ namespace cryptonote
     uint64_t m_expect_height;
     crypto::hash m_expect_hash;
     cryptonote::difficulty_type m_expect_difficulty;
+    size_t m_num_requested;
   };
 
   inline std::string get_protocol_state_string(cryptonote_connection_context::state s)
