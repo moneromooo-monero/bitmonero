@@ -4770,6 +4770,8 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const epee::wip
    // If we use the approximate height we subtract one month as
    // a safety margin.
    height = get_approximate_blockchain_height();
+   // since this is an estimation, err on the side of caution: 5 days early
+   height -= std::min<uint64_t>(height, 5 * 86400 / DIFFICULTY_TARGET_V2);
    uint64_t target_height = get_daemon_blockchain_target_height(err);
    if (err.empty()) {
      if (target_height < height)
