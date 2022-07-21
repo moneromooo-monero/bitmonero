@@ -221,7 +221,7 @@ class MiningTest():
         available_ram = util_resources.available_ram_gb()
         threshold_ram = 3
         self.print_mining_info("Available RAM = " + str(round(available_ram, 1)) + " GB")
-        if available_ram < threshold_ram:
+        if available_ram < threshold_ram and not self.is_mining_silent():
             print("Warning! Available RAM =", round(available_ram, 1), 
                   "GB is less than the reasonable threshold =", threshold_ram,
                   ". The RX init might exceed the calculated timeout.")
